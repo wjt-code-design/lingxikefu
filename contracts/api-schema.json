@@ -1,0 +1,178 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lingxi.local/contracts/api-schema.json",
+  "title": "Lingxi 智能客服系统 API 契约（JSON Schema 双源）",
+  "version": "v0.2",
+  "description": "与 contracts/api.ts 一一对应，作为后端 Pydantic 模型与集成测试的单一真源参考。字段名/枚举值不得漂移。",
+  "x-api-prefix": "/api/v1",
+  "x-error-model": {
+    "type": "object",
+    "properties": {
+      "code": { "type": "string", "description": "错误码段 AUTH_*/PARAM_*/KB_*/QUOTA_*/RAG_*/SYS_*" },
+      "message": { "type": "string" },
+      "request_id": { "type": "string" }
+    },
+    "required": ["code", "message", "request_id"]
+  },
+  "definitions": {
+    "Role": { "type": "string", "enum": ["admin", "agent", "user"] },
+    "LoginReq": {
+      "type": "object",
+      "properties": { "account": { "type": "string" }, "password": { "type": "string", "minLength": 6 } },
+      "required": ["account", "password"]
+    },
+    "RegisterReq": {
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "phone": { "type": "string", "pattern": "^1[3-9]\\d{9}$" },
+        "password": { "type": "string", "minLength": 6 },
+        "role": { "$ref": "#/definitions/Role" }
+      },
+      "required": ["password"],
+      "anyOf": [{ "required": ["email"] }, { "required": ["phone"] }]
+    },
+    "AuthResp": {
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "access_token": { "type": "string" },
+        "refresh_token": { "type": "string" }
+      },
+      "required": ["user_id", "access_token", "refresh_token"]
+    },
+    "MeResp": {
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "$ref": "#/definitions/Role" },
+        "quota_left": { "type": "integer" }
+      },
+      "required": ["user_id", "role", "quota_left"]
+    },
+    "Session": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "updated_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "created_at", "updated_at"]
+    },
+    "SessionListResp": {
+      "type": "object",
+      "properties": {
+        "items": { "type": "array", "items": { "$ref": "#/definitions/Session" } },
+        "total": { "type": "integer" }
+      },
+      "required": ["items", "total"]
+    },
+    "Message": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "session_id": { "type": "string" },
+        "role": { "type": "string", "enum": ["user", "assistant"] },
+        "content": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" },
+        "intent": { "type": "string" }
+      },
+      "required": ["id", "session_id", "role", "content", "created_at"]
+    },
+    "MessageSource": {
+      "type": "object",
+      "properties": {
+        "chunk_id": { "type": "string" },
+        "doc_title": { "type": "string" },
+        "snippet": { "type": "string" },
+        "score": { "type": "number" }
+      },
+      "required": ["chunk_id", "doc_title", "snippet", "score"]
+    },
+    "SSEStage": { "type": "string", "enum": ["retrieving", "generating", "done", "error"] },
+    "ChatStreamReq": {
+      "type": "object",
+      "properties": {
+        "session_id": { "type": "string" },
+        "content": { "type": "string", "minLength": 1 },
+        "stream": { "const": true }
+      },
+      "required": ["session_id", "content", "stream"]
+    },
+    "DocStatus": { "type": "string", "enum": ["parsing", "embedding", "indexed", "failed"] },
+    "KBItem": {
+      "type": "object",
+      "properties": {
+        "kb_id": { "type": "string" },
+        "name": { "type": "string" },
+        "doc_count": { "type": "integer" },
+        "chunk_count": { "type": "integer" }
+      },
+      "required": ["kb_id", "name", "doc_count", "chunk_count"]
+    },
+    "CreateKBReq": {
+      "type": "object",
+      "properties": { "name": { "type": "string" }, "description": { "type": "string" } },
+      "required": ["name"]
+    },
+    "DocItem": {
+      "type": "object",
+      "properties": {
+        "doc_id": { "type": "string" },
+        "name": { "type": "string" },
+        "status": { "$ref": "#/definitions/DocStatus" },
+        "chunks": { "type": "integer" },
+        "error": { "type": "string" }
+      },
+      "required": ["doc_id", "name", "status", "chunks"]
+    },
+    "FeedbackReq": {
+      "type": "object",
+      "properties": {
+        "rating": { "type": "string", "enum": ["up", "down"] },
+        "comment": { "type": "string" }
+      },
+      "required": ["rating"]
+    },
+    "QuotaResp": {
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date" },
+        "used": { "type": "integer" },
+        "limit": { "type": "integer" },
+        "left": { "type": "integer" }
+      },
+      "required": ["date", "used", "limit", "left"]
+    },
+    "AdminStats": {
+      "type": "object",
+      "properties": {
+        "sessions": { "type": "integer" },
+        "messages": { "type": "integer" },
+        "documents": { "type": "integer" },
+        "feedback_up": { "type": "integer" },
+        "feedback_down": { "type": "integer" },
+        "avg_first_token_ms": { "type": "number" }
+      },
+      "required": ["sessions", "messages", "documents", "feedback_up", "feedback_down", "avg_first_token_ms"]
+    },
+    "UserItem": {
+      "type": "object",
+      "properties": {
+        "user_id": { "type": "string" },
+        "account": { "type": "string" },
+        "role": { "$ref": "#/definitions/Role" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["user_id", "account", "role", "created_at"]
+    },
+    "RoleUpdateReq": {
+      "type": "object",
+      "properties": { "role": { "$ref": "#/definitions/Role" } },
+      "required": ["role"]
+    }
+  }
+}
