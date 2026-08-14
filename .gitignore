@@ -1,0 +1,14 @@
+# 隔离仓库：只跟踪本项目交付物，排除参考克隆/环境/产物
+research/
+.workbuddy/
+node_modules/
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+dist/
+build/
+*.egg-info/
+.DS_Store
+.excalidraw
