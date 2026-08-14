@@ -53,7 +53,7 @@ def test_register_success(client):
 
 
 def test_register_requires_contact(client):
-    r = client.post(f"{API}/auth/register", json={"password": "x"})
+    r = client.post(f"{API}/auth/register", json={"password": "secret123"})
     assert r.status_code == 400
 
 
@@ -61,6 +61,24 @@ def test_register_duplicate_email(client):
     _register(client, email="dup@b.com")
     r = _register(client, email="dup@b.com")
     assert r.status_code == 400
+
+
+def test_register_rejects_admin_role(client):
+    """提权漏洞回归：匿名注册不能指定 admin/agent 角色。"""
+    r = client.post(
+        f"{API}/auth/register",
+        json={"email": "hack@b.com", "password": "secret123", "role": "admin"},
+    )
+    assert r.status_code == 400
+    # 确认该邮箱未被创建为任何账号
+    r2 = client.post(f"{API}/auth/login", json={"account": "hack@b.com", "password": "secret123"})
+    assert r2.status_code == 401
+
+
+def test_register_short_password_rejected(client):
+    """密码强度：后端拒绝少于 6 位。"""
+    r = client.post(f"{API}/auth/register", json={"email": "pw@b.com", "password": "12345"})
+    assert r.status_code == 422
 
 
 def test_login_success(client):

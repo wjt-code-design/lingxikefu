@@ -33,6 +33,9 @@ class AuthService:
         if req.phone and self.repo.get_by_phone(req.phone):
             raise AuthError("该手机号已注册")
         role = req.role or UserRole.user
+        # 安全红线：匿名注册只允许普通用户，禁止提权为 admin/agent
+        if role != UserRole.user:
+            raise AuthError("注册仅允许 user 角色")
         return self.repo.create(
             email=req.email,
             phone=req.phone,

@@ -14,7 +14,7 @@ class LoginReq(BaseModel):
 class RegisterReq(BaseModel):
     email: str | None = Field(default=None, description="与 phone 至少填一个")
     phone: str | None = Field(default=None, description="与 email 至少填一个")
-    password: str
+    password: str = Field(min_length=6, description="至少 6 位")
     role: UserRole | None = None
 
 
