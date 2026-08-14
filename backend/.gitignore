@@ -1,0 +1,4 @@
+# backend 局部忽略（根 .gitignore 已覆盖 __pycache__/.env/venv 等）
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
