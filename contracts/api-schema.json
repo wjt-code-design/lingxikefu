@@ -41,6 +41,16 @@
       },
       "required": ["user_id", "access_token", "refresh_token"]
     },
+    "RefreshReq": {
+      "type": "object",
+      "properties": { "refresh_token": { "type": "string" } },
+      "required": ["refresh_token"]
+    },
+    "RefreshResp": {
+      "type": "object",
+      "properties": { "access_token": { "type": "string" } },
+      "required": ["access_token"]
+    },
     "MeResp": {
       "type": "object",
       "properties": {
@@ -113,6 +123,11 @@
       },
       "required": ["kb_id", "name", "doc_count", "chunk_count"]
     },
+    "KBListResp": {
+      "type": "object",
+      "properties": { "items": { "type": "array", "items": { "$ref": "#/definitions/KBItem" } } },
+      "required": ["items"]
+    },
     "CreateKBReq": {
       "type": "object",
       "properties": { "name": { "type": "string" }, "description": { "type": "string" } },
@@ -173,6 +188,11 @@
       "type": "object",
       "properties": { "role": { "$ref": "#/definitions/Role" } },
       "required": ["role"]
+    },
+    "OkResp": {
+      "type": "object",
+      "properties": { "ok": { "type": "boolean" } },
+      "required": ["ok"]
     }
   }
 }

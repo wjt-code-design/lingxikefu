@@ -27,6 +27,9 @@ export interface AuthResp {
 export interface RefreshReq {
   refresh_token: string;
 }
+export interface RefreshResp {
+  access_token: string;
+}
 export interface MeResp {
   user_id: string;
   email?: string;
@@ -95,6 +98,9 @@ export interface KBItem {
   doc_count: number;
   chunk_count: number;
 }
+export interface KBListResp {
+  items: KBItem[];
+}
 export interface CreateKBReq {
   name: string;
   description?: string;
@@ -111,6 +117,11 @@ export interface DocItem {
 export interface FeedbackReq {
   rating: 'up' | 'down';
   comment?: string;
+}
+
+// ---------- 通用响应 ----------
+export interface OkResp {
+  ok: boolean;
 }
 
 // ---------- Quota ----------

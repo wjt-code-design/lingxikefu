@@ -18,7 +18,7 @@ x-api-environment: &api-env
   JWT_SECRET: ${JWT_SECRET:-__CHANGE_ME__}
   LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-__CHANGE_ME__}
   TENANT_DEFAULT: ${TENANT_DEFAULT:-default}
-  CORS_ORIGINS: '["http://localhost:5173","http://localhost:3000"]'
+  CORS_ORIGINS: '["http://localhost:5173"]'
 
 services:
   postgres:
