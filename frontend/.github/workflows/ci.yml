@@ -1,0 +1,105 @@
+# Lingxi 前端 CI：lint(eslint) → 类型检查(tsc) → 单测(vitest) → e2e(playwright) → 构建(vite)
+# 红线⑨：day1 必须有 CI + 单测基线；对齐 backend/.github/workflows/ci.yml 的三段式（检查→测试→构建）
+name: Frontend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  NODE_VERSION: "20"
+
+jobs:
+  lint:
+    name: Lint (eslint)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: ESLint check
+        run: npm run lint
+
+  typecheck:
+    name: Type check (tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: TypeScript check
+        run: npm run typecheck
+
+  test:
+    name: Unit tests (vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Run vitest
+        run: npm run test
+
+  e2e:
+    name: E2E (playwright)
+    runs-on: ubuntu-latest
+    needs: [typecheck, test]
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+      - name: Run Playwright tests
+        run: npm run e2e
+
+  build:
+    name: Build (vite)
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Build
+        working-directory: frontend
+        run: npm run build

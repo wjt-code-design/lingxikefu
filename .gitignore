@@ -1,5 +1,6 @@
 # 隔离仓库：只跟踪本项目交付物，排除参考克隆/环境/产物
 research/
+wt/
 .workbuddy/
 node_modules/
 __pycache__/
