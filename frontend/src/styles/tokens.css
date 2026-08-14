@@ -1,0 +1,25 @@
+/* ============================================================
+   灵犀 / Lingxi 设计 Token（语义变量名固定，规划 §2.1）
+   light + dark 双主题；dark 通过 [data-theme="dark"] 覆盖。
+   注意：AntD 主题算法由 App.tsx 的 ConfigProvider 驱动，
+   此处 CSS 变量供自定义组件/布局使用，二者保持同步切换。
+   ============================================================ */
+:root {
+  --color-brand: #2f6bff; /* 主色：信任蓝 */
+  --color-brand-soft: #e8f0ff; /* 主色浅底 */
+  --color-accent: #14c8a0; /* 辅助色：薄荷绿 */
+  --color-surface: #ffffff; /* 卡片/输入框底 */
+  --color-ink: #1a2233; /* 主文字 */
+  --color-muted: #6b7689; /* 次要文字/占位 */
+  --color-danger: #f5455c; /* 错误/删除 */
+  --radius-md: 12px;
+  --shadow-card: 0 2px 12px rgba(26, 34, 51, 0.06);
+}
+
+[data-theme='dark'] {
+  --color-surface: #1b1f2a;
+  --color-ink: #e8ecf2;
+  --color-muted: #9aa4b5;
+  --color-brand-soft: #1e2a45;
+  --shadow-card: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
