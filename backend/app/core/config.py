@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # --- 配额（BU-08：每用户每日问答上限，Redis 计数） ---
+    DAILY_QUOTA_LIMIT: int = 200
+
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
 

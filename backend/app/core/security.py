@@ -8,10 +8,22 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 
 from jose import jwt
+from passlib.context import CryptContext
 
 from app.core.config import settings
 
 ALGORITHM = "HS256"
+_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def hash_password(password: str) -> str:
+    """bcrypt 哈希，禁止明文存储（红线：密码永不落库明文）。"""
+    return _pwd_context.hash(password)
+
+
+def verify_password(password: str, hashed: str) -> bool:
+    """校验明文与存储哈希。"""
+    return _pwd_context.verify(password, hashed)
 
 
 def create_access_token(subject: str, role: str) -> str:
