@@ -26,10 +26,10 @@ describe('路由可达与 RequireAuth 守卫', () => {
     expect(screen.getByRole('heading', { name: '对话挂件' })).toBeInTheDocument();
   });
 
-  it('普通用户访问 /admin/knowledge → 重定向 /login', () => {
+  it('普通用户访问 /admin/knowledge → 显示 403 无权限页（不再踢登录）', () => {
     loginAs('user');
     renderApp('/admin/knowledge');
-    expect(screen.getByRole('heading', { name: '登录灵犀客服' })).toBeInTheDocument();
+    expect(screen.getByText('403')).toBeInTheDocument();
   });
 
   it('admin 访问 /admin/knowledge → 渲染知识库管理页', () => {
