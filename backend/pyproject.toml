@@ -38,7 +38,7 @@ include = ["app*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-addopts = "-q"
+addopts = "-q --cov=app --cov-report=term-missing --cov-report=xml:coverage.xml --cov-fail-under=70"
 
 [tool.ruff]
 line-length = 120

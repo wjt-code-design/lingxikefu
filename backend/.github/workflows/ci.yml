@@ -41,14 +41,14 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r requirements.txt
-      - name: Run tests
+      - name: Run tests (coverage >= 70%)
         run: pytest
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pytest-report
-          path: backend/.pytest_cache
+          name: pytest-coverage
+          path: backend/coverage.xml
 
   secret-scan:
     name: Secret scan (gitleaks 等价)
