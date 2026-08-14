@@ -1,0 +1,122 @@
+# Lingxi 后端 CI：lint(ruff) → 单测(pytest) → secret 扫描 → 构建镜像
+# 红线⑨：day1 必须有 CI + 单测基线；禁止提交真实密钥/endpoint。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Install ruff
+        run: pip install "ruff>=0.4,<1.0"
+      - name: Ruff check
+        run: ruff check app tests alembic
+
+  test:
+    name: Unit tests (pytest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: pytest
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: backend/.pytest_cache
+
+  secret-scan:
+    name: Secret scan (gitleaks 等价)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for leaked secrets
+        run: |
+          python - <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          SECRET_PATTERNS = [
+              re.compile(r"sk-[A-Za-z0-9]{20,}"),                    # OpenAI-style keys
+              re.compile(r"AKIA[0-9A-Z]{16}"),                       # AWS access key id
+              re.compile(r"sk_live_[A-Za-z0-9]{20,}"),               # Stripe live keys
+              re.compile(r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY"),  # private keys
+          ]
+          SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".lock", ".woff", ".woff2"}
+
+          hits = []
+          for path in pathlib.Path(".").rglob("*"):
+              if any(part.startswith(".") and part != ".github" for part in path.parts):
+                  continue  # 跳过 .git/.venv 等
+              if path.suffix.lower() in SKIP_SUFFIXES or not path.is_file():
+                  continue
+              try:
+                  content = path.read_text(encoding="utf-8", errors="ignore")
+              except OSError:
+                  continue
+              for lineno, line in enumerate(content.splitlines(), 1):
+                  if any(p.search(line) for p in SECRET_PATTERNS):
+                      hits.append(f"{path}:{lineno}")
+
+          if hits:
+              print("::error::疑似真实密钥泄漏（请改用 secret 注入）:")
+              for h in hits:
+                  print(f"  - {h}")
+              sys.exit(1)
+
+          # .env.example 的 JWT_SECRET 必须是占位符
+          env_example = pathlib.Path("backend/.env.example")
+          if env_example.exists():
+              text = env_example.read_text(encoding="utf-8")
+              for key in ("JWT_SECRET", "LITELLM_MASTER_KEY"):
+                  bad = [ln for ln in text.splitlines()
+                         if ln.startswith(f"{key}=") and not ln.endswith("__CHANGE_ME__")]
+                  if bad:
+                      print(f"::error::{key} 必须为占位符 __CHANGE_ME__: {bad}")
+                      sys.exit(1)
+
+          print("OK: 未发现真实密钥，.env.example 全为占位符")
+          PY
+
+  build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: [lint, test, secret-scan]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build API image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: false
+          tags: lingxi-backend:ci
+      - name: Validate docker-compose
+        working-directory: backend
+        run: docker compose config --quiet

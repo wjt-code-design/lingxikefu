@@ -1,0 +1,34 @@
+# Lingxi 智能客服系统 · 后端依赖
+# 版本全部用兼容区间，禁止锁死精确版本（避免镜像/CI 撞车）
+
+# --- Web 框架 ---
+fastapi>=0.111,<1.0
+uvicorn[standard]>=0.29,<1.0
+python-multipart>=0.0.9,<1.0
+
+# --- 数据 ---
+sqlalchemy>=2.0,<3.0
+alembic>=1.13,<2.0
+psycopg[binary]>=3.1,<4.0
+redis>=5.0,<6.0
+
+# --- 配置 ---
+pydantic>=2.7,<3.0
+pydantic-settings>=2.3,<3.0
+
+# --- 安全 ---
+python-jose[cryptography]>=3.3,<4.0
+passlib[bcrypt]>=1.7,<2.0
+bcrypt>=4.1,<5.0
+
+# --- 任务队列 ---
+celery[redis]>=5.3,<6.0
+
+# --- 向量库 / 模型网关 ---
+qdrant-client>=1.9,<2.0
+litellm>=1.40,<2.0
+
+# --- 测试 / 工程纪律（dev） ---
+pytest>=8.0,<9.0
+httpx>=0.27,<1.0
+ruff>=0.4,<1.0
