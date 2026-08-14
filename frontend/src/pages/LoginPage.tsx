@@ -1,15 +1,68 @@
-import { Typography } from 'antd';
-import { EmptyState } from '@/components/common/EmptyState';
+import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Button, Form, Input, Typography, message } from 'antd';
+import type { ApiError } from '@/contracts/api';
+import { login, me } from '@/api/auth';
+import { useAuthStore } from '@/store/authStore';
 
 /**
- * 登录页（FE-02 实现表单 + authStore）。
- * 本单元仅空壳：路由可达、标题占位。
+ * 登录页（FE-02）：表单 → login() → 写入 token → me() 取档案 → 跳 /chat。
+ * 路由守卫 RequireAuth 读取 authStore.token 决定放行。
  */
 export function LoginPage() {
+  const navigate = useNavigate();
+  const [form] = Form.useForm<{ account: string; password: string }>();
+  const [loading, setLoading] = useState(false);
+
+  const onFinish = async (values: { account: string; password: string }) => {
+    setLoading(true);
+    try {
+      const resp = await login(values);
+      // 先写入 token，me() 才能经拦截器携带 Bearer
+      useAuthStore.setState({
+        token: resp.access_token,
+        refreshToken: resp.refresh_token,
+      });
+      const meResp = await me();
+      useAuthStore.getState().setUser(meResp);
+      message.success('登录成功');
+      navigate('/chat');
+    } catch (e) {
+      message.error((e as ApiError).message || '登录失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <div className="page">
-      <Typography.Title level={3}>登录</Typography.Title>
-      <EmptyState title="登录表单占位" description="账号/密码表单将在 FE-02 接入 authStore 与 api/auth.ts" />
+    <div className="auth-card">
+      <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
+        登录灵犀客服
+      </Typography.Title>
+      <Form form={form} layout="vertical" onFinish={onFinish} requiredMark={false}>
+        <Form.Item
+          name="account"
+          label="账号"
+          rules={[{ required: true, message: '请输入邮箱或手机号' }]}
+        >
+          <Input size="large" placeholder="邮箱或手机号" autoComplete="username" />
+        </Form.Item>
+        <Form.Item
+          name="password"
+          label="密码"
+          rules={[{ required: true, message: '请输入密码' }]}
+        >
+          <Input.Password size="large" placeholder="密码" autoComplete="current-password" />
+        </Form.Item>
+        <Form.Item style={{ marginBottom: 8 }}>
+          <Button type="primary" htmlType="submit" size="large" block loading={loading}>
+            登录
+          </Button>
+        </Form.Item>
+      </Form>
+      <Typography.Paragraph type="secondary" style={{ textAlign: 'center', margin: 0 }}>
+        还没有账号？<Link to="/register">立即注册</Link>
+      </Typography.Paragraph>
     </div>
   );
 }

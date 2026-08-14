@@ -11,13 +11,13 @@ describe('路由可达与 RequireAuth 守卫', () => {
   it('未登录访问 /admin/knowledge → 重定向 /login', () => {
     logout();
     renderApp('/admin/knowledge');
-    expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '登录灵犀客服' })).toBeInTheDocument();
   });
 
   it('未登录访问 /chat → 重定向 /login', () => {
     logout();
     renderApp('/chat');
-    expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '登录灵犀客服' })).toBeInTheDocument();
   });
 
   it('匿名可访问 /widget（渲染挂件页）', () => {
@@ -29,7 +29,7 @@ describe('路由可达与 RequireAuth 守卫', () => {
   it('普通用户访问 /admin/knowledge → 重定向 /login', () => {
     loginAs('user');
     renderApp('/admin/knowledge');
-    expect(screen.getByRole('heading', { name: '登录' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '登录灵犀客服' })).toBeInTheDocument();
   });
 
   it('admin 访问 /admin/knowledge → 渲染知识库管理页', () => {

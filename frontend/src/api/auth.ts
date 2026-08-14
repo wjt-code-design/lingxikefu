@@ -1,20 +1,33 @@
-import type { AuthResp, LoginReq, MeResp, RefreshReq, RefreshResp, RegisterReq } from '@/contracts/api';
+import { http } from './client';
+import type {
+  AuthResp,
+  LoginReq,
+  MeResp,
+  RefreshReq,
+  RefreshResp,
+  RegisterReq,
+} from '@/contracts/api';
 
-// TODO(FE-02): 认证接口接入 api/client.ts 的 http 实例，并联动 store/authStore.ts
-// 签名与契约类型一致（契约优先），本单元仅占位。
-
-export async function login(_req: LoginReq): Promise<AuthResp> {
-  throw new Error('TODO(FE-02): login 接口待实现');
+/** POST /auth/login → AuthResp */
+export async function login(req: LoginReq): Promise<AuthResp> {
+  const { data } = await http.post<AuthResp>('/auth/login', req);
+  return data;
 }
 
-export async function register(_req: RegisterReq): Promise<AuthResp> {
-  throw new Error('TODO(FE-02): register 接口待实现');
+/** POST /auth/register → AuthResp */
+export async function register(req: RegisterReq): Promise<AuthResp> {
+  const { data } = await http.post<AuthResp>('/auth/register', req);
+  return data;
 }
 
-export async function refresh(_req: RefreshReq): Promise<RefreshResp> {
-  throw new Error('TODO(FE-02): refresh 接口待实现');
+/** POST /auth/refresh → RefreshResp */
+export async function refresh(req: RefreshReq): Promise<RefreshResp> {
+  const { data } = await http.post<RefreshResp>('/auth/refresh', req);
+  return data;
 }
 
+/** GET /auth/me → MeResp（依赖请求拦截器携带 Bearer token） */
 export async function me(): Promise<MeResp> {
-  throw new Error('TODO(FE-02): me 接口待实现');
+  const { data } = await http.get<MeResp>('/auth/me');
+  return data;
 }
