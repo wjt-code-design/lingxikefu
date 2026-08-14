@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from functools import lru_cache
 
@@ -37,6 +38,9 @@ class LocalEmbeddingClient(EmbeddingClient):
             with self._lock:
                 if self._model is None:
                     try:
+                        # 本地模型强制离线加载：模型已在本机缓存，联网检查/下载反而
+                        # 在企业网络触发 SSL 校验失败；离线也符合"数据不出境"原则。
+                        os.environ.setdefault("HF_HUB_OFFLINE", "1")
                         from sentence_transformers import SentenceTransformer
                     except ImportError as e:  # pragma: no cover - 环境依赖
                         raise ModelNotConfiguredError(
