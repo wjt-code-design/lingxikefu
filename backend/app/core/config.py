@@ -56,6 +56,21 @@ class Settings(BaseSettings):
     # --- LiteLLM 网关（百炼 Key 由网关 env/KMS 注入，禁止直写真实值） ---
     LITELLM_MASTER_KEY: str = PLACEHOLDER_SECRET
 
+    # --- 模型（ADR-3：百炼 + LiteLLM；embedding 本地 bge 优先，可切百炼） ---
+    # chat 主模型：客服高频问答用 flash 档（快 + 便宜），max 档仅降级/复杂任务
+    CHAT_MODEL: str = "qwen3.7-flash-2026-07-15"
+    CHAT_MODEL_FALLBACK: str | None = "deepseek-v4-flash-0731"
+    # 百炼 API Key（env 注入，勿提交；缺失时 llm client 运行时报清晰错误，不做启动强校验，
+    # 以便无 Key 环境下单测/CI 可跑、本地 embedding 方案不依赖它）
+    DASHSCOPE_API_KEY: str | None = None
+    DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境）；bailian=百炼 text-embedding
+    EMBEDDING_PROVIDER: str = "local"
+    EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"
+    # rerank：MVP 关闭（管线预留节点，评测 recall@5 不达标再开）
+    RAG_ENABLE_RERANK: bool = False
+    RERANK_MODEL: str = "gte-rerank-v2"
+
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"],
