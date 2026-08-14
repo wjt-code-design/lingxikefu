@@ -17,7 +17,7 @@ from app.schemas.auth import (
     RegisterReq,
 )
 from app.services.auth import AuthError, AuthService
-from app.services.quota import QuotaService
+from app.services.quota import get_quota_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -63,7 +63,7 @@ def me(
     user = svc.repo.get_by_id(UUID(payload["sub"]))
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
-    quota_left = QuotaService().left_today(str(user.id))
+    quota_left = get_quota_service().left_today(str(user.id))
     return MeResp(
         user_id=str(user.id),
         email=user.email,

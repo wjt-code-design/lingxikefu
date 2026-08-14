@@ -52,3 +52,19 @@ class QuotaService:
             return int(used)
         except Exception:
             return 0
+
+
+_quota_service: QuotaService | None = None
+
+
+def get_quota_service(redis_client=None) -> QuotaService:
+    """业务路径使用模块级单例（复用 Redis 连接，避免每次请求重建实例）；
+
+    测试可显式传入 redis_client 获取隔离的新实例。
+    """
+    global _quota_service
+    if redis_client is not None:
+        return QuotaService(redis_client=redis_client)
+    if _quota_service is None:
+        _quota_service = QuotaService()
+    return _quota_service

@@ -7,14 +7,14 @@ from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_user
 from app.schemas.quota import QuotaResp
-from app.services.quota import QuotaService
+from app.services.quota import get_quota_service
 
 router = APIRouter(prefix="/quota", tags=["quota"])
 
 
 @router.get("", response_model=QuotaResp)
 def get_quota(payload: dict = Depends(get_current_user)) -> QuotaResp:
-    qs = QuotaService()
+    qs = get_quota_service()
     used = qs.used_today(payload["sub"])
     limit = qs.daily_limit()
     return QuotaResp(
