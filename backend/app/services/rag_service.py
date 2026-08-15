@@ -58,7 +58,7 @@ def classify_intent(query: str) -> str:
     return "qa"
 
 
-def run_pipeline(query: str, kb_id: UUID, top_k: int = 5) -> RagResult:
+def run_pipeline(query: str, kb_id: UUID, top_k: int = 8) -> RagResult:
     """RAG 管线入口（非流式部分）：intent → 检索 → 拒答判定。
 
     返回 RagResult，生成阶段由 Chat 层用 build_qa_messages 组装后流式调用。
@@ -85,7 +85,7 @@ async def stream_answer(
     query: str,
     kb_id: UUID,
     history: list[dict] | None = None,
-    top_k: int = 5,
+    top_k: int = 8,
 ):
     """流式回答：yield (event_type, data)。
 
