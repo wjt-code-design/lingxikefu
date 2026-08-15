@@ -52,9 +52,10 @@ export function useChatStream() {
     abortRef.current = controller;
     const token = useAuthStore.getState().token;
 
+    const base = import.meta.env.VITE_API_BASE || API_PREFIX;
     setState({ stage: 'retrieving', tokens: '', sources: [] });
     try {
-      const resp = await fetch(`${API_PREFIX}/chat/stream`, {
+      const resp = await fetch(`${base}/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
