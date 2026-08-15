@@ -12,9 +12,9 @@ from app.core.security import (
     hash_password,
     verify_password,
 )
+from app.models.user import User, UserRole
 from app.repositories.users import UsersRepository
 from app.schemas.auth import RegisterReq
-from app.models.user import User, UserRole
 
 
 class AuthError(Exception):

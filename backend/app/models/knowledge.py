@@ -55,6 +55,8 @@ class Document(Base):
         server_default=DocumentStatus.parsing.value,
     )
     sha256: Mapped[str] = mapped_column(sa.String(64), nullable=False, index=True)
+    # 解析后的纯文本（上传时提取入库，worker 只做切片/向量化；扫描件 PDF 为 None → failed）
+    raw_text: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     chunk_count: Mapped[int] = mapped_column(sa.Integer(), nullable=False, default=0, server_default="0")
     error: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     created_at: Mapped[datetime] = mapped_column(

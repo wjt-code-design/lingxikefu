@@ -6,10 +6,9 @@
 from __future__ import annotations
 
 import pytest
-
 from app.core.config import settings
 from app.llm_clients.base import ModelNotConfiguredError
-from app.llm_clients.chat import BailianChatClient, get_chat_client
+from app.llm_clients.chat import BailianChatClient
 from app.llm_clients.embedding import (
     BailianEmbeddingClient,
     LocalEmbeddingClient,

@@ -74,6 +74,16 @@ class Settings(BaseSettings):
     RAG_ENABLE_RERANK: bool = False
     RERANK_MODEL: str = "gte-rerank-v2"
 
+    # --- 知识库导入（BU-04：分块 / 上传限制 / 向量集合） ---
+    # 分块参数：中文按字符计；块内尽量保留段落结构，单段超长再硬切
+    CHUNK_SIZE: int = 500
+    CHUNK_OVERLAP: int = 50
+    # 上传文件大小上限（MB），超出拒绝
+    MAX_UPLOAD_MB: int = 10
+    # Qdrant 集合名：带维度后缀（bge=768 / text-embedding-v3=1024），
+    # 防换 embedding provider 后误写旧集合（维度不同 = 语义空间不同，必须重建）
+    QDRANT_COLLECTION: str = "lingxi_bge_768"
+
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
         default_factory=lambda: ["http://localhost:5173"],
@@ -119,6 +129,18 @@ class Settings(BaseSettings):
 
         if not (1 <= self.POSTGRES_PORT <= 65535):
             errors.append(f"POSTGRES_PORT 非法值: {self.POSTGRES_PORT!r}（应为 1-65535 的整数）")
+
+        # --- BU-04 知识库导入参数 ---
+        if self.CHUNK_SIZE <= 0:
+            errors.append(f"CHUNK_SIZE 非法值: {self.CHUNK_SIZE!r}（应 > 0）")
+        if not (0 <= self.CHUNK_OVERLAP < self.CHUNK_SIZE):
+            errors.append(
+                f"CHUNK_OVERLAP 非法值: {self.CHUNK_OVERLAP!r}（应满足 0 <= overlap < CHUNK_SIZE={self.CHUNK_SIZE}）"
+            )
+        if not (1 <= self.MAX_UPLOAD_MB <= 100):
+            errors.append(f"MAX_UPLOAD_MB 非法值: {self.MAX_UPLOAD_MB!r}（应为 1-100 MB）")
+        if not self.QDRANT_COLLECTION.strip():
+            errors.append("QDRANT_COLLECTION 缺失（向量集合名不能为空）")
 
         if errors:
             raise ValueError(

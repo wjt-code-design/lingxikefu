@@ -63,6 +63,7 @@ for _router in (
     sessions.router,
     chat.router,
     knowledge.router,
+    knowledge.documents_router,
     feedback.router,
     quota.router,
     admin.router,

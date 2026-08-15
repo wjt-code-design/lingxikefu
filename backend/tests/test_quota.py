@@ -1,15 +1,14 @@
 """Quota 测试（BU-08）：端点降级 + 服务逻辑（假 Redis 注入）。"""
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
-
 import app.models.user
+import pytest
 from app.core.database import get_db
 from app.main import app
 from app.models.base import Base
 from app.models.user import User
 from app.services.quota import QuotaService
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

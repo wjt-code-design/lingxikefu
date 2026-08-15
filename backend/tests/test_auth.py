@@ -1,17 +1,16 @@
 """Auth 端点测试（BU-02）：SQLite 内存库 + get_db 覆盖，无需 PostgreSQL。"""
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 import app.models.user  # 注册 User 表到 Base.metadata
+import pytest
 from app.core.database import get_db
 from app.main import app
 from app.models.base import Base
 from app.models.user import User
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 API = "/api/v1"
 

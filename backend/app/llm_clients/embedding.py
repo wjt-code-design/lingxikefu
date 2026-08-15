@@ -45,7 +45,7 @@ class LocalEmbeddingClient(EmbeddingClient):
                     except ImportError as e:  # pragma: no cover - 环境依赖
                         raise ModelNotConfiguredError(
                             "本地 embedding 需要 sentence-transformers，请安装："
-                            "pip install sentence-transformers（缺失原始错误: %s）" % e
+                            f"pip install sentence-transformers（缺失原始错误: {e}）"
                         ) from e
                     logger.info("加载本地 embedding 模型 %s ...", settings.EMBEDDING_MODEL)
                     self._model = SentenceTransformer(settings.EMBEDDING_MODEL)

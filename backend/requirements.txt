@@ -27,6 +27,10 @@ celery[redis]>=5.3,<6.0
 # --- 向量库 / 模型网关 ---
 qdrant-client>=1.9,<2.0
 litellm>=1.40,<2.0
+pdfplumber>=0.11,<1.0
+# 本地 embedding 模型（bge-base-zh-v1.5）；容器/部署环境必须显式声明，
+# 否则 BU-04 导入管线在容器内会因缺包而 ModelNotConfiguredError。
+sentence-transformers>=2.7,<4.0
 
 # --- 测试 / 工程纪律（dev） ---
 pytest>=8.0,<9.0
