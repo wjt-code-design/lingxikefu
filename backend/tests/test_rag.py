@@ -99,6 +99,15 @@ def test_build_qa_messages_contains_sources():
     assert msgs[-1] == {"role": "user", "content": "保修多久"}
 
 
+def test_prompt_forbids_metadata_and_allows_demo_data():
+    """规则 6/7：禁文件名元信息；演示/模拟订单数据必须直接引用不得拒答。"""
+    msgs = build_qa_messages("快递到哪儿了", [make_chunk(0.9, "订单 SO2026080118 派送中")])
+    sys = msgs[0]["content"]
+    assert "绝对禁止" in sys and "文件名" in sys
+    assert "演示/模拟" in sys
+    assert "资料未收录" in sys  # 拒答仅限资料确实无相关内容时
+
+
 def test_build_qa_messages_history():
     msgs = build_qa_messages("那电池呢", [make_chunk(0.9)], history=[{"role": "user", "content": "保修多久"}, {"role": "assistant", "content": "12个月"}])
     assert "用户: 保修多久" in msgs[0]["content"]
