@@ -143,7 +143,8 @@ def _to_sources(chunks: list[RetrievedChunk]) -> list[dict]:
             "chunk_id": c.chunk_id,
             "doc_id": c.doc_id,
             "score": round(c.score, 4),
-            "text": c.text[:200],
+            # 字段名对齐前端契约 MessageSource.snippet（SSE 契约 §1.4）
+            "snippet": c.text[:200],
         }
         for c in chunks
     ]

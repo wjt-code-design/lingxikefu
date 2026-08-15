@@ -193,6 +193,18 @@ body {
   overflow-y: auto;
   white-space: pre-wrap;
 }
+.chat-source__chunk {
+  padding: 4px 0;
+  border-bottom: 1px dashed rgba(128, 128, 128, 0.2);
+}
+.chat-source__chunk:last-child {
+  border-bottom: none;
+}
+.chat-source__ref {
+  color: var(--color-primary, #1677ff);
+  font-weight: 600;
+  margin-right: 4px;
+}
 /* 阶段指示 */
 .chat-stage {
   display: flex;

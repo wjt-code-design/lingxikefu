@@ -70,6 +70,7 @@ export interface Message {
 }
 export interface MessageSource {
   chunk_id: string;
+  doc_id?: string;
   doc_title: string;
   snippet: string;
   score: number;

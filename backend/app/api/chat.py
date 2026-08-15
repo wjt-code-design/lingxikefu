@@ -139,7 +139,7 @@ async def chat_stream(
                                 chunk_id=uuid.UUID(src["chunk_id"]),
                                 doc_id=uuid.UUID(src["doc_id"]),
                                 doc_title=src.get("doc_title", ""),
-                                snippet=src.get("text", "")[:500],
+                                snippet=src.get("snippet", "")[:500],
                                 score=src.get("score", 0.0),
                             )
                         )
