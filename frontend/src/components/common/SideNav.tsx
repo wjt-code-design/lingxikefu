@@ -30,6 +30,7 @@ export function SideNav() {
     ...(role === 'admin' || role === 'agent'
       ? [
           { key: '/agent/sessions', icon: <MessageOutlined />, label: '会话列表' },
+          { key: '/agent/customers', icon: <TeamOutlined />, label: '客户管理' },
           { key: '/agent/tickets', icon: <FileTextOutlined />, label: '工单（Phase2）' },
         ]
       : []),

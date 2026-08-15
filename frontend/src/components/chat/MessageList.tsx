@@ -24,7 +24,8 @@ export function MessageList({
 }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+    // jsdom 等无头环境没有 scrollIntoView（测试/SSR），存在性保护
+    endRef.current?.scrollIntoView?.({ behavior: 'smooth' });
   }, [messages.length, stream?.tokens.length]);
 
   const isStreaming =

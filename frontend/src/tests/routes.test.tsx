@@ -20,10 +20,11 @@ describe('路由可达与 RequireAuth 守卫', () => {
     expect(screen.getByRole('heading', { name: '登录灵犀客服' })).toBeInTheDocument();
   });
 
-  it('匿名可访问 /widget（渲染挂件页）', () => {
+  it('匿名可访问 /widget（渲染挂件页）', async () => {
     logout();
     renderApp('/widget');
-    expect(screen.getByRole('heading', { name: '对话挂件' })).toBeInTheDocument();
+    // 挂件页首屏为对话欢迎语（Empty 描述），无独立 heading
+    expect(await screen.findByText('您好，我是星河智家智能客服，请问有什么可以帮您？')).toBeInTheDocument();
   });
 
   it('普通用户访问 /admin/knowledge → 显示 403 无权限页（不再踢登录）', () => {
@@ -32,23 +33,24 @@ describe('路由可达与 RequireAuth 守卫', () => {
     expect(screen.getByText('403')).toBeInTheDocument();
   });
 
-  it('admin 访问 /admin/knowledge → 渲染知识库管理页', () => {
+  it('admin 访问 /admin/knowledge → 渲染知识库管理页', async () => {
     loginAs('admin');
     renderApp('/admin/knowledge');
-    expect(screen.getByRole('heading', { name: '知识库管理' })).toBeInTheDocument();
+    // 页面为懒加载模块，等待异步渲染完成
+    expect(await screen.findByRole('heading', { name: '知识库管理' })).toBeInTheDocument();
   });
 
-  it('admin 访问 /admin/users 与 /admin/stats → 渲染对应空壳', () => {
+  it('admin 访问 /admin/users 与 /admin/stats → 渲染对应空壳', async () => {
     loginAs('admin');
     renderApp('/admin/users');
-    expect(screen.getByRole('heading', { name: '用户管理' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '用户管理' })).toBeInTheDocument();
     renderApp('/admin/stats');
-    expect(screen.getByRole('heading', { name: '运营统计' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '运营统计' })).toBeInTheDocument();
   });
 
-  it('已登录访问 /chat → 渲染对话页', () => {
+  it('已登录访问 /chat → 渲染对话页', async () => {
     loginAs('user');
     renderApp('/chat');
-    expect(screen.getByRole('heading', { name: '对话' })).toBeInTheDocument();
+    expect(await screen.findByText('您好，我是星河智家智能客服，请问有什么可以帮您？')).toBeInTheDocument();
   });
 });
