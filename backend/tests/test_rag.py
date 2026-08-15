@@ -143,3 +143,27 @@ async def test_stream_answer_error_event(patch, monkeypatch):
     events = [e async for e in stream_answer("退货运费", uuid4())]
     assert events[0][0] == "error"
     assert events[0][1]["code"] == "RAG_RETRIEVAL"
+
+
+async def test_stream_answer_does_not_force_bailian_model_when_provider_is_zhipu(patch, monkeypatch):
+    """回归保护：provider=zhipu 时 stream_answer 不应硬塞 settings.CHAT_MODEL（百炼模型名）。
+
+    根因：rag_service.stream_answer 之前写死 ``client.stream(messages, model=settings.CHAT_MODEL)``，
+    当 CHAT_PROVIDER=zhipu 时会把 ``qwen3.7-flash-2026-07-15`` 发给 open.bigmodel.cn，
+    智谱返回 ``{"code":"1214","message":"modelCode：不存在"}`` → 400。
+
+    修复后应让 client 用自己的 ``_default_model()``（provider-aware），不传 model 或传 None。
+    """
+    # 模拟 provider=zhipu 的真实配置
+    monkeypatch.setattr("app.services.rag_service.settings.CHAT_PROVIDER", "zhipu", raising=False)
+    monkeypatch.setattr("app.services.rag_service.settings.ZHIPU_CHAT_MODEL", "glm-5.1", raising=False)
+    # CHAT_MODEL 仍是百炼名（fixture 已设为 "qwen3.7-flash"）
+    events = [e async for e in stream_answer("退货", uuid4())]
+    assert "token" in [t for t, _ in events]
+    assert len(patch.calls) == 1, f"应恰好调用一次 chat client，实际 {len(patch.calls)} 次"
+    passed_model = patch.calls[0][1]
+    # 关键断言：不应把百炼模型名传给 client（覆盖了 provider 感知 → 智谱 400）
+    assert passed_model != "qwen3.7-flash", (
+        f"stream_answer 把百炼模型名 {passed_model!r} 硬塞给 client，"
+        "应让 client 用 _default_model() 选 ZHIPU_CHAT_MODEL（glm-5.1）"
+    )
