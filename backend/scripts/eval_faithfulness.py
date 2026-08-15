@@ -260,9 +260,9 @@ async def main() -> int:
     qa_total = stats["qa"][0]
     refuse_ok = stats["refuse"][1]
     refuse_total = stats["refuse"][0]
-    rq_ok, rq_total = stats["refuse_qa"]
+    rq_total, rq_ok = stats["refuse_qa"]  # noqa: E501  # stats[kind]=[total, ok]
     if rq_total:
-        print(f"  [info] 正常题拒答 {rq_ok}/{rq_total}（合理拒答率 {rq_ok / rq_total:.0%}，其余为误拒答，不计入 faithfulness）")
+        print(f"  [info] 正常题拒答 {rq_total} 题（合理拒答 {rq_ok}，误拒答 {rq_total - rq_ok}，不计入 faithfulness）")
     pass_all = (
         qa_total > 0
         and qa_ok / qa_total >= 0.85
