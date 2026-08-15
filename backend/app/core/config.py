@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     LITELLM_MASTER_KEY: str = PLACEHOLDER_SECRET
 
     # --- 模型（ADR-3：百炼 + LiteLLM；embedding 本地 bge 优先，可切百炼） ---
+    # chat provider：bailian（默认）/ zhipu（智谱 GLM，百炼额度耗尽时的备选）
+    CHAT_PROVIDER: str = "bailian"
     # chat 主模型：客服高频问答用 flash 档（快 + 便宜），max 档仅降级/复杂任务
     CHAT_MODEL: str = "qwen3.7-flash-2026-07-15"
     CHAT_MODEL_FALLBACK: str | None = "deepseek-v4-flash-0731"
@@ -67,6 +69,10 @@ class Settings(BaseSettings):
     # 以便无 Key 环境下单测/CI 可跑、本地 embedding 方案不依赖它）
     DASHSCOPE_API_KEY: str | None = None
     DASHSCOPE_BASE_URL: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # 智谱（GLM）API：OpenAI 兼容端点；CHAT_PROVIDER=zhipu 时生效
+    ZHIPU_API_KEY: str | None = None
+    ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
+    ZHIPU_CHAT_MODEL: str = "glm-5.1"
     # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境）；bailian=百炼 text-embedding
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"

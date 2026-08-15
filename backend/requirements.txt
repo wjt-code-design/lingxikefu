@@ -29,6 +29,8 @@ celery[redis]>=5.3,<6.0
 # （>1.10 的 client 走 /points/query 新 API，server 1.9 不支持 → 检索 404）
 qdrant-client>=1.9,<1.10
 litellm>=1.40,<2.0
+# chat 客户端 httpx 直连 OpenAI 兼容端点（双 provider），运行时核心依赖
+httpx>=0.27,<1.0
 pdfplumber>=0.11,<1.0
 # 本地 embedding 模型（bge-base-zh-v1.5）；容器/部署环境必须显式声明，
 # 否则 BU-04 导入管线在容器内会因缺包而 ModelNotConfiguredError。
@@ -37,5 +39,4 @@ sentence-transformers>=2.7,<4.0
 # --- 测试 / 工程纪律（dev） ---
 pytest>=8.0,<9.0
 pytest-cov>=4.0,<7.0
-httpx>=0.27,<1.0
 ruff>=0.4,<1.0

@@ -1,7 +1,8 @@
 """LLM 客户端抽象基类与异常。
 
-统一走 LiteLLM（ADR-3）；本地 embedding（bge）为独立实现。
-无 Key / 未启用时抛 ``ModelNotConfiguredError``，报错信息必须可操作（告诉用户配什么）。
+chat 走 httpx 直连 OpenAI 兼容端点（百炼/智谱双 provider，见 chat.py）；
+embedding 本地 bge（独立实现）。无 Key / 未启用时抛 ``ModelNotConfiguredError``，
+报错信息必须可操作（告诉用户配什么）。
 """
 from __future__ import annotations
 
