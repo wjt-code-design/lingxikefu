@@ -150,6 +150,44 @@ def _chunks_have_answer(chunks, claims: list[str]) -> bool:
     return False
 
 
+def _sentence_supported(sentence: str, chunk_text: str) -> bool:
+    """引用点句子是否被对应 chunk 实质支撑（2字窗口交集≥30%）。"""
+    s_bg = _bigrams(sentence)
+    c_bg = _bigrams(chunk_text)
+    if not s_bg or not c_bg:
+        return False
+    return len(s_bg & c_bg) / len(s_bg) >= 0.30
+
+
+def judge_citations(answer: str, chunks) -> tuple[bool, int, int]:
+    """[来源N] 引用合法性（grounded-ai：引文必须可溯源到 chunk）。
+
+    每个 [来源N] 的引用点句子须与 chunks[N-1].text 有实质内容重叠，
+    防「引文编造」（把内容安到无关来源上）。返回 (是否全合法, 合法数, 总数)。
+
+    细节：引用点取标记前最近一个句子（避免多句累积稀释交集）；
+    连续引用 [来源1][来源2] 时第二个引用点为空 → 跳过不计（共享同一句子）。
+    """
+    if not chunks:
+        return True, 0, 0
+    parts = re.split(r"(\[来源\d+\])", answer)
+    ok = total = 0
+    cur = ""
+    for part in parts:
+        m = re.fullmatch(r"\[来源(\d+)\]", part)
+        if m:
+            n = int(m.group(1))
+            if 1 <= n <= len(chunks) and cur.strip():
+                total += 1
+                sentence = re.split(r"(?<=[。！？；])", cur.strip())[-1]
+                if _sentence_supported(sentence, chunks[n - 1].text):
+                    ok += 1
+            cur = ""
+        else:
+            cur += part
+    return total == 0 or ok == total, ok, total
+
+
 async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
     r = run_pipeline(q["question"], kb_id)
     if q["intent"] == "qa" and not r.refuse:
@@ -171,7 +209,15 @@ async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
                 return {"qid": q["qid"], "kind": "refuse_qa", "ok": False, "why": "误拒答(资料含答案仍拒答)", "answer": answer[:80]}
             return {"qid": q["qid"], "kind": "refuse_qa", "ok": True, "why": "合理拒答(资料未含答案)", "answer": answer[:80]}
         ok, why = judge_qa(answer, gt["claims"] if gt else [])
-        return {"qid": q["qid"], "kind": "qa", "ok": ok, "why": why, "answer": answer[:80]}
+        cit_all_ok, cit_good, cit_total = judge_citations(answer, r.chunks)
+        return {
+            "qid": q["qid"],
+            "kind": "qa",
+            "ok": ok,
+            "why": why,
+            "answer": answer[:80],
+            "cit": (cit_good, cit_total) if not cit_all_ok else None,
+        }
     # 闲聊/转人工：有引导词即可
     ok = any(m in answer for m in ("人工", "客服", "解答", "咨询", "帮助"))
     return {"qid": q["qid"], "kind": q["intent"], "ok": ok, "why": "" if ok else "无引导词", "answer": answer[:80]}
@@ -230,6 +276,7 @@ async def main() -> int:
 
     stats = {"qa": [0, 0], "refuse": [0, 0], "refuse_qa": [0, 0], "handoff": [0, 0], "chitchat": [0, 0]}
     fails: list[str] = []
+    cit_good = cit_total = 0
     for q in questions:
         g = gt.get(q["qid"])
         if q["intent"] == "qa" and g is None:
@@ -249,6 +296,12 @@ async def main() -> int:
             stats[kind][1] += 1
         else:
             fails.append(f"{res['qid']} [{kind}] {res['why']}")
+        if res.get("cit"):
+            g0, t0 = res["cit"]
+            cit_good += g0
+            cit_total += t0
+            if g0 < t0:
+                fails.append(f"{res['qid']} [cite] 引用不合法 {g0}/{t0}")
         tag = "PASS" if res["ok"] else "FAIL"
         print(f"  [{tag}] {res['qid']} ({kind}) {res['answer'][:60]}")
 
@@ -256,6 +309,8 @@ async def main() -> int:
     for kind, (total, ok) in stats.items():
         rate = ok / total if total else 0.0
         print(f"  {kind:9s} {ok}/{total} = {rate:.1%}")
+    if cit_total:
+        print(f"  引用合法率 {cit_good}/{cit_total} = {cit_good / cit_total:.1%}（[来源N] 可溯源，目标≥95%）")
     qa_ok = stats["qa"][1]
     qa_total = stats["qa"][0]
     refuse_ok = stats["refuse"][1]
