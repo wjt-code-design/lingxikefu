@@ -1,7 +1,7 @@
 # HANDOFF · 灵犀（Lingxi）智能客服 · 交接状态
 
 > 用途：**防上下文 token 耗尽 / 无缝切换模型 / 新会话接续**。任何新模型或新会话开始前，先读本文件即可无缝接上，无需重问用户。
-> 最后更新：2026-08-16 02:15
+> 最后更新：2026-08-16 02:35
 
 ---
 
@@ -16,7 +16,7 @@
 
 | 服务 | 地址 | 状态 |
 |---|---|---|
-| 前端 dev | http://localhost:5173 | ✅ 运行中（PID 22900，IPv4+IPv6 双栈） |
+| 前端 dev | http://localhost:5173 | ✅ 运行中（PID 21016，IPv4+IPv6 双栈） |
 | 后端 API | http://localhost:8003 | ✅ 运行中（每次重启 PID 会变，用 netstat 查） |
 | PostgreSQL / Redis / Qdrant | localhost 5432 / 6379 / 6333 | 宿主机已起 |
 
@@ -46,6 +46,14 @@
    - 现象：问"快递到哪儿了"检索命中模拟物流文档（0.5 分）却回答"资料未收录"。
    - 修复：prompt 新增规则 7/8——演示/模拟数据必须直接引用回答；未提供订单号时列出资料中订单轨迹再询问。
    - 验证：物流/退货场景均稳定引用模拟订单（SO2026080118 派送中 [来源1] 等）。
+7. **来源面板挂清单**（2026-08-16 修复，commit e20afab）：
+   - 现象：回复正文下挂一长串"文档名 [来源N、M]"折叠项（SourceAccordion label 格式），像来源清单。
+   - 修复：改为**胶囊入口**（📁 来源 N 条，默认收起），点击展开按文档分组去重、片段带 [来源N]。
+8. **路由太少**（2026-08-16 扩展，commit e20afab，参考 C:\Users\33393\Desktop\dianshangkefu 路由逻辑）：
+   - 角色分流 home：user→/chat，agent→/agent/sessions，admin→/admin/knowledge。
+   - /agent 工作台模块化：sessions（真实列表，调 GET /sessions）、customers（占位）、tickets（占位）。
+   - 懒加载：admin/agent 页面 lazy 分割（客户侧主包）。
+   - 修既有路由测试：admin 页面改 findByRole 异步等待 lazy；/widget /chat 断言改 Empty 欢迎语（原断言 heading 不存在）。
 
 ## 4. 测试与验证
 
