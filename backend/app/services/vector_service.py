@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 from functools import lru_cache
-from uuid import UUID, NAMESPACE_DNS, uuid5
+from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from app.core.config import settings
 from app.llm_clients.embedding import get_embedding_client
