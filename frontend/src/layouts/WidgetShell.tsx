@@ -2,6 +2,7 @@ import { Segmented, Space, Typography } from 'antd';
 import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { Outlet } from 'react-router-dom';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
+import { UserMenu } from '@/components/common/UserMenu';
 
 // C1 统一（V1 后无"深色"，dark = 柔和浅海盐变体）：与 AppHeader 同文案同图标
 const options = [
@@ -29,6 +30,7 @@ export function WidgetShell() {
             onChange={(v) => setTheme(v as ThemeMode)}
             aria-label="主题切换"
           />
+          <UserMenu />
         </Space>
       </div>
       <div className="widget-shell__body">

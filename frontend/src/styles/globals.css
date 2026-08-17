@@ -18,8 +18,8 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
-  /* 海盐蓝治愈背景渐变（规范：160deg #F8FBFE → #EFF7FD，不添加图片） */
-  background: linear-gradient(160deg, #f8fbfe 0%, #eff7fd 100%);
+  /* User 端暖米背景渐变（重构：160deg #FAF8F4 → #F2EFE8；内部台由 .app-workbench 覆盖为冷灰） */
+  background: linear-gradient(160deg, #faf8f4 0%, #f2efe8 100%);
   color: var(--text-2);
   transition:
     background-color 0.2s ease,
@@ -941,4 +941,164 @@ body {
 .chat-satisfaction__hint {
   font-size: 11px;
   color: var(--text-4);
+}
+
+/* ===================== 内部工作台外壳（semantic-workbench，T2'） ===================== */
+/* 唯一中深色：侧栏 #2E5D85（白字 6.95:1 AA）——内容区/顶栏全浅色 */
+.app-workbench .admin-layout__sider {
+  background: #2e5d85 !important;
+}
+.app-workbench .admin-layout__logo {
+  color: #ffffff;
+}
+.app-workbench .side-nav {
+  background: transparent !important;
+  border-inline-end: none !important;
+}
+.app-workbench .side-nav .ant-menu-item {
+  color: rgba(255, 255, 255, 0.82);
+}
+.app-workbench .side-nav .ant-menu-item:hover {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+}
+.app-workbench .side-nav .ant-menu-item-selected {
+  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+.app-workbench .admin-layout__main {
+  background: var(--bg-page); /* 浅冷灰 #F2F5F8（tokens.css 覆盖） */
+}
+.app-workbench .admin-layout__content {
+  padding: 20px;
+}
+/* 顶栏：白底 + 发丝线（控制台感） */
+.app-workbench .app-header {
+  background: #ffffff;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ===================== UserMenu（三端复用，T2'） ===================== */
+.user-menu {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 2px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.user-menu:hover {
+  border-color: var(--color-brand);
+}
+.user-menu:focus-visible {
+  outline: 2px solid var(--color-brand-dark);
+  outline-offset: 2px;
+}
+.user-menu__avatar {
+  background: linear-gradient(135deg, #96c8e8, #539fd8) !important;
+  color: #fff !important;
+  font-size: 13px;
+}
+.user-menu__tag {
+  margin-inline-end: 0 !important;
+  font-size: 11px;
+  line-height: 18px;
+}
+.user-menu__name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+/* User 外壳（WidgetShell）：暖米顶栏 + 大圆角 */
+.widget-shell__bar {
+  background: rgba(250, 248, 244, 0.92);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: blur(8px);
+}
+
+/* ===================== T4'：服务首页（Landing）+ 个人中心（Profile） ===================== */
+.landing {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 64px 24px 40px;
+}
+.landing__hero {
+  text-align: center;
+  padding: 32px 0 48px;
+}
+.landing__badge {
+  display: inline-block;
+  padding: 4px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+  margin-bottom: 16px;
+}
+.landing__title {
+  font-size: 40px !important;
+  letter-spacing: 0.01em;
+}
+.landing__sub {
+  font-size: 16px;
+  color: var(--text-3);
+  max-width: 520px;
+  margin: 0 auto 28px !important;
+}
+.landing__cta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+.landing__feature {
+  text-align: center;
+  height: 100%;
+  border-radius: var(--radius-md);
+}
+.landing__feature-icon {
+  font-size: 28px;
+  color: var(--color-brand);
+  margin-bottom: 8px;
+}
+
+.profile {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.profile__card {
+  border-radius: var(--radius-md);
+}
+.profile__value {
+  font-size: 15px;
+  margin-top: 4px;
+}
+.profile__session {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--border);
+  font-size: 14px;
+}
+.profile__session:last-child {
+  border-bottom: none;
+}
+.profile__session-time {
+  color: var(--text-4);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.profile-loading {
+  display: block;
+  margin: 80px auto;
 }

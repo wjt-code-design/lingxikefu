@@ -1,9 +1,7 @@
-import { Button, Layout, Segmented, Space, Typography } from 'antd';
-import { DesktopOutlined, LogoutOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
-import { useAuthStore } from '@/store/authStore';
-import { logout as logoutApi } from '@/api/auth';
+import { Layout, Segmented, Space, Typography } from 'antd';
+import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
+import { UserMenu } from './UserMenu';
 
 const themeOptions = [
   { label: '浅色', value: 'light', icon: <SunOutlined /> },
@@ -12,23 +10,11 @@ const themeOptions = [
 ];
 
 /**
- * 通用顶栏：品牌 + 主题切换（light/dark/system）+ 退出登录。
- * 主题切换会同步 <html data-theme> 与 AntD darkAlgorithm（见 App.tsx / useTheme）。
+ * 内部台顶栏：品牌 + 主题切换（浅色/柔和/跟随系统）+ UserMenu（三端复用）。
+ * 柔和档仅切换浅色海盐变体（theme.ts softTokens + CSS 变量），永不出现深色界面。
  */
 export function AppHeader() {
   const { theme, setTheme } = useTheme();
-  const navigate = useNavigate();
-  const { refreshToken, clear } = useAuthStore();
-
-  const handleLogout = async () => {
-    try {
-      if (refreshToken) await logoutApi(refreshToken);
-    } catch {
-      /* 后端吊销失败也不阻断本地登出 */
-    }
-    clear();
-    navigate('/login');
-  };
 
   return (
     <Layout.Header className="app-header">
@@ -42,9 +28,7 @@ export function AppHeader() {
           onChange={(v) => setTheme(v as ThemeMode)}
           aria-label="主题切换"
         />
-        <Button icon={<LogoutOutlined />} onClick={handleLogout}>
-          退出登录
-        </Button>
+        <UserMenu />
       </Space>
     </Layout.Header>
   );

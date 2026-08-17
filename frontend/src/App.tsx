@@ -23,7 +23,7 @@ export default function App() {
       theme={{
         // V1 修复（假深色）：恒用 defaultAlgorithm ——「拒绝深色」规范。
         // 之前 dark 套 darkAlgorithm 会让 AntD 组件深黑底 + 深色文字不可读；
-        // 现在 dark 仅切换浅色海盐"柔和变体"（theme.ts darkTokens + CSS 变量），永不出现深色界面。
+        // 柔和档仅切换浅色海盐变体（theme.ts softTokens + CSS 变量），永不出现深色界面。
         algorithm: antdTheme.defaultAlgorithm,
         token: themeTokens(resolved),
       }}

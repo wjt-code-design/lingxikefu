@@ -33,6 +33,10 @@ const MyTicketsPage = lazy(() => import('@/pages/MyTicketsPage'));
 const UsersPage = lazy(() => import('@/pages/admin/UsersPage'));
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'));
 const FeedbackPage = lazy(() => import('@/pages/admin/FeedbackPage'));
+// T4'：新路由（403/个人中心/服务首页）
+const ForbiddenPage = lazy(() => import('@/pages/ForbiddenPage'));
+const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
+const LandingPage = lazy(() => import('@/pages/LandingPage'));
 
 function RouteFallback() {
   // U1：路由懒加载 fallback 用骨架屏（感知性能，替代"加载中…"文字）
@@ -53,6 +57,7 @@ function useHome(): string {
 
 export function AppRoutes() {
   const home = useHome();
+  const role = useAuthStore((s) => s.role);
 
   return (
     <Suspense fallback={<RouteFallback />}>
@@ -89,6 +94,18 @@ export function AppRoutes() {
           <Route index element={<MyTicketsPage />} />
         </Route>
 
+        {/* T4'：个人中心（user/agent/admin 均可；/auth/me 已有） */}
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <WidgetShell />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<ProfilePage />} />
+        </Route>
+
         {/* Agent 工作台（参考 dianshangkefu /workbench 模块化） */}
         <Route
           path="/agent"
@@ -117,9 +134,15 @@ export function AppRoutes() {
           <Route path="users" element={<UsersPage />} />
           <Route path="stats" element={<StatsPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
+          {/* T4'：dashboard 入口一行重定向 → stats（不建独立占位页） */}
+          <Route path="dashboard" element={<Navigate to="/admin/stats" replace />} />
         </Route>
 
-        <Route path="/" element={<Navigate to={home} replace />} />
+        {/* T4'：/403 无权限 */}
+        <Route path="/403" element={<ForbiddenPage />} />
+
+        {/* T4'：/ 服务首页——已登录按角色分流，未登录展示品牌落地页 */}
+        <Route path="/" element={role ? <Navigate to={home} replace /> : <LandingPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>

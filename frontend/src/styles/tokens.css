@@ -1,6 +1,10 @@
 /* ============================================================
-   灵犀 / Lingxi 设计 Token（海盐蓝治愈系 · 2026-08-17 定稿）
-   light + dark 双主题；dark 通过 [data-theme="dark"] 覆盖。
+   灵犀 / Lingxi 设计 Token（海盐蓝治愈系 · 2026-08-17 重构定稿）
+   两层语义：
+   - :root = semantic-user（User 端：暖米底 + 海盐蓝 + 大圆角，对外）
+   - .app-workbench = semantic-workbench（内部台：冷灰底 + 发丝线 +
+     深一档强调 + 小圆角；Agent/Admin 共用，仅菜单权限不同）
+   唯一中深色 = 内部台侧栏 #2E5D85（白字 6.95:1，AA 达标）
    调性：治愈通透 / 轻量 ins 简约 / 低饱和海盐蓝 / 浅色护眼（拒绝深色、赛博、厚重商务）
    注意：AntD 主题由 theme.ts 的 JS token 驱动（与下方 CSS 变量同值，改色时两处同步）。
    ============================================================ */
@@ -24,7 +28,7 @@
 
   /* ---- 背景/边框 ---- */
   --color-surface: #ffffff; /* 卡片/输入框底 */
-  --bg-page: #f8fbfe; /* 页面底 */
+  --bg-page: #faf8f4; /* 页面底（暖米白） */
   --border: #e6f0f8; /* 分割线/描边 */
 
   /* ---- 几何（圆角统一：气泡/输入/卡片 16px，小标签 10px） ---- */
@@ -39,7 +43,7 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* dark 主题：按用户规范「拒绝深色」——保持浅色海盐系，仅微调对比（不出现深色界面） */
+/* 柔和变体（soft，原 dark 语义废除——无深色模式）：切换器「柔和」档 = 微调对比的浅色海盐系 */
 [data-theme='dark'] {
   --color-brand: #96c8e8;
   --color-brand-dark: #539fd8;
@@ -56,8 +60,34 @@
   --text-4: #8296a9; /* V2：dark(柔和)变体同标准对比度 */
 
   --color-surface: #ffffff;
-  --bg-page: #f0f7fc;
-  --border: #dcebf6;
+  --bg-page: #f6f4ef; /* 柔和档：暖米微调 */
+  --border: #e9e4dc;
 
   --shadow-card: 0 4px 14px rgba(148, 198, 232, 0.16);
+}
+
+/* ===== semantic-workbench（内部工作台：Agent+Admin 共用外壳，仅菜单权限不同） =====
+   冷灰底 + 发丝线 + 深一档强调（#539FD8）+ 小圆角；侧栏 #2E5D85 白字（唯一中深色）。
+   挂在 AdminLayout 根节点 .app-workbench 上，User 端不受影响。 */
+.app-workbench {
+  --color-brand: #539fd8; /* 强调深一档（控制台感） */
+  --color-brand-dark: #3e7cb1;
+  --color-brand-soft: rgba(83, 159, 216, 0.12);
+  --color-accent: #4da07f; /* 成功/在线（加深保对比） */
+  --color-amber: #e0a86a;
+  --color-orange: #e0a86a;
+  --color-danger: #d97a7a;
+
+  --text-1: #2f3e4e;
+  --text-2: #2f3e4e;
+  --text-3: #6b7f93;
+  --text-4: #8296a9;
+
+  --color-surface: #ffffff;
+  --bg-page: #f2f5f8; /* 浅冷灰内容区 */
+  --border: #e3e9ef; /* 发丝线 */
+
+  --radius-md: 10px; /* 小圆角（控制台感） */
+  --radius-sm: 8px;
+  --shadow-card: 0 2px 10px rgba(46, 93, 133, 0.08); /* 冷调轻影 */
 }

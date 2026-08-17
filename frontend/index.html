@@ -11,7 +11,7 @@
         try {
           var raw = localStorage.getItem('lingxi-theme');
           var t = raw ? JSON.parse(raw).state.theme : 'system';
-          var dark = false;
+          var dark = false; // 柔和档（原 dark 语义废除，仅驱动浅色变体 data-theme）
           if (t === 'dark') {
             dark = true;
           } else if (t === 'system') {
