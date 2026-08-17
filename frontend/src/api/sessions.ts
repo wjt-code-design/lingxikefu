@@ -12,6 +12,8 @@ interface BackendSession {
   created_at: string;
   updated_at: string;
   satisfaction: string | null;
+  user_email: string | null; // BUG-12：客户标识
+  user_phone: string | null;
 }
 
 interface BackendSessionDetail extends BackendSession {
@@ -30,6 +32,8 @@ function toSession(s: BackendSession): Session {
     created_at: s.created_at,
     updated_at: s.updated_at,
     satisfaction: s.satisfaction ?? undefined,
+    user_email: s.user_email ?? undefined, // BUG-12
+    user_phone: s.user_phone ?? undefined,
   };
 }
 

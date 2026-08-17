@@ -17,6 +17,7 @@ from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
+from app.models.user import User
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -48,6 +49,7 @@ def client(monkeypatch):
             KnowledgeBase.__table__,
             Document.__table__,
             Ticket.__table__,  # T1：handoff 建单测试
+            User.__table__,  # BUG-12：list_sessions 回填 user_email/user_phone
         ],
     )
     Local = sessionmaker(bind=engine, expire_on_commit=False)

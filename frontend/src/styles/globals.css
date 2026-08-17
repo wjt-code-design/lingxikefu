@@ -630,6 +630,19 @@ body {
   color: var(--text-4);
   flex-shrink: 0;
 }
+/* BUG-12：客服视角客户标识小标签（email/phone） */
+.wb-session__customer {
+  font-size: 11px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+  border-radius: var(--radius-sm);
+  padding: 1px 6px;
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 0;
+}
 /* 知识库条目 */
 .wb-kb {
   display: flex;

@@ -18,6 +18,7 @@ from app.core.database import get_db
 from app.models.message import Message
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
+from app.models.user import User
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -36,6 +37,9 @@ class SessionItem(BaseModel):
     created_at: str
     updated_at: str  # L2：补齐 updated_at，与前端契约对齐
     satisfaction: str | None = None  # BUG-06：会话满意度（satisfied/neutral/unsatisfied）
+    # BUG-12：客户标识（agent/admin 全租户视角用于区分客户；user 视角为 None 不泄露他人信息）
+    user_email: str | None = None
+    user_phone: str | None = None
 
 
 class SessionMessage(BaseModel):
@@ -94,6 +98,8 @@ def list_sessions(
     - agent/admin：看全租户客户会话（客服工作台「会话列表」核心能力）；
     - 支持 page/size 分页（offset/limit），total 为过滤后的真实总数；
     - 排序仍按 updated_at desc（配合 BUG-03 的 session touch 后排序才正确）。
+    - BUG-12：agent/admin 视角返回每个会话所属客户标识（email/phone），
+      供工作台历史面板区分客户；user 视角仅返回自己会话（标识为自己，不泄露他人）。
     """
     user_id = uuid.UUID(payload["sub"])
     role = payload.get("role")
@@ -110,19 +116,27 @@ def list_sessions(
         .offset((page - 1) * size)
         .limit(size)
     ).all()
-    return SessionListResp(
-        total=total,
-        items=[
+    # BUG-12：批量取会话归属用户的 email/phone（避免 N+1 查询）
+    user_ids = {s.user_id for s in rows}
+    user_map: dict[uuid.UUID, User] = {}
+    if user_ids:
+        for u in db.scalars(select(User).where(User.id.in_(user_ids))).all():
+            user_map[u.id] = u
+    items: list[SessionItem] = []
+    for s in rows:
+        u = user_map.get(s.user_id)
+        items.append(
             SessionItem(
                 session_id=str(s.id),
                 title=s.title,
                 created_at=s.created_at.isoformat(),
                 updated_at=s.updated_at.isoformat(),
                 satisfaction=s.satisfaction,
+                user_email=u.email if u else None,
+                user_phone=u.phone if u else None,
             )
-            for s in rows
-        ],
-    )
+        )
+    return SessionListResp(total=total, items=items)
 
 
 @router.get("/{session_id}", response_model=SessionDetail)

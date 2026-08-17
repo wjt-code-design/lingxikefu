@@ -1,4 +1,5 @@
 import { http } from './client';
+import { useAuthStore } from '@/store/authStore';
 import type {
   AuthResp,
   LoginReq,
@@ -37,4 +38,29 @@ export async function logout(refreshToken: string): Promise<OkResp> {
 export async function me(): Promise<MeResp> {
   const { data } = await http.get<MeResp>('/auth/me');
   return data;
+}
+
+/**
+ * BUG-15：启动时静默续期。
+ * access token 仅存内存、刷新页面即丢失；若本地持久化了 refreshToken 而无 token，
+ * 在应用首屏渲染前调用本函数续期恢复会话（成功则写回 token，失败则清空登录态）。
+ * 由 main.tsx 在 createRoot 前 await 调用，避免路由守卫把已登录用户闪跳到 /login。
+ */
+export async function bootstrapAuth(): Promise<void> {
+  const { token, refreshToken, setAuth } = useAuthStore.getState();
+  if (token || !refreshToken) return; // 已有 token 或未登录，无需续期
+  try {
+    const resp = await refresh({ refresh_token: refreshToken });
+    const meResp = await me();
+    setAuth(
+      {
+        user_id: meResp.user_id,
+        access_token: resp.access_token,
+        refresh_token: resp.refresh_token,
+      },
+      meResp
+    );
+  } catch {
+    useAuthStore.getState().clear();
+  }
 }

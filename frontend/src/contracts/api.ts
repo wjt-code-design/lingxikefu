@@ -46,6 +46,8 @@ export interface Session {
   created_at: string;
   updated_at: string;
   satisfaction?: string; // BUG-06：会话满意度（satisfied/neutral/unsatisfied）
+  user_email?: string; // BUG-12：客户标识（agent/admin 视角显示）
+  user_phone?: string;
 }
 export interface SessionListReq {
   page: number;

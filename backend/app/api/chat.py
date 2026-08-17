@@ -22,7 +22,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -239,6 +239,7 @@ def agent_reply(
 @router.post("/stream")
 async def chat_stream(
     req: ChatStreamReq,
+    request: Request,
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ):
@@ -294,6 +295,10 @@ async def chat_stream(
         kb_version = await run_in_threadpool(_kb_version_str, db, kb_id)
 
     async def gen():
+        # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
+        if await request.is_disconnected():
+            logger.info("chat stream aborted: client disconnected (pre)")
+            return
         if kb_id is None:
             yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
             return
@@ -309,9 +314,17 @@ async def chat_stream(
         cache_hit = False  # T10：缓存命中标记（落库 meta + 跳过回填）
         t0 = time.monotonic()
         try:
+            # BUG-09：RAG/LLM 生成前再确认连接（检索可能耗时数秒）
+            if await request.is_disconnected():
+                logger.info("chat stream aborted: client disconnected (pre-llm)")
+                return
             async for event, data in stream_answer(
                 req.content, kb_id, history=history, kb_version=kb_version
             ):
+                # BUG-09：每收到一个事件检查客户端连接，断开即终止（不再消费下一个事件）
+                if await request.is_disconnected():
+                    logger.info("chat stream aborted: client disconnected during %s", event)
+                    return
                 if event == "intent":
                     # R-2：真实意图（qa/handoff/chitchat）——落库用 + 转发客户端
                     intent = data.get("intent", "qa")

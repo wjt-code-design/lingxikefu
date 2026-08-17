@@ -54,14 +54,22 @@ def test_report_frontend_error_log_injection_escaped(client, caplog):
     assert "\n" not in rec.message.split("message=")[1].split(" stack=")[0]
 
 
-def test_report_frontend_error_rate_limited(client, caplog):
-    """同 IP 超过窗口上限（60s/10 条）→ 静默 204 且不再写日志（防刷屏）。"""
-    from app.api.telemetry import _RATE_LIMIT_MAX, _recent
+def test_report_frontend_error_rate_limited(client, caplog, monkeypatch):
+    """同 IP 超过窗口上限（60s/10 条）→ 静默 204 且不再写日志（防刷屏）。
 
-    _recent.clear()  # 重置滑动窗口，避免前序测试消耗配额
+    monkeypatch get_redis 抛异常强制走内存降级路径，保证测试不依赖 Redis 状态。
+    """
+    from app.api import telemetry
+
+    def _redis_down(*args, **kwargs):
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(telemetry, "get_redis", _redis_down)
+
+    telemetry._recent.clear()  # 重置内存滑动窗口，避免前序测试消耗配额
     with caplog.at_level(logging.ERROR, logger="lingxi"):
-        for _ in range(_RATE_LIMIT_MAX + 3):
+        for _ in range(telemetry._RATE_LIMIT_MAX + 3):
             r = client.post("/api/v1/telemetry/frontend-error", json={"message": "x"})
             assert r.status_code == 204
     n = sum(1 for rec in caplog.records if "frontend_error" in rec.message)
-    assert n == _RATE_LIMIT_MAX  # 超限部分被丢弃，不写日志
+    assert n == telemetry._RATE_LIMIT_MAX  # 超限部分被丢弃，不写日志
