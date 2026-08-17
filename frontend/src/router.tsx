@@ -39,6 +39,7 @@ const AdminDashboardPage = lazy(() => import('@/pages/admin/DashboardPage'));
 const SessionsAuditPage = lazy(() => import('@/pages/admin/SessionsAuditPage'));
 const SettingsPage = lazy(() => import('@/pages/admin/SettingsPage'));
 const LogsPage = lazy(() => import('@/pages/admin/LogsPage'));
+const RolesPage = lazy(() => import('@/pages/admin/RolesPage'));
 const AgentDashboardPage = lazy(() => import('@/pages/agent/DashboardPage'));
 const KbSearchPage = lazy(() => import('@/pages/agent/KbSearchPage'));
 const FaqPage = lazy(() => import('@/pages/FaqPage'));
@@ -154,6 +155,7 @@ export function AppRoutes() {
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="knowledge" element={<KnowledgePage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route path="roles" element={<RolesPage />} />
           <Route path="stats" element={<StatsPage />} />
           <Route path="feedback" element={<FeedbackPage />} />
           <Route path="sessions" element={<SessionsAuditPage />} />

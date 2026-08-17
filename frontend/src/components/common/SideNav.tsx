@@ -7,6 +7,7 @@ import {
   FileSearchOutlined,
   FileTextOutlined,
   MessageOutlined,
+  SafetyOutlined,
   SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
@@ -29,6 +30,7 @@ export function SideNav() {
           { key: '/admin/dashboard', icon: <BarChartOutlined />, label: '运营总览' },
           { key: '/admin/knowledge', icon: <BookOutlined />, label: '知识库' },
           { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
+          { key: '/admin/roles', icon: <SafetyOutlined />, label: '权限管理' },
           { key: '/admin/stats', icon: <BarChartOutlined />, label: '运营统计' },
           { key: '/admin/feedback', icon: <DislikeOutlined />, label: '踩反馈' },
           { key: '/admin/sessions', icon: <MessageOutlined />, label: '会话审计' },

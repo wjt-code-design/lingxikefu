@@ -6,6 +6,7 @@ import type {
   AuditLogListResp,
   OkResp,
   Role,
+  RoleListResp,
   StatsTrendResp,
   UserListResp,
 } from '@/contracts/api';
@@ -58,5 +59,10 @@ export async function getAdminSettings(): Promise<AdminSettings> {
 /** GET /admin/audit-logs → AuditLogListResp（筛选 + 分页） */
 export async function getAuditLogs(req: AuditLogListReq = {}): Promise<AuditLogListResp> {
   const r = await http.get<AuditLogListResp>('/admin/audit-logs', { params: req });
+  return r.data;
+}
+/** GET /admin/roles → RoleListResp（只读角色权限定义：菜单级可见性 + 数据范围） */
+export async function getRoles(): Promise<RoleListResp> {
+  const r = await http.get<RoleListResp>('/admin/roles');
   return r.data;
 }

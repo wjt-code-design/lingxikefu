@@ -238,6 +238,17 @@ export interface RoleUpdateReq {
   role: Role;
 }
 
+// ---------- Admin · Roles（权限管理 C9：菜单级可见性 + agent 数据范围，按钮级 RBAC 后置 P2） ----------
+export interface RoleDef {
+  role: Role;
+  name: string;
+  menus: string[];
+  scope: string;
+}
+export interface RoleListResp {
+  roles: RoleDef[];
+}
+
 // ---------- Admin · System Settings（Phase4） ----------
 export interface AdminSettingsModel {
   provider: string;

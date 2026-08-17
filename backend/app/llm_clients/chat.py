@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import AsyncGenerator
 from functools import lru_cache
 
@@ -17,6 +18,8 @@ import httpx
 
 from app.core.config import settings
 from app.llm_clients.base import ChatClient, ModelNotConfiguredError
+
+logger = logging.getLogger(__name__)
 
 #: 流式默认 60s（边收边发足够）；非流式 complete 用 120s（推理模型长回答 + 慢网络兜底）
 _TIMEOUT = httpx.Timeout(60.0, connect=10.0)
@@ -140,9 +143,60 @@ class OpenAILikeChatClient(ChatClient):
             raise last_err
 
 
+class FallbackChatClient(ChatClient):
+    """主 client 额度类失败（HTTP 402/403）时自动降级到备选 client。
+
+    场景：百炼每个模型 100 万 token 免费额度，一次性用完即止不重置，耗尽返回 403。
+    若 CHAT_PROVIDER=bailian 且百炼 403，自动切到备选（智谱）重试一次，
+    无需手动改环境变量；备选也失败则原样抛错（fail-closed，不静默吞）。
+    """
+
+    def __init__(self, primary: ChatClient, fallback: ChatClient) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    @staticmethod
+    def _is_quota_error(err: BaseException) -> bool:
+        """额度类错误判定：HTTP 402(需要付款)/403(禁止，额度耗尽) 属一次性额度耗尽，可降级。"""
+        return isinstance(err, httpx.HTTPStatusError) and err.response.status_code in (402, 403)
+
+    async def stream(self, messages: list[dict], model: str | None = None, **kwargs) -> AsyncGenerator[str, None]:
+        try:
+            async for delta in self.primary.stream(messages, model=model, **kwargs):
+                yield delta
+        except BaseException as e:  # noqa: BLE001 —— 需先判定额度错误再决定是否降级
+            if not self._is_quota_error(e):
+                raise
+            logger.warning(
+                "chat provider=%s 额度失败(%s)，自动降级到备选 provider",
+                getattr(self.primary, "provider", "?"),
+                e,
+            )
+            async for delta in self.fallback.stream(messages, model=model, **kwargs):
+                yield delta
+
+    async def complete(self, messages: list[dict], model: str | None = None, **kwargs) -> str:
+        try:
+            return await self.primary.complete(messages, model=model, **kwargs)
+        except BaseException as e:  # noqa: BLE001 —— 需先判定额度错误再决定是否降级
+            if not self._is_quota_error(e):
+                raise
+            logger.warning(
+                "chat provider=%s 额度失败(%s)，自动降级到备选 provider",
+                getattr(self.primary, "provider", "?"),
+                e,
+            )
+            return await self.fallback.complete(messages, model=model, **kwargs)
+
+
 @lru_cache(maxsize=1)
 def get_chat_client() -> ChatClient:
     provider = settings.CHAT_PROVIDER.lower()
     if provider not in ("bailian", "zhipu"):
         raise ModelNotConfiguredError(f"CHAT_PROVIDER 非法值: {provider!r}（可选: bailian / zhipu）")
-    return OpenAILikeChatClient(provider)
+    primary = OpenAILikeChatClient(provider)
+    if provider == "bailian":
+        # 百炼免费额度（每模型 100 万 token，用完即止不重置）耗尽返回 403，
+        # 自动降级到智谱续命（保留 zhipu key 缺失时的可操作报错），无需手动改 CHAT_PROVIDER。
+        return FallbackChatClient(primary, OpenAILikeChatClient("zhipu"))
+    return primary

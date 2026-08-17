@@ -11,7 +11,11 @@ import httpx
 import pytest
 from app.core.config import settings
 from app.llm_clients.base import ModelNotConfiguredError
-from app.llm_clients.chat import OpenAILikeChatClient, get_chat_client
+from app.llm_clients.chat import (
+    FallbackChatClient,
+    OpenAILikeChatClient,
+    get_chat_client,
+)
 from app.llm_clients.embedding import (
     BailianEmbeddingClient,
     LocalEmbeddingClient,
@@ -138,13 +142,136 @@ class TestChatRouting:
 
         monkeypatch.setattr(settings, "CHAT_PROVIDER", "bailian")
         get_chat_client.cache_clear()
-        assert get_chat_client().provider == "bailian"
+        # 百炼包 FallbackChatClient（额度 403 自动降级智谱），主 provider 仍为 bailian
+        fb = get_chat_client()
+        assert isinstance(fb, FallbackChatClient)
+        assert fb.primary.provider == "bailian"
+        assert fb.fallback.provider == "zhipu"
 
     def test_invalid_provider_routing(self, monkeypatch):
         monkeypatch.setattr(settings, "CHAT_PROVIDER", "unknown")
         get_chat_client.cache_clear()
         with pytest.raises(ModelNotConfiguredError, match="CHAT_PROVIDER"):
             get_chat_client()
+
+
+class TestFallbackChat:
+    """百炼额度 403 → 自动降级智谱；非额度错误不降级（fail-closed）。"""
+
+    @staticmethod
+    def _setup_env(monkeypatch):
+        monkeypatch.setattr(settings, "CHAT_PROVIDER", "bailian")
+        monkeypatch.setattr(settings, "DASHSCOPE_API_KEY", "unit-bailian-key")
+        monkeypatch.setattr(settings, "DASHSCOPE_BASE_URL", "https://bailian.test/v1")
+        monkeypatch.setattr(settings, "CHAT_MODEL", "qwen3.7-flash-2026-07-15")
+        monkeypatch.setattr(settings, "ZHIPU_API_KEY", "unit-zhipu-key")
+        monkeypatch.setattr(settings, "ZHIPU_BASE_URL", "https://zhipu.test/v4")
+        monkeypatch.setattr(settings, "ZHIPU_CHAT_MODEL", "glm-5.1")
+        get_chat_client.cache_clear()
+
+    def test_complete_403_falls_back_to_zhipu(self, monkeypatch):
+        self._setup_env(monkeypatch)
+        captured: dict = {}
+
+        async def fake_post(self, url, content=None, headers=None):
+            captured["url"] = url
+            if "bailian.test" in url:
+                req = httpx.Request("POST", url)
+                return httpx.Response(403, request=req)  # 百炼免费额度耗尽
+            class _R:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"choices": [{"message": {"content": "来自智谱"}}]}
+
+            return _R()
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+        import asyncio
+
+        out = asyncio.run(get_chat_client().complete([{"role": "user", "content": "hi"}]))
+        assert out == "来自智谱"
+        assert captured["url"].startswith("https://zhipu.test")
+
+    def test_complete_non_quota_error_not_fallback(self, monkeypatch):
+        self._setup_env(monkeypatch)
+
+        async def fake_post(self, url, content=None, headers=None):
+            req = httpx.Request("POST", url)
+            return httpx.Response(404, request=req)  # 404 非额度错误，不应降级
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+        import asyncio
+
+        with pytest.raises(httpx.HTTPStatusError):
+            asyncio.run(get_chat_client().complete([{"role": "user", "content": "hi"}]))
+
+    def test_stream_403_falls_back_to_zhipu(self, monkeypatch):
+        self._setup_env(monkeypatch)
+        seen_urls: list[str] = []
+
+        class FakeResp:
+            def __init__(self, url):
+                self._url = url
+
+            def raise_for_status(self):
+                if "bailian.test" in self._url:
+                    req = httpx.Request("POST", self._url)
+                    raise httpx.HTTPStatusError(
+                        "403 Forbidden",
+                        request=req,
+                        response=httpx.Response(403, request=req),
+                    )
+
+            async def aiter_lines(self):
+                if "bailian.test" in self._url:
+                    return
+                yield 'data: {"choices":[{"delta":{"content":"流式"}}]}'
+                yield "data: [DONE]"
+
+        class FakeStreamCM:
+            def __init__(self, url):
+                self._url = url
+
+            async def __aenter__(self):
+                return FakeResp(self._url)
+
+            async def __aexit__(self, *a):
+                return False
+
+        class FakeAsyncClient:
+            def __init__(self, *a, **k):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *a):
+                return False
+
+            def stream(self, method, url, content=None, headers=None):
+                seen_urls.append(url)
+                return FakeStreamCM(url)
+
+        def client_factory(*a, **k):
+            return FakeAsyncClient()
+
+        monkeypatch.setattr(httpx, "AsyncClient", client_factory)
+        import asyncio
+
+        client = get_chat_client()
+
+        async def collect(messages):
+            out = []
+            async for d in client.stream(messages):
+                out.append(d)
+            return out
+
+        deltas = asyncio.run(collect([{"role": "user", "content": "hi"}]))
+        assert deltas == ["流式"]
+        assert seen_urls[0].startswith("https://bailian.test")
+        assert seen_urls[-1].startswith("https://zhipu.test")
 
 
 class TestRerankGate:
