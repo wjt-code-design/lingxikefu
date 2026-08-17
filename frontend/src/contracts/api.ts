@@ -45,6 +45,7 @@ export interface Session {
   title?: string;
   created_at: string;
   updated_at: string;
+  satisfaction?: string; // BUG-06：会话满意度（satisfied/neutral/unsatisfied）
 }
 export interface SessionListReq {
   page: number;

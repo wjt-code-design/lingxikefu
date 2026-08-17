@@ -90,12 +90,14 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     return response
 
 
+# BUG-02（安全）：credentials 模式下禁用通配符方法/头——浏览器对 allow_credentials=True 的
+# 通配符展开为反射模式，等于信任任意 Origin 的凭证请求。收窄到实际使用的白名单。
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 

@@ -20,6 +20,7 @@ import logging
 import threading
 import time
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.concurrency import run_in_threadpool
@@ -177,6 +178,11 @@ async def _persist_answer(
         db.add(msg)
         db.commit()
         db.refresh(msg)
+        # BUG-03：touch 会话 updated_at（assistant 落库同样触发排序浮顶）
+        sess = db.get(Session, session_id)
+        if sess is not None:
+            sess.updated_at = datetime.now(timezone.utc)
+            db.commit()
         for src in source_payloads:
             db.add(
                 MessageSource(
@@ -224,6 +230,9 @@ def agent_reply(
     db.add(msg)
     db.commit()
     db.refresh(msg)
+    # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
+    s.updated_at = datetime.now(timezone.utc)
+    db.commit()
     return {"message_id": str(msg.id)}
 
 
@@ -273,6 +282,9 @@ async def chat_stream(
     db.add(user_msg)
     db.commit()
     db.refresh(user_msg)
+    # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
+    s.updated_at = datetime.now(timezone.utc)
+    db.commit()
 
     kb_id = await run_in_threadpool(_latest_kb_id, db)
 

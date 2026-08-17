@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
@@ -35,6 +35,7 @@ class SessionItem(BaseModel):
     title: str | None
     created_at: str
     updated_at: str  # L2：补齐 updated_at，与前端契约对齐
+    satisfaction: str | None = None  # BUG-06：会话满意度（satisfied/neutral/unsatisfied）
 
 
 class SessionMessage(BaseModel):
@@ -42,6 +43,7 @@ class SessionMessage(BaseModel):
     role: str
     content: str
     created_at: str
+    intent: str | None = None  # BUG-07：消息意图（qa/handoff/chitchat）
 
 
 class SessionDetail(BaseModel):
@@ -75,6 +77,7 @@ def create_session(
         title=s.title,
         created_at=s.created_at.isoformat(),
         updated_at=s.updated_at.isoformat(),
+        satisfaction=s.satisfaction,
     )
 
 
@@ -82,11 +85,30 @@ def create_session(
 def list_sessions(
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
 ) -> SessionListResp:
+    """会话列表（BUG-01 / BUG-05）。
+
+    - user：只看自己的会话（Session.user_id == 当前用户）；
+    - agent/admin：看全租户客户会话（客服工作台「会话列表」核心能力）；
+    - 支持 page/size 分页（offset/limit），total 为过滤后的真实总数；
+    - 排序仍按 updated_at desc（配合 BUG-03 的 session touch 后排序才正确）。
+    """
     user_id = uuid.UUID(payload["sub"])
-    total = db.scalar(select(func.count(Session.id)).where(Session.user_id == user_id)) or 0
+    role = payload.get("role")
+    cond = (
+        Session.tenant_id == settings.TENANT_DEFAULT
+        if role in ("admin", "agent")
+        else Session.user_id == user_id
+    )
+    total = db.scalar(select(func.count(Session.id)).where(cond)) or 0
     rows = db.scalars(
-        select(Session).where(Session.user_id == user_id).order_by(Session.updated_at.desc()).limit(50)
+        select(Session)
+        .where(cond)
+        .order_by(Session.updated_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
     ).all()
     return SessionListResp(
         total=total,
@@ -96,6 +118,7 @@ def list_sessions(
                 title=s.title,
                 created_at=s.created_at.isoformat(),
                 updated_at=s.updated_at.isoformat(),
+                satisfaction=s.satisfaction,
             )
             for s in rows
         ],
@@ -131,6 +154,7 @@ def get_session(
                 role=m.role.value,
                 content=m.content,
                 created_at=m.created_at.isoformat(),
+                intent=m.intent,  # BUG-07：返回真实意图供客服判断转人工
             )
             for m in msgs
         ],

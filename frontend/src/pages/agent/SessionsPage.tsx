@@ -6,14 +6,19 @@ import { useNavigate } from 'react-router-dom';
 import { deleteSession, listSessions } from '@/api/sessions';
 import type { ApiError, Session } from '@/contracts/api';
 import { EmptyState } from '@/components/common/EmptyState';
+import { useAuthStore } from '@/store/authStore';
 
 /**
  * Agent 工作台 · 会话列表（真实查询 GET /sessions + T8 React Query）。
  * 点击行进入对话页（/chat）；操作列支持删除（T4：含未关闭工单 409 时提示）。
+ *
+ * BUG-10/11：删除按钮仅 admin 显示——后端 delete_session 只放行 owner/admin，
+ * agent 点了会 404（防探测），故按角色条件渲染，避免无效操作。
  */
 export function SessionsPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const role = useAuthStore((s) => s.role);
 
   const { data, isLoading } = useQuery({
     queryKey: ['sessions'],
@@ -37,6 +42,12 @@ export function SessionsPage() {
     return <EmptyState title="暂无会话" description="用户发起对话后会出现在这里" />;
   }
 
+  const satisfactionLabel: Record<string, string> = {
+    satisfied: '满意',
+    neutral: '一般',
+    unsatisfied: '不满意',
+  };
+
   const columns: ColumnsType<Session> = [
     {
       title: '标题',
@@ -50,6 +61,12 @@ export function SessionsPage() {
       render: (v: string) => new Date(v).toLocaleString('zh-CN'),
     },
     {
+      title: '满意度',
+      dataIndex: 'satisfaction',
+      width: 100,
+      render: (v: string | undefined) => (v ? (satisfactionLabel[v] ?? v) : '—'),
+    },
+    {
       title: '操作',
       key: 'action',
       width: 180,
@@ -58,17 +75,19 @@ export function SessionsPage() {
           <Button size="small" onClick={() => navigate(`/chat?session=${record.id}`)}>
             查看对话
           </Button>
-          <Popconfirm
-            title="删除该会话？"
-            description="删除后对话记录不可恢复"
-            okText="删除"
-            okButtonProps={{ danger: true }}
-            onConfirm={() => onDelete(record)}
-          >
-            <Button size="small" danger>
-              删除
-            </Button>
-          </Popconfirm>
+          {role === 'admin' && (
+            <Popconfirm
+              title="删除该会话？"
+              description="删除后对话记录不可恢复"
+              okText="删除"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onDelete(record)}
+            >
+              <Button size="small" danger>
+                删除
+              </Button>
+            </Popconfirm>
+          )}
         </Space>
       ),
     },

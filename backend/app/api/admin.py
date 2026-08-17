@@ -71,13 +71,32 @@ def list_users(
 def update_user_role(
     user_id: UUID,
     req: RoleUpdateReq,
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> OkResp:
-    """变更用户角色（仅限同租户用户）。"""
+    """变更用户角色（仅限同租户用户）。
+
+    BUG-04 自保护：
+    - admin 禁止修改自己的角色（单 admin 系统自我降级即锁死，无法再进管理后台）；
+    - 多 admin 场景也禁止降级最后一个 admin（防御：目标为 admin 且系统仅剩一个时拒绝）。
+    """
+    if str(user_id) == payload["sub"]:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "不允许修改自己的角色")
     u = db.get(User, user_id)
     if u is None or u.tenant_id != settings.TENANT_DEFAULT:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
+    if u.role == UserRole.admin and req.role != UserRole.admin:
+        admin_cnt = (
+            db.scalar(
+                select(func.count(User.id)).where(
+                    User.tenant_id == settings.TENANT_DEFAULT,
+                    User.role == UserRole.admin,
+                )
+            )
+            or 0
+        )
+        if admin_cnt <= 1:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能降级最后一个管理员")
     u.role = UserRole(req.role)
     db.commit()
     return OkResp()
@@ -200,6 +219,7 @@ def list_feedback(
         for r in rows
     ]
     return FeedbackListResp(items=items, total=total)
+
 
 def _day_key(dt) -> str:
     """统一日期键（兼容 sqlite naive / pg tz-aware）。"""
