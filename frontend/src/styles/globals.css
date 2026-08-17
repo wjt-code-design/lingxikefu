@@ -1307,3 +1307,122 @@ body {
   line-height: 1.6;
   color: var(--text-3);
 }
+
+/* ===================== 通知中心（铃铛 + 面板，内部台 agent/admin） ===================== */
+.notification-bell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--text-2);
+  cursor: pointer;
+  transition:
+    all var(--dur-fast) var(--ease-out);
+}
+.notification-bell:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand-dark);
+}
+.notification-bell__icon {
+  font-size: 16px;
+}
+.notification-panel {
+  width: 340px;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.notification-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.notification-panel__body {
+  max-height: 420px;
+  overflow-y: auto;
+}
+.notification-panel__state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+.notification-item {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.notification-item:last-child {
+  border-bottom: none;
+}
+.notification-item:hover {
+  background: var(--color-brand-soft);
+}
+.notification-item--unread {
+  background: color-mix(in srgb, var(--color-brand) 8%, transparent);
+}
+.notification-item__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  background: var(--color-brand-soft);
+  color: var(--color-brand-dark);
+  font-size: 14px;
+}
+.notification-item__main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.notification-item__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notification-item__tag {
+  flex: none;
+  padding: 0 6px;
+  font-size: 11px;
+  line-height: 18px;
+  border-radius: 999px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+}
+.notification-item__content {
+  font-size: 12px;
+  color: var(--text-3);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.notification-item__time {
+  font-size: 11px;
+  color: var(--text-4);
+}

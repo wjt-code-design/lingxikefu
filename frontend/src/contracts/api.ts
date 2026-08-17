@@ -325,3 +325,22 @@ export interface TrendPoint {
 export interface StatsTrendResp {
   days: TrendPoint[];
 }
+
+// ---------- Notifications（通知中心 SSE · P2） ----------
+export interface NotificationItem {
+  notification_id: string;
+  event_type: string;
+  title: string;
+  content: string;
+  resource_type?: string | null;
+  resource_id?: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+export interface NotificationListResp {
+  items: NotificationItem[];
+  total: number;
+}
+export interface UnreadCountResp {
+  count: number;
+}

@@ -22,6 +22,7 @@ from app.core.database import get_db
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.services.audit_service import audit_log
+from app.services.notification_service import create_notification
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +86,13 @@ def ensure_active_ticket(
     session_id: uuid.UUID,
     message_id: uuid.UUID | None = None,
     source: str = "ai",
+    notify: bool = True,
 ) -> Ticket | None:
     """AI 建单 helper（chat.py handoff 时调用）：幂等 + fail-open。
 
     同 session 已有 open/processing 工单 → 返回既有（不重复建）；
     任何异常 → 回滚并返回 None（不阻断 SSE 流，chat 层降级为原话术）。
+    notify=False：手动转人工时由 escalate_ticket 单独发 ticket.transfer，避免重复 ticket.created。
     """
     try:
         active = db.scalar(
@@ -109,6 +112,17 @@ def ensure_active_ticket(
         db.add(t)
         db.commit()
         db.refresh(t)
+        # 通知中心：AI handoff 建单成功 → 推给 agent（fail-open，不阻断问答流）
+        if notify:
+            create_notification(
+                db,
+                recipient_role="agent",
+                event_type="ticket.created",
+                title="新工单待处理",
+                content=f"AI 转人工已建工单 {t.id}",
+                resource_type="ticket",
+                resource_id=str(t.id),
+            )
         return t
     except Exception:  # noqa: BLE001 - fail-open：建单失败不影响问答流
         db.rollback()
@@ -155,6 +169,16 @@ def create_ticket(
         actor_role=payload.get("role"),
         action="ticket.create",
         resource="ticket",
+        resource_id=str(t.id),
+    )
+    # 通知中心：手动建单 → 推给 agent（fail-open）
+    create_notification(
+        db,
+        recipient_role="agent",
+        event_type="ticket.created",
+        title="新工单待处理",
+        content=f"客服已建工单 {t.id}",
+        resource_type="ticket",
         resource_id=str(t.id),
     )
     return _item(t)
@@ -288,7 +312,17 @@ def escalate_ticket(
         raise HTTPException(status_code=404, detail="session not found")
     if str(s.user_id) != payload["sub"]:
         raise HTTPException(status_code=403, detail="not your session")
-    t = ensure_active_ticket(db, session_id, source="manual")
+    t = ensure_active_ticket(db, session_id, source="manual", notify=False)
     if t is None:
         raise HTTPException(status_code=503, detail="工单创建失败，请稍后重试")
+    # 通知中心：用户主动转人工 → 推给 agent（fail-open）
+    create_notification(
+        db,
+        recipient_role="agent",
+        event_type="ticket.transfer",
+        title="用户转人工",
+        content=f"会话 {session_id} 用户请求人工服务",
+        resource_type="ticket",
+        resource_id=str(t.id),
+    )
     return _item(t)

@@ -20,6 +20,7 @@ from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
 from app.services.audit_service import audit_log
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -231,4 +232,14 @@ def rate_satisfaction(
         raise HTTPException(status_code=404, detail="session not found")  # 防探测
     s.satisfaction = body.rating
     db.commit()
+    # 通知中心：满意度提交 → 推给 admin（fail-open，不阻塞主流程）
+    create_notification(
+        db,
+        recipient_role="admin",
+        event_type="satisfaction.submitted",
+        title="收到满意度评价",
+        content=f"会话 {session_id} 用户评价：{body.rating}",
+        resource_type="session",
+        resource_id=str(session_id),
+    )
     return OkResp()

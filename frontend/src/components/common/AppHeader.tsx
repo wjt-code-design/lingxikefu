@@ -1,6 +1,7 @@
 import { Layout, Segmented, Space, Typography } from 'antd';
 import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
+import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
 
 const themeOptions = [
@@ -10,7 +11,7 @@ const themeOptions = [
 ];
 
 /**
- * 内部台顶栏：品牌 + 主题切换（浅色/柔和/跟随系统）+ UserMenu（三端复用）。
+ * 内部台顶栏：品牌 + 主题切换（浅色/柔和/跟随系统）+ 通知铃铛 + UserMenu。
  * 柔和档仅切换浅色海盐变体（theme.ts softTokens + CSS 变量），永不出现深色界面。
  */
 export function AppHeader() {
@@ -28,6 +29,7 @@ export function AppHeader() {
           onChange={(v) => setTheme(v as ThemeMode)}
           aria-label="主题切换"
         />
+        <NotificationBell />
         <UserMenu />
       </Space>
     </Layout.Header>
