@@ -1,18 +1,18 @@
 import { Layout, Segmented, Space, Typography } from 'antd';
-import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { DesktopOutlined, SunOutlined } from '@ant-design/icons';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
 import { NotificationBell } from './NotificationBell';
 import { UserMenu } from './UserMenu';
 
+// 拒绝深色：仅「浅色 / 跟随系统」两档（跟随系统恒解析为浅色）。原「柔和(dark)」假深色档已删除。
 const themeOptions = [
   { label: '浅色', value: 'light', icon: <SunOutlined /> },
-  { label: '柔和', value: 'dark', icon: <MoonOutlined /> },
   { label: '跟随系统', value: 'system', icon: <DesktopOutlined /> },
 ];
 
 /**
- * 内部台顶栏：品牌 + 主题切换（浅色/柔和/跟随系统）+ 通知铃铛 + UserMenu。
- * 柔和档仅切换浅色海盐变体（theme.ts softTokens + CSS 变量），永不出现深色界面。
+ * 内部台顶栏：品牌 + 主题切换（浅色/跟随系统）+ 通知铃铛 + UserMenu。
+ * 恒为浅色海盐系，永不出现深色界面。
  */
 export function AppHeader() {
   const { theme, setTheme } = useTheme();

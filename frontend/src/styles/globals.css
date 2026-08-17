@@ -147,7 +147,9 @@ body {
 
 /* 挂件外壳 */
 .widget-shell {
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -160,9 +162,10 @@ body {
 }
 .widget-shell__body {
   flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 /* 顶栏 */
@@ -185,6 +188,8 @@ body {
 .page--chat,
 .page--widget {
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* 空态 / 加载态 */
@@ -211,6 +216,8 @@ body {
 .page--widget,
 .page--chat {
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
 .chat-container {
   display: flex;
@@ -222,7 +229,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 16px;
+  padding: 14px 16px;
 }
 .chat-container__empty {
   margin-top: 64px;
@@ -249,14 +256,17 @@ body {
 }
 .chat-container__footer {
   border-top: 1px solid var(--border);
-  padding: 12px 16px;
+  padding: 10px 16px;
   background: var(--color-surface);
 }
 /* 消息列表与气泡 */
 .chat-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
+  width: 100%;
+  max-width: 780px;
+  margin: 0 auto;
 }
 .chat-msg {
   display: flex;
@@ -268,7 +278,7 @@ body {
   justify-content: flex-start;
 }
 .chat-msg__bubble {
-  max-width: 680px;
+  max-width: 640px;
   padding: 10px 14px;
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -333,6 +343,8 @@ body {
 }
 .chat-msg__text {
   margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.75;
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -533,6 +545,9 @@ body {
   grid-template-columns: 260px minmax(0, 1fr) 300px;
   gap: 12px;
   padding: 12px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
 }
 .wb-col {
   min-height: 0;
@@ -550,7 +565,11 @@ body {
   padding: 14px 12px;
 }
 .wb-col--main {
-  background: transparent;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
 }
 /* 品牌区（参考稿：灵犀·星河智家 + 客服在线 7×24） */
 .wb-brand {

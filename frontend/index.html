@@ -5,25 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>灵犀 · Lingxi 智能客服</title>
     <script>
-      // 防闪烁（FOUC）：首帧渲染前根据持久化主题设置 <html data-theme>
-      // key 必须与 store/themeStore.ts 的 persist name 一致：lingxi-theme
-      (function () {
-        try {
-          var raw = localStorage.getItem('lingxi-theme');
-          var t = raw ? JSON.parse(raw).state.theme : 'system';
-          var dark = false; // 柔和档（原 dark 语义废除，仅驱动浅色变体 data-theme）
-          if (t === 'dark') {
-            dark = true;
-          } else if (t === 'system') {
-            dark = !!(
-              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-            );
-          }
-          document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
-      })();
+      // 拒绝深色：恒为浅色海盐系，data-theme 固定 light（无深色模式，防 FOUC 闪烁）
+      document.documentElement.setAttribute('data-theme', 'light');
     </script>
   </head>
   <body>

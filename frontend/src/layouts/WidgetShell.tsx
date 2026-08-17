@@ -1,13 +1,12 @@
 import { Segmented, Space, Typography } from 'antd';
-import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { DesktopOutlined, SunOutlined } from '@ant-design/icons';
 import { Outlet } from 'react-router-dom';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
 import { UserMenu } from '@/components/common/UserMenu';
 
-// C1 统一（V1 后无"深色"，dark = 柔和浅海盐变体）：与 AppHeader 同文案同图标
+// 拒绝深色：仅「浅色 / 跟随系统」两档（跟随系统恒解析为浅色）。原「柔和(dark)」假深色档已删除。
 const options = [
   { label: '浅色', value: 'light', icon: <SunOutlined /> },
-  { label: '柔和', value: 'dark', icon: <MoonOutlined /> },
   { label: '跟随系统', value: 'system', icon: <DesktopOutlined /> },
 ];
 

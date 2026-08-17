@@ -43,29 +43,6 @@
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* 柔和变体（soft，原 dark 语义废除——无深色模式）：切换器「柔和」档 = 微调对比的浅色海盐系 */
-[data-theme='dark'] {
-  --color-brand: #96c8e8;
-  --color-brand-dark: #539fd8;
-  --color-brand-soft: rgba(150, 200, 232, 0.16);
-
-  --color-accent: #73c9a8;
-  --color-amber: #f6c38e;
-  --color-orange: #f6c38e;
-  --color-danger: #e58e8e;
-
-  --text-1: #2f3e4e;
-  --text-2: #2f3e4e;
-  --text-3: #6b7f93;
-  --text-4: #8296a9; /* V2：dark(柔和)变体同标准对比度 */
-
-  --color-surface: #ffffff;
-  --bg-page: #f6f4ef; /* 柔和档：暖米微调 */
-  --border: #e9e4dc;
-
-  --shadow-card: 0 4px 14px rgba(148, 198, 232, 0.16);
-}
-
 /* ===== semantic-workbench（内部工作台：Agent+Admin 共用外壳，仅菜单权限不同） =====
    冷灰底 + 发丝线 + 深一档强调（#539FD8）+ 小圆角；侧栏 #2E5D85 白字（唯一中深色）。
    挂在 AdminLayout 根节点 .app-workbench 上，User 端不受影响。 */
