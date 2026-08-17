@@ -6,6 +6,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 
 from app.core.security import decode_token
+from app.core.token_revocation import is_revoked
 
 _bearer = HTTPBearer()
 
@@ -15,13 +16,21 @@ def get_current_user(
 ) -> dict:
     """解析并校验 Bearer token，返回 payload（含 sub / role）。"""
     try:
-        return decode_token(creds.credentials)
+        payload = decode_token(creds.credentials)
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # M1：登出后吊销的 token 立即失效
+    if is_revoked(payload.get("jti")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="token 已失效，请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return payload
 
 
 def require_admin(payload: dict = Depends(get_current_user)) -> dict:

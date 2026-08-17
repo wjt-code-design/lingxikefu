@@ -1,11 +1,13 @@
 import { Segmented, Space, Typography } from 'antd';
+import { DesktopOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import { Outlet } from 'react-router-dom';
 import { useTheme, type ThemeMode } from '@/hooks/useTheme';
 
+// C1 统一（V1 后无"深色"，dark = 柔和浅海盐变体）：与 AppHeader 同文案同图标
 const options = [
-  { label: '浅', value: 'light' },
-  { label: '深', value: 'dark' },
-  { label: '系统', value: 'system' },
+  { label: '浅色', value: 'light', icon: <SunOutlined /> },
+  { label: '柔和', value: 'dark', icon: <MoonOutlined /> },
+  { label: '跟随系统', value: 'system', icon: <DesktopOutlined /> },
 ];
 
 /**
@@ -18,7 +20,7 @@ export function WidgetShell() {
   return (
     <div className="widget-shell">
       <div className="widget-shell__bar">
-        <Typography.Text strong>灵犀 · Lingxi</Typography.Text>
+        <Typography.Text strong>灵犀 · 星河智家</Typography.Text>
         <Space>
           <Segmented
             size="small"

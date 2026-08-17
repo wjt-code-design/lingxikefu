@@ -9,13 +9,34 @@
 from __future__ import annotations
 
 import logging
+import time
 from functools import lru_cache
 from uuid import NAMESPACE_DNS, UUID, uuid5
 
 from app.core.config import settings
 from app.llm_clients.embedding import get_embedding_client
+from app.services.sparse_util import text_to_sparse
 
 logger = logging.getLogger(__name__)
+
+
+def get_collection_name() -> str:
+    """当前生效的 Qdrant 集合名：hybrid 用专用集合（named dense+sparse），否则纯 dense 旧集合。"""
+    return settings.QDRANT_COLLECTION_HYBRID if settings.RAG_ENABLE_HYBRID else settings.QDRANT_COLLECTION
+
+#: 集合名列表缓存（L7）：维度不变，60s 内复用，避免每次 upsert/delete 都 get_collections。
+_COLLECTIONS_CACHE: tuple[float, set[str]] | None = None
+_COLLECTIONS_TTL = 60.0
+
+
+def _list_collections() -> set[str]:
+    global _COLLECTIONS_CACHE
+    now = time.time()
+    if _COLLECTIONS_CACHE and now - _COLLECTIONS_CACHE[0] < _COLLECTIONS_TTL:
+        return _COLLECTIONS_CACHE[1]
+    names = {c.name for c in get_qdrant_client().get_collections().collections}
+    _COLLECTIONS_CACHE = (now, names)
+    return names
 
 
 def _point_id(doc_id: UUID, idx: int) -> str:
@@ -52,22 +73,35 @@ def get_qdrant_client():
 
 
 def ensure_collection() -> int:
-    """确保 Qdrant 集合存在且维度与当前 embedding 一致，返回维度。"""
+    """确保 Qdrant 集合存在且维度与当前 embedding 一致，返回维度。
+
+    hybrid 模式创建 named vectors（dense+sparse），纯 dense 模式维持旧结构。
+    """
     dim = get_embedding_client().dim
-    name = settings.QDRANT_COLLECTION
+    name = get_collection_name()
     try:
         client = get_qdrant_client()
-        collections = [c.name for c in client.get_collections().collections]
-        if name not in collections:
-            client.create_collection(
-                collection_name=name,
-                vectors_config={"size": dim, "distance": "Cosine"},
-            )
-            logger.info("创建 Qdrant 集合 %s (dim=%s)", name, dim)
+        if name not in _list_collections():
+            if settings.RAG_ENABLE_HYBRID:
+                client.create_collection(
+                    collection_name=name,
+                    vectors_config={"dense": {"size": dim, "distance": "Cosine"}},
+                    sparse_vectors_config={"sparse": {}},
+                )
+            else:
+                client.create_collection(
+                    collection_name=name,
+                    vectors_config={"size": dim, "distance": "Cosine"},
+                )
+            logger.info("创建 Qdrant 集合 %s (dim=%s, hybrid=%s)", name, dim, settings.RAG_ENABLE_HYBRID)
             return dim
         info = client.get_collection(name)
         vector_params = info.config.params.vectors
-        existing = vector_params.size if hasattr(vector_params, "size") else None
+        # named vectors（hybrid：{"dense": {...}, "sparse": {...}}）→ 取 dense 维度；纯 dense → 直接 .size
+        if isinstance(vector_params, dict):
+            existing = vector_params.get("dense").size if vector_params.get("dense") else None
+        else:
+            existing = vector_params.size if hasattr(vector_params, "size") else None
         if existing != dim:
             raise VectorStoreError(
                 f"Qdrant 集合 {name} 维度 {existing} != 当前 embedding 维度 {dim}，"
@@ -95,23 +129,44 @@ def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[l
             raise VectorStoreError(
                 f"向量维度 {len(v)} != 集合维度 {dim}，可能 embedding 配置不一致"
             )
-    name = settings.QDRANT_COLLECTION
+    name = get_collection_name()
     # point id 用 uuid5 稳定派生（合法 UUID、去重幂等、可溯源），chunk_id 同值
-    points = [
-        {
-            "id": _point_id(doc_id, idx),
-            "vector": vectors[idx],
-            "payload": {
-                "chunk_id": _point_id(doc_id, idx),
-                "doc_id": str(doc_id),
-                "kb_id": str(kb_id),
-                "tenant_id": settings.TENANT_DEFAULT,
-                "idx": idx,
-                "text": texts[idx],
-            },
-        }
-        for idx in range(len(texts))
-    ]
+    if settings.RAG_ENABLE_HYBRID:
+        # hybrid：named vectors（dense + sparse bigram），sparse 检索词面匹配补 dense 语义短板
+        points = [
+            {
+                "id": _point_id(doc_id, idx),
+                "vector": {
+                    "dense": vectors[idx],
+                    "sparse": text_to_sparse(texts[idx]),
+                },
+                "payload": {
+                    "chunk_id": _point_id(doc_id, idx),
+                    "doc_id": str(doc_id),
+                    "kb_id": str(kb_id),
+                    "tenant_id": settings.TENANT_DEFAULT,
+                    "idx": idx,
+                    "text": texts[idx],
+                },
+            }
+            for idx in range(len(texts))
+        ]
+    else:
+        points = [
+            {
+                "id": _point_id(doc_id, idx),
+                "vector": vectors[idx],
+                "payload": {
+                    "chunk_id": _point_id(doc_id, idx),
+                    "doc_id": str(doc_id),
+                    "kb_id": str(kb_id),
+                    "tenant_id": settings.TENANT_DEFAULT,
+                    "idx": idx,
+                    "text": texts[idx],
+                },
+            }
+            for idx in range(len(texts))
+        ]
     try:
         get_qdrant_client().upsert(collection_name=name, points=points)
     except Exception as e:  # noqa: BLE001
@@ -121,12 +176,11 @@ def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[l
 
 def delete_by_doc_id(doc_id: UUID) -> None:
     """删除某文档的全部向量（导入失败回滚 / 删除文档时调用）。"""
-    name = settings.QDRANT_COLLECTION
+    name = get_collection_name()
     try:
         client = get_qdrant_client()
-        # 先确认集合存在，不存在则无事可删（幂等）
-        collections = [c.name for c in client.get_collections().collections]
-        if name in collections:
+        # 先确认集合存在，不存在则无事可删（幂等）；集合名走本地缓存（L7）
+        if name in _list_collections():
             from qdrant_client.http.models import (
                 FieldCondition,
                 Filter,

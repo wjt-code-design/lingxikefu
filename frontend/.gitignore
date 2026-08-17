@@ -1,0 +1,7 @@
+# vite 配置变化时的临时编译产物（残留会污染 git 状态）
+*.timestamp-*.mjs
+
+# Playwright e2e 测试产物
+playwright-report/
+test-results/
+playwright/.cache/

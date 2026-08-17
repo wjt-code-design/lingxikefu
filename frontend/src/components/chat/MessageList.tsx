@@ -22,26 +22,61 @@ export function MessageList({
   stream?: StreamView;
   onRate: (id: string, rating: 'up' | 'down') => void;
 }) {
+  const listRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
+  // L8：用户上滑离开底部 → 暂停自动滚底；回到底部附近（80px 内）→ 恢复跟随。
+  // 用 ref 而非 state：不因滚动触发重渲染，token 流式期间保持 60fps。
+  const stickToBottom = useRef(true);
+
+  // 滚动容器是 .chat-list 的父级（.chat-container__body，overflow-y: auto），结构见 ChatContainer
+  useEffect(() => {
+    const scroller = listRef.current?.parentElement;
+    if (!scroller) return;
+    const onScroll = () => {
+      const dist = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
+      stickToBottom.current = dist < 80;
+    };
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, []);
+
   useEffect(() => {
     // jsdom 等无头环境没有 scrollIntoView（测试/SSR），存在性保护
-    endRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    if (stickToBottom.current) {
+      endRef.current?.scrollIntoView?.({ behavior: 'smooth' });
+    }
   }, [messages.length, stream?.tokens.length]);
 
   const isStreaming =
     !!stream && (stream.stage === 'retrieving' || stream.stage === 'generating');
 
   return (
-    <div className="chat-list">
+    <div ref={listRef} className="chat-list">
       {messages.map((m) => (
         <MessageBubble key={m.id} msg={m} onRate={(r) => onRate(m.id, r)} />
       ))}
       {isStreaming && stream && (
         <div className="chat-msg chat-msg--ai">
+          {/* V8：流式占位与正式消息保持头像一致性 */}
+          <div className="chat-msg__avatar" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
+              <path
+                d="M12 3C7 3 3 6.8 3 11.5c0 2.6 1.3 4.9 3.4 6.4V21l3.2-1.9c.7.2 1.5.3 2.4.3 5 0 9-3.8 9-8.5S17 3 12 3z"
+                fill="#96C8E8"
+                opacity="0.55"
+              />
+              <circle cx="8.7" cy="11.3" r="1.2" fill="#539FD8" />
+              <circle cx="12.3" cy="11.3" r="1.2" fill="#539FD8" />
+              <circle cx="15.9" cy="11.3" r="1.2" fill="#539FD8" />
+            </svg>
+          </div>
           <div className="chat-msg__bubble">
             <StageIndicator stage={stream.stage as 'retrieving' | 'generating'} />
             {stream.tokens && (
-              <Typography.Paragraph className="chat-msg__text">{stream.tokens}</Typography.Paragraph>
+              <Typography.Paragraph className="chat-msg__text">
+                {stream.tokens}
+                <span className="chat-cursor" aria-hidden="true" />
+              </Typography.Paragraph>
             )}
           </div>
         </div>

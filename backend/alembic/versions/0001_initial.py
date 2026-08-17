@@ -1,4 +1,4 @@
-"""BU-01 首版迁移：全表（含 tenant_id） + tenant_id 索引 + quotas 唯一约束
+"""BU-01 首版迁移：全表（含 tenant_id） + tenant_id 索引（配额改用 Redis 计数，无 quotas 表）
 
 Revision ID: 0001
 Revises:
@@ -177,22 +177,6 @@ def upgrade() -> None:
     op.create_index("ix_feedback_message_id", "feedback", ["message_id"])
     op.create_index("ix_feedback_user_id", "feedback", ["user_id"])
 
-    # ---------- quotas（每日配额，唯一约束 (tenant_id, user_id, date)） ----------
-    op.create_table(
-        "quotas",
-        sa.Column("id", sa.Uuid(), nullable=False),
-        sa.Column("tenant_id", sa.String(length=64), nullable=False, server_default="default"),
-        sa.Column("user_id", sa.Uuid(), nullable=False),
-        sa.Column("date", sa.Date(), nullable=False),
-        sa.Column("used", sa.Integer(), nullable=False, server_default="0"),
-        sa.Column("limit", sa.Integer(), nullable=False, server_default="100"),
-        sa.PrimaryKeyConstraint("id"),
-        sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
-        sa.UniqueConstraint("tenant_id", "user_id", "date", name="uq_quotas_tenant_user_date"),
-    )
-    op.create_index("ix_quotas_tenant_id", "quotas", ["tenant_id"])
-    op.create_index("ix_quotas_user_id", "quotas", ["user_id"])
-
     # ---------- tickets（Phase2 预留） ----------
     op.create_table(
         "tickets",
@@ -221,7 +205,6 @@ def downgrade() -> None:
     # 先删引用方（子表），再删被引用方（父表）
     for table in (
         "tickets",
-        "quotas",
         "feedback",
         "chunk_context",
         "chunks",

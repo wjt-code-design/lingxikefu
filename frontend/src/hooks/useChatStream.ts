@@ -10,22 +10,38 @@ export interface ChatStreamState {
   tokens: string;
   sources: MessageSource[];
   messageId?: string;
+  ticketId?: string; // T1：handoff 建单后携带工单号
   error?: { code: string; message: string };
 }
 
 const INITIAL: ChatStreamState = { stage: 'idle', tokens: '', sources: [] };
 
-/** 后端 SSE 事件分派（stage/token/sources/done/error，见 contracts/api.ts SSEEvent） */
+/**
+ * 流式兜底超时（L8）。
+ * 后端单次 LLM httpx 超时 60s，retrieval + generation 全程可能更长；
+ * 此处 120s 防后端进程挂死/丢包导致前端无限等待。
+ */
+const STREAM_TIMEOUT_MS = 120_000;
+
+/** 后端 SSE 事件分派（stage/intent/token/sources/done/error，见 contracts/api.ts SSEEvent） */
 function applyEvent(state: ChatStreamState, ev: SSEEvent): ChatStreamState {
   switch (ev.event) {
     case 'stage':
       return { ...state, stage: ev.data.stage, error: undefined };
+    case 'intent':
+      // R-2：意图事件供后端落库真实 intent，前端无需状态变更
+      return state;
     case 'token':
       return { ...state, tokens: state.tokens + ev.data.delta };
     case 'sources':
       return { ...state, sources: ev.data.sources };
     case 'done':
-      return { ...state, stage: 'done', messageId: ev.data.message_id };
+      return {
+        ...state,
+        stage: 'done',
+        messageId: ev.data.message_id,
+        ticketId: ev.data.ticket_id, // T1：handoff 建单工单号
+      };
     case 'error':
       return { ...state, stage: 'error', error: ev.data };
   }
@@ -54,6 +70,12 @@ export function useChatStream() {
 
     const base = import.meta.env.VITE_API_BASE || API_PREFIX;
     setState({ stage: 'retrieving', tokens: '', sources: [] });
+    // 兜底超时：超时则中止 fetch 并转超时错误（区分于用户主动 reset 的静默中止）
+    let timedOut = false;
+    const timer = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, STREAM_TIMEOUT_MS);
     try {
       const resp = await fetch(`${base}/chat/stream`, {
         method: 'POST',
@@ -97,13 +119,24 @@ export function useChatStream() {
         }
       }
     } catch (e) {
-      if ((e as Error).name !== 'AbortError') {
+      if ((e as Error).name === 'AbortError') {
+        // 用户 reset（silent）或兜底超时（显式报错）
+        if (timedOut) {
+          setState((s) => ({
+            ...s,
+            stage: 'error',
+            error: { code: 'TIMEOUT', message: '响应超时，请稍后重试' },
+          }));
+        }
+      } else {
         setState((s) => ({
           ...s,
           stage: 'error',
           error: { code: 'NET', message: '网络连接失败，请检查网络后重试' },
         }));
       }
+    } finally {
+      clearTimeout(timer);
     }
   }, []);
 

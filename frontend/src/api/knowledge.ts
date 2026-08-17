@@ -1,19 +1,41 @@
-import type { CreateKBReq, DocItem, KBItem, KBListResp, OkResp } from '@/contracts/api';
+import { http } from '@/api/client';
+import type {
+  CreateKBReq,
+  DocItem,
+  DocumentListResp,
+  KBItem,
+  KBListResp,
+  OkResp,
+} from '@/contracts/api';
 
-// TODO(FE-04): 知识库/文档接口接入 api/client.ts，签名与契约一致。
-
+/** GET /knowledge-bases → KBListResp */
 export async function listKnowledgeBases(): Promise<KBListResp> {
-  throw new Error('TODO(FE-04): 知识库列表接口待实现');
+  const r = await http.get<KBListResp>('/knowledge-bases');
+  return r.data;
 }
 
-export async function createKnowledgeBase(_req: CreateKBReq): Promise<KBItem> {
-  throw new Error('TODO(FE-04): 创建知识库接口待实现');
+/** POST /knowledge-bases → KBItem */
+export async function createKnowledgeBase(req: CreateKBReq): Promise<KBItem> {
+  const r = await http.post<KBItem>('/knowledge-bases', req);
+  return r.data;
 }
 
-export async function uploadDocument(_kbId: string, _file: File): Promise<DocItem> {
-  throw new Error('TODO(FE-04): 上传文档接口待实现');
+/** GET /knowledge-bases/{kbId}/documents → DocumentListResp */
+export async function listDocuments(kbId: string): Promise<DocumentListResp> {
+  const r = await http.get<DocumentListResp>(`/knowledge-bases/${kbId}/documents`);
+  return r.data;
 }
 
-export async function deleteDocument(_docId: string): Promise<OkResp> {
-  throw new Error('TODO(FE-04): 删除文档接口待实现');
+/** POST /knowledge-bases/{kbId}/documents（multipart）→ DocItem */
+export async function uploadDocument(kbId: string, file: File): Promise<DocItem> {
+  const form = new FormData();
+  form.append('file', file);
+  const r = await http.post<DocItem>(`/knowledge-bases/${kbId}/documents`, form);
+  return r.data;
+}
+
+/** DELETE /documents/{docId} → OkResp */
+export async function deleteDocument(docId: string): Promise<OkResp> {
+  const r = await http.delete<OkResp>(`/documents/${docId}`);
+  return r.data;
 }

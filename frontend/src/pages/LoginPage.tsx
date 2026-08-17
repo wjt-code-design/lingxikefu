@@ -1,16 +1,17 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
 import { login, me } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
 
 /**
- * 登录页（FE-02）：表单 → login() → 写入 token → me() 取档案 → 跳 /chat。
- * 路由守卫 RequireAuth 读取 authStore.token 决定放行。
+ * 登录页（FE-02）：表单 → login() → 写入 token → me() 取档案 → 跳回来源页或 /chat。
+ * 路由守卫 RequireAuth 将受保护路径存入 location.state.from（L6：登录后回到来源页）。
  */
 export function LoginPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [form] = Form.useForm<{ account: string; password: string }>();
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +27,8 @@ export function LoginPage() {
       const meResp = await me();
       useAuthStore.getState().setUser(meResp);
       message.success('登录成功');
-      navigate('/chat');
+      const from = (location.state as { from?: string } | null)?.from;
+      navigate(from && from !== '/login' ? from : '/chat');
     } catch (e) {
       message.error((e as ApiError).message || '登录失败');
     } finally {

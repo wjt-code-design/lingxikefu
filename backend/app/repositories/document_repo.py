@@ -1,6 +1,7 @@
 """知识库 / 文档 / 切片仓储（BU-04）。单租户：查询显式带 tenant_id。"""
 from __future__ import annotations
 
+import hashlib
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -134,7 +135,7 @@ class ChunkRepository:
                 kb_id=kb_id,
                 idx=i,
                 text=text,
-                hash=str(hash(text))[:64],
+                hash=hashlib.sha256(text.encode("utf-8")).hexdigest()[:64],
             )
             for i, text in enumerate(texts)
         ]

@@ -3,6 +3,7 @@ import type {
   AuthResp,
   LoginReq,
   MeResp,
+  OkResp,
   RefreshReq,
   RefreshResp,
   RegisterReq,
@@ -23,6 +24,12 @@ export async function register(req: RegisterReq): Promise<AuthResp> {
 /** POST /auth/refresh → RefreshResp */
 export async function refresh(req: RefreshReq): Promise<RefreshResp> {
   const { data } = await http.post<RefreshResp>('/auth/refresh', req);
+  return data;
+}
+
+/** POST /auth/logout → OkResp（吊销 token，使旧 token 失效） */
+export async function logout(refreshToken: string): Promise<OkResp> {
+  const { data } = await http.post<OkResp>('/auth/logout', { refresh_token: refreshToken });
   return data;
 }
 

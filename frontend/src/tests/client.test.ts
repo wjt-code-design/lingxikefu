@@ -1,4 +1,5 @@
 import { AxiosError } from 'axios';
+import type { AxiosHeaderValue, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { http } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
@@ -15,25 +16,40 @@ describe('client 401 自动刷新拦截器', () => {
     useAuthStore.setState({ token: null, refreshToken: null, user: null, role: null });
   });
 
+  type MockResponse = { status: number; data: unknown };
+  type AdapterFn = (config: InternalAxiosRequestConfig) => Promise<AxiosResponse>;
+
+  function toAxiosResponse(config: InternalAxiosRequestConfig, res: MockResponse): AxiosResponse {
+    return {
+      data: res.data,
+      status: res.status,
+      statusText: '',
+      headers: config.headers ?? {},
+      config,
+    };
+  }
+
   // handler 返回状态码；≥400 主动 reject AxiosError（带 response），模拟真实 HTTP 错误
-  function mockAdapter(handler: (config: any) => { status: number; data: unknown }) {
-    http.defaults.adapter = (async (config: any) => {
+  function mockAdapter(handler: (config: InternalAxiosRequestConfig) => MockResponse) {
+    const adapter: AdapterFn = async (config) => {
       const res = handler(config);
       if (res.status >= 400) {
-        throw new AxiosError('mock error', 'ERR', config, {}, {
-          status: res.status,
-          data: res.data,
-          headers: {},
+        throw new AxiosError(
+          'mock error',
+          'ERR',
           config,
-        } as any);
+          {},
+          toAxiosResponse(config, res),
+        );
       }
-      return { ...config, headers: config.headers || {}, statusText: '', request: {}, data: res.data, status: res.status };
-    }) as any;
+      return toAxiosResponse(config, res);
+    };
+    http.defaults.adapter = adapter;
   }
 
   it('access 过期(401) → 自动 refresh → 用新 token 重试成功', async () => {
     let secureCalls = 0;
-    const seenAuth: (string | undefined)[] = [];
+    const seenAuth: (AxiosHeaderValue | undefined)[] = [];
     mockAdapter((config) => {
       seenAuth.push(config.headers?.Authorization);
       if (config.url === '/secure') {
@@ -68,14 +84,14 @@ describe('client 401 自动刷新拦截器', () => {
 
   it('非 401 错误直接透传，不触发刷新', async () => {
     mockAdapter(() => ({ status: 500, data: {} }));
-    let err: any = null;
+    let err: unknown = null;
     try {
       await http.get('/secure');
     } catch (e) {
       err = e;
     }
     expect(err).not.toBeNull();
-    expect(err?.code).toBe('UNKNOWN');
+    expect((err as AxiosError).code).toBe('500'); // H1 契约：无结构化 code 时回退到 HTTP 状态码
     expect(useAuthStore.getState().token).toBe('old');
   });
 });

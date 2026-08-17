@@ -33,3 +33,9 @@ class Session(Base):
         server_default=sa.func.now(),
         onupdate=sa.func.now(),
     )
+    satisfaction: Mapped[str | None] = mapped_column(
+        sa.String(16),
+        nullable=True,
+        default=None,
+        comment="会话级满意度（P2-2）：satisfied / neutral / unsatisfied",
+    )

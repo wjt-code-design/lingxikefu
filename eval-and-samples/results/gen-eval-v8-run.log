@@ -1,0 +1,102 @@
+评测 90 题（拒答 8 + 可答 82），预计 ~15 分钟
+
+  拒答 Q042 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q049 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q055 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q060 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q061 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q067 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q069 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  拒答 Q071 → 疑似编造❌ | [ERR] Client error '429 Too Many Requests' for url 'https://
+  可答 Q001 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q002 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q003 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q004 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q005 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q006 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q007 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q008 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q009 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q010 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q011 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q012 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q013 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q014 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q015 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q016 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q017 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q018 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q019 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q020 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q021 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q022 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q023 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q024 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q025 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q026 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q027 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q028 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q029 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q030 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q031 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q032 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q033 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q034 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q035 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q036 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q041 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q043 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q044 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q045 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q046 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q047 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q048 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q050 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q051 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q052 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q053 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q054 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q056 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q057 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q058 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q059 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q062 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q063 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q064 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q065 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q066 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q068 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q070 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q072 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q073 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q074 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q076 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q080 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q081 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q082 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q083 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q084 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q085 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q086 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q087 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q088 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q089 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q090 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q091 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q092 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q093 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q094 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q095 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q096 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q097 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+  可答 Q100 → 失败 | [ERR] Client error '429 Too Many Requests' for url
+
+=== v6 全量生成评测指标（max_tokens=4096 与生产一致）===
+拒答诚实率: 0/8 = 0.0%（目标 ≥87.5%）
+可答误报率: 0/82 = 0.0%（现实目标 ≤10%）
+可答空回答率: 0/82 = 0.0%（目标 0）
+可答生成失败率: 82/82 = 100.0%（目标 0，防 [ERR] 混入正常）
+来源标注合规率: 100.0%（目标 ≥95%）
+数字编造疑似: 0 题（启发式，含日期/序号合理项，需人工复核）
+
+结果已落盘: C:\Users\33393\WorkBuddy\2026-08-15-00-39-34\eval-and-samples\results\gen-eval-20260816-1239.json

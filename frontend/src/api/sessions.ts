@@ -10,6 +10,7 @@ interface BackendSession {
   session_id: string;
   title: string | null;
   created_at: string;
+  updated_at: string;
 }
 
 interface BackendSessionDetail extends BackendSession {
@@ -26,7 +27,7 @@ function toSession(s: BackendSession): Session {
     id: s.session_id,
     title: s.title ?? undefined,
     created_at: s.created_at,
-    updated_at: s.created_at,
+    updated_at: s.updated_at,
   };
 }
 
@@ -37,8 +38,8 @@ export async function createSession(title?: string): Promise<Session> {
 }
 
 export async function listSessions(req: SessionListReq): Promise<SessionListResp> {
-  const r = await http.get<{ items: BackendSession[] }>('/sessions', { params: req });
-  return { items: r.data.items.map(toSession), total: r.data.items.length };
+  const r = await http.get<{ items: BackendSession[]; total: number }>('/sessions', { params: req });
+  return { items: r.data.items.map(toSession), total: r.data.total };
 }
 
 export async function getSessionDetail(id: string): Promise<SessionDetail> {
@@ -51,4 +52,17 @@ export async function getSessionDetail(id: string): Promise<SessionDetail> {
       session_id: r.data.session_id,
     })),
   };
+}
+
+/** 删除会话（T4：owner/admin；含未关闭工单的会话后端返回 409）。 */
+export async function deleteSession(id: string): Promise<void> {
+  await http.delete(`/sessions/${id}`);
+}
+
+/** 会话级满意度评分（P2-2：satisfied / neutral / unsatisfied，幂等覆盖）。 */
+export async function rateSatisfaction(
+  id: string,
+  rating: 'satisfied' | 'neutral' | 'unsatisfied'
+): Promise<void> {
+  await http.post(`/sessions/${id}/satisfaction`, { rating });
 }

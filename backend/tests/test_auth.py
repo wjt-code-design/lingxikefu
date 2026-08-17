@@ -103,6 +103,10 @@ def test_refresh_issues_new_access(client):
     r = client.post(f"{API}/auth/refresh", json={"refresh_token": reg["refresh_token"]})
     assert r.status_code == 200
     assert r.json()["access_token"]
+    # R-4 轮换：返回新 refresh，且旧 refresh 再次使用应失效
+    assert r.json()["refresh_token"]
+    r2 = client.post(f"{API}/auth/refresh", json={"refresh_token": reg["refresh_token"]})
+    assert r2.status_code == 401
 
 
 def test_me_requires_auth(client):
@@ -117,3 +121,24 @@ def test_me_returns_profile_and_quota(client):
     assert data["email"] == "me@b.com"
     assert data["role"] == "user"
     assert isinstance(data["quota_left"], int)
+
+
+def test_consume_token_atomic_single_use(monkeypatch):
+    """Bug #2 修复：同一 jti 并发复用 refresh token —— SETNX 原子占用，仅首次成功。"""
+    from app.core import token_revocation
+
+    class _FakeRedis:
+        def __init__(self):
+            self._data: dict[str, str] = {}
+
+        def set(self, key, value, ex=None, nx=False):
+            if nx and key in self._data:
+                return False
+            self._data[key] = value
+            return True
+
+    _fake = _FakeRedis()
+    monkeypatch.setattr(token_revocation, "get_redis", lambda: _fake)  # 单例：状态跨调用共享
+    assert token_revocation.consume_token("jti-1", 9999999999) is True   # 首次占用成功
+    assert token_revocation.consume_token("jti-1", 9999999999) is False  # 复用被拒（防双签发）
+    assert token_revocation.consume_token("jti-2", 9999999999) is True   # 不同 jti 不受影响

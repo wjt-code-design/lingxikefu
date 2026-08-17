@@ -33,11 +33,23 @@ class Ticket(Base):
         nullable=False,
         index=True,
     )
+    # T1 溯源锚点（v2.1 修订 C）：建单时记录触发消息，问题追踪溯源的起点。
+    # 消息删除（随会话级联）时 SET NULL，工单保留。
+    message_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid(),
+        sa.ForeignKey("messages.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[TicketStatus] = mapped_column(
         sa.Enum(TicketStatus, name="ticket_status"),
         nullable=False,
         default=TicketStatus.open,
         server_default=TicketStatus.open.value,
+    )
+    # 建单来源：ai（LLM 意图自动）/ manual（用户主动转人工按钮）
+    source: Mapped[str] = mapped_column(
+        sa.String(20), nullable=False, default="ai", server_default="ai"
     )
     assignee_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid(),

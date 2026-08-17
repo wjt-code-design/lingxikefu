@@ -1,4 +1,7 @@
-/* 全局基础样式：以设计 token 为底色，随 <html data-theme> 切换 */
+/* ============================================================
+   全局基础样式（海盐蓝治愈系 · 2026-08-17）
+   只改样式、不动 DOM 结构；修正历史幽灵 CSS 变量（--color-ink 等）
+   ============================================================ */
 * {
   box-sizing: border-box;
 }
@@ -15,15 +18,95 @@ body {
   font-family:
     -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', sans-serif;
-  background: var(--color-surface);
-  color: var(--color-ink);
+  /* 海盐蓝治愈背景渐变（规范：160deg #F8FBFE → #EFF7FD，不添加图片） */
+  background: linear-gradient(160deg, #f8fbfe 0%, #eff7fd 100%);
+  color: var(--text-2);
   transition:
     background-color 0.2s ease,
     color 0.2s ease;
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- 通用动效（轻量化，不花哨） ---------- */
+
+/* 消息弹出：淡入 + 轻微向上位移 */
+.chat-msg {
+  animation: msg-in var(--dur-base) var(--ease-out);
+}
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 按钮 hover：缓慢提亮 + 轻微放大 1.02 倍（轻量化）。
+   I3 修复：scale 仅主操作按钮（primary / 热问胶囊），
+   排除 Space.Compact 内小按钮（重试/转人工/发送）与纯图标按钮（赞踩/复制）——避免组内跳动 */
+.ant-btn {
+  transition:
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+.ant-btn:not(:disabled):hover {
+  background-color: rgba(150, 200, 232, 0.1);
+}
+.ant-btn-primary:not(:disabled):hover,
+.chat-container__hot-btn:not(:disabled):hover {
+  transform: scale(1.02);
+}
+.ant-btn-primary:not(:disabled) {
+  transition:
+    transform var(--dur-fast) var(--ease-out),
+    background-color var(--dur-base) var(--ease-out),
+    border-color var(--dur-base) var(--ease-out),
+    color var(--dur-base) var(--ease-out);
+}
+
+/* 输入框激活：柔和淡蓝色光晕 */
+.chat-composer textarea:focus,
+.ant-input:focus,
+.ant-input-focused {
+  box-shadow: 0 0 0 3px rgba(150, 200, 232, 0.25) !important;
+}
+
+/* 尊重系统减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg {
+    animation: none;
+  }
+  .ant-btn {
+    transition: none;
+  }
+  .ant-btn:not(:disabled):hover {
+    transform: none;
+  }
+}
+
 /* ---------- 布局辅助 ---------- */
+
+/* AppTable 行 hover 品牌化高亮 */
+.app-table-row:hover > td {
+  background: var(--color-brand-soft) !important;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+/* 工单提示条（amber 微光，柔和化） */
+.chat-msg__ticket {
+  margin-top: 8px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--text-3);
+  background: color-mix(in srgb, var(--color-amber) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-amber) 38%, transparent);
+}
 
 /* 认证外壳 */
 .auth-layout {
@@ -37,7 +120,7 @@ body {
   background: var(--color-brand-soft);
 }
 .auth-layout__brand {
-  color: var(--color-brand) !important;
+  color: var(--color-brand-dark) !important;
 }
 .auth-layout__card {
   width: 100%;
@@ -56,7 +139,7 @@ body {
   text-align: center;
   font-weight: 700;
   font-size: 16px;
-  color: var(--color-brand);
+  color: var(--color-brand-dark);
 }
 .admin-layout__content {
   padding: 24px;
@@ -73,7 +156,7 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: 8px 16px;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  border-bottom: 1px solid var(--border);
 }
 .widget-shell__body {
   flex: 1;
@@ -88,7 +171,7 @@ body {
   align-items: center;
   justify-content: space-between;
   background: var(--color-surface) !important;
-  border-bottom: 1px solid rgba(127, 127, 127, 0.2);
+  border-bottom: 1px solid var(--border);
   line-height: normal;
 }
 .app-header__title {
@@ -124,7 +207,7 @@ body {
   height: 100%;
 }
 
-/* ===================== 对话挂件（FE-03） ===================== */
+/* ===================== 对话挂件（海盐蓝气泡） ===================== */
 .page--widget,
 .page--chat {
   height: 100%;
@@ -144,8 +227,28 @@ body {
 .chat-container__empty {
   margin-top: 64px;
 }
+/* 热门问题快捷入口 */
+.chat-container__hot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  padding: 0 24px;
+  margin-top: 8px;
+}
+.chat-container__hot-btn {
+  border-radius: 999px;
+  border-color: var(--border) !important;
+  color: var(--text-2) !important;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.chat-container__hot-btn:hover {
+  transform: scale(1.02);
+  border-color: var(--color-brand) !important;
+  color: var(--color-brand-dark) !important;
+}
 .chat-container__footer {
-  border-top: 1px solid rgba(107, 118, 137, 0.18);
+  border-top: 1px solid var(--border);
   padding: 12px 16px;
   background: var(--color-surface);
 }
@@ -168,18 +271,114 @@ body {
   max-width: 82%;
   padding: 10px 14px;
   border-radius: var(--radius-md);
-  background: var(--color-brand-soft);
+  background: var(--color-surface);
+  position: relative;
 }
+/* 用户消息：海盐蓝渐变气泡（居右） */
 .chat-msg--user .chat-msg__bubble {
-  background: var(--color-brand);
-  color: #fff;
+  background: linear-gradient(135deg, #b4d8f5, #96c8e8);
+  color: var(--text-1);
+}
+/* AI 消息：纯白卡片 + 浅蓝细边框 + 柔和蓝影 */
+.chat-msg--ai .chat-msg__bubble {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  border-bottom-left-radius: 6px;
+}
+/* 用户气泡小折角（对话感） */
+.chat-msg--user .chat-msg__bubble {
+  border-bottom-right-radius: 6px;
+}
+/* AI 复制按钮：桌面 hover 显示（不遮挡正文）；触屏（hover:none）常显——I1 修复 */
+.chat-msg--ai .chat-msg__copy {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-size: 12px;
+}
+.chat-msg--ai .chat-msg__bubble:hover .chat-msg__copy {
+  opacity: 1;
+}
+@media (hover: none) {
+  /* 触屏无 hover：复制按钮常显，且不遮挡正文（改为气泡底部行内） */
+  .chat-msg--ai .chat-msg__copy {
+    position: static;
+    opacity: 1;
+    float: right;
+    margin: 2px 0 0 8px;
+    padding: 0 4px;
+  }
+}
+/* 流式输出光标 */
+.chat-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-brand-dark);
+  animation: chat-cursor-blink 1s step-end infinite;
+}
+@keyframes chat-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
 }
 .chat-msg__text {
   margin: 0 0 4px;
   white-space: pre-wrap;
   word-break: break-word;
 }
-/* 来源折叠 */
+/* Markdown 渲染 */
+.chat-msg__text p {
+  margin: 0 0 8px;
+  white-space: normal;
+}
+.chat-msg__text p:last-child {
+  margin-bottom: 0;
+}
+.chat-msg__text ul,
+.chat-msg__text ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+.chat-msg__text li {
+  margin: 2px 0;
+}
+.chat-msg__text code {
+  background: var(--color-brand-soft);
+  padding: 1px 5px;
+  border-radius: 6px;
+  font-size: 0.9em;
+}
+.chat-msg__text pre {
+  background: var(--color-brand-soft);
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+}
+.chat-msg__text pre code {
+  background: none;
+  padding: 0;
+}
+.chat-msg__text a {
+  color: var(--color-brand-dark);
+}
+.chat-msg__text h1,
+.chat-msg__text h2,
+.chat-msg__text h3 {
+  margin: 8px 0 4px;
+  white-space: normal;
+}
+
+/* 来源折叠（海盐蓝胶囊） */
 .chat-source {
   margin-top: 8px;
 }
@@ -190,43 +389,43 @@ body {
   padding: 2px 12px;
   font-size: 12px;
   line-height: 22px;
-  color: var(--color-primary, #1677ff);
-  background: rgba(22, 119, 255, 0.06);
-  border: 1px solid rgba(22, 119, 255, 0.2);
-  border-radius: 999px;
+  color: var(--color-brand-dark);
+  background: rgba(150, 200, 232, 0.1);
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: background 0.2s;
 }
 .chat-source__toggle:hover {
-  background: rgba(22, 119, 255, 0.12);
+  background: rgba(150, 200, 232, 0.2);
 }
 .chat-source__panel {
   margin-top: 8px;
-  border: 1px solid rgba(128, 128, 128, 0.18);
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
   padding: 6px 10px;
-  background: rgba(128, 128, 128, 0.04);
+  background: rgba(150, 200, 232, 0.05);
 }
 .chat-source__group {
   padding: 4px 0;
 }
 .chat-source__group + .chat-source__group {
-  border-top: 1px dashed rgba(128, 128, 128, 0.2);
+  border-top: 1px dashed var(--border);
 }
 .chat-source__group-title {
   font-size: 12px;
   font-weight: 600;
-  color: var(--color-text, #333);
+  color: var(--text-2);
   margin-bottom: 2px;
 }
 .chat-source__refs {
   font-weight: 400;
-  color: var(--color-primary, #1677ff);
+  color: var(--color-brand-dark);
   margin-left: 4px;
 }
 .chat-source__snippet {
   font-size: 12px;
-  color: var(--color-muted);
+  color: var(--text-3);
   max-height: 120px;
   overflow-y: auto;
   white-space: pre-wrap;
@@ -235,23 +434,61 @@ body {
   padding: 3px 0;
 }
 .chat-source__ref {
-  color: var(--color-primary, #1677ff);
+  color: var(--color-brand-dark);
   font-weight: 600;
   margin-right: 4px;
 }
-/* 阶段指示 */
+
+/* 阶段指示：海盐蓝三点呼吸（替换 Spin 转圈） */
 .chat-stage {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--color-muted);
+  color: var(--text-3);
   font-size: 13px;
 }
+.chat-dots {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.chat-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  animation: dot-breathe 1.2s ease-in-out infinite;
+}
+.chat-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.chat-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes dot-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-dots span {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+
 /* 反馈条 */
 .chat-thumbs {
   margin-top: 4px;
 }
-/* 输入区 */
+
+/* 输入区（海盐蓝胶囊 + 激活光晕） */
 .chat-composer {
   display: flex;
   gap: 8px;
@@ -259,4 +496,449 @@ body {
 }
 .chat-composer .ant-input-textarea {
   flex: 1;
+}
+.chat-composer textarea {
+  background: var(--color-surface) !important;
+  border-color: var(--border) !important;
+  border-radius: var(--radius-md) !important;
+  transition: box-shadow var(--dur-base) var(--ease-out);
+}
+.chat-composer .ant-btn-primary {
+  background: var(--color-brand) !important;
+  border-color: var(--color-brand) !important;
+  color: var(--text-1) !important;
+  border-radius: var(--radius-md) !important;
+}
+.chat-composer .ant-btn-primary:hover {
+  /* V3：hover 加深到 --color-brand-dark（#539FD8）而非变浅 #B4D8F5——保持对比度 */
+  background: var(--color-brand-dark) !important;
+  border-color: var(--color-brand-dark) !important;
+  color: #fff !important;
+}
+
+/* ===================== 三栏工作台（Workbench，海盐蓝） ===================== */
+.wb {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.wb-mobile-bar {
+  display: none; /* 仅 <768px 显示 */
+}
+.wb-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr) 276px;
+  gap: 12px;
+  padding: 12px;
+}
+.wb-col {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.wb-col--left,
+.wb-col--right {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow-y: auto;
+  padding: 14px 12px;
+}
+.wb-col--main {
+  background: transparent;
+}
+/* 品牌区（参考稿：灵犀·星河智家 + 客服在线 7×24） */
+.wb-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 4px 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.wb-brand__name {
+  font-size: 16px;
+  color: var(--text-1);
+}
+.wb-brand__online {
+  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.wb-brand__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-accent);
+  display: inline-block;
+}
+/* 分组 */
+.wb-section {
+  margin-bottom: 16px;
+}
+.wb-section__title {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 8px;
+  letter-spacing: 0.02em;
+}
+.wb-spin {
+  display: block;
+  padding: 16px 0;
+  text-align: center;
+}
+.wb-empty .ant-empty-description {
+  font-size: 12px;
+  color: var(--text-3);
+}
+/* 历史会话条目 */
+.wb-session {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.wb-session:hover {
+  background: rgba(150, 200, 232, 0.12);
+}
+.wb-session__title {
+  font-size: 13px;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+.wb-session__time {
+  font-size: 11px;
+  color: var(--text-4);
+  flex-shrink: 0;
+}
+/* 知识库条目 */
+.wb-kb {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.wb-kb:hover {
+  background: rgba(150, 200, 232, 0.12);
+}
+.wb-kb__name {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.wb-kb__meta {
+  font-size: 11px;
+  color: var(--text-4);
+}
+/* 右栏：溯源 */
+.wb-source {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  background: rgba(150, 200, 232, 0.04);
+}
+.wb-source__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.wb-source__doc {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wb-source__tag {
+  font-size: 12px;  /* A3：10→12px */
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: #4da07f;  /* A3：加深绿（浅绿 #73C9A8 对比不足） */
+  background: rgba(115, 201, 168, 0.16);
+  flex-shrink: 0;
+}
+.wb-source__score {
+  font-size: 11px;
+  color: var(--color-brand-dark);
+  margin: 2px 0;
+}
+.wb-source__snippet {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* 右栏：快捷话术 */
+.wb-replies {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.wb-reply {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--text-2);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    color var(--dur-fast) var(--ease-out);
+}
+.wb-reply:hover {
+  border-color: var(--color-brand);
+  color: var(--color-brand-dark);
+}
+/* 移动端（<768px）：折叠为单栏，左右栏走抽屉 */
+/* L1（建议书）：中屏 768-1080px —— 右栏收窄为 240px，避免对话区被挤压 */
+@media (max-width: 1080px) and (min-width: 768px) {
+  .wb-grid {
+    grid-template-columns: 200px minmax(0, 1fr) 240px;
+    gap: 10px;
+    padding: 10px;
+  }
+  .wb-col--left,
+  .wb-col--right {
+    padding: 12px 10px;
+  }
+}
+/* L2（建议书）：移动端去 .page 外框，对话区全宽沉浸 */
+@media (max-width: 767px) {
+  .page--chat,
+  .page--widget {
+    padding: 0;
+  }
+
+
+  .wb-mobile-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--color-surface);
+  }
+  .wb-mobile-hint {
+    color: var(--text-4);
+    font-size: 14px;
+  }
+  .wb-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+    padding: 0;
+  }
+  .wb-col--left,
+  .wb-col--right {
+    display: none; /* 走 Drawer */
+  }
+  .wb-col--main {
+    border-radius: 0;
+  }
+}
+
+/* ---------- P0-1：消息生命周期（sending/failed） + P0-2 创建错误提示 ---------- */
+.chat-msg__bubble--sending {
+  opacity: 0.65;
+}
+.chat-msg__bubble--failed {
+  border-color: var(--color-danger) !important;
+}
+.chat-msg__status {
+  display: block;
+  font-size: 11px;
+  color: var(--text-4);
+  margin-top: 4px;
+}
+.chat-msg__status--failed {
+  color: var(--color-danger);
+}
+.chat-container__error {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--color-danger);
+  background: rgba(229, 142, 142, 0.1);
+  border: 1px solid rgba(229, 142, 142, 0.3);
+}
+
+/* P0-4：转人工按钮（海盐蓝描边胶囊）+ 手动转人工结果气泡 */
+.chat-composer__escalate {
+  border-color: var(--color-brand) !important;
+  color: var(--color-brand-dark) !important;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.chat-composer__escalate:hover {
+  background: rgba(150, 200, 232, 0.12) !important;
+}
+.chat-msg__ticket--error {
+  color: var(--color-danger);
+  border-color: rgba(229, 142, 142, 0.4);
+  background: rgba(229, 142, 142, 0.08);
+}
+
+/* P1-1：历史对话标题行 + 新建按钮 */
+.wb-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.wb-section__head .wb-section__title {
+  margin-bottom: 0;
+}
+.wb-new {
+  border: 1px solid var(--border);
+  background: var(--color-surface);
+  color: var(--color-brand-dark);
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wb-new:hover {
+  border-color: var(--color-brand);
+  background: rgba(150, 200, 232, 0.12);
+}
+
+/* P1-3：快捷话术提示 */
+.wb-replies-hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+}
+
+/* ---------- V5：品牌化欢迎块（替代 Empty 空态感） ---------- */
+.chat-container__empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.chat-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin-top: 48px;
+  padding: 24px 32px;
+  text-align: center;
+}
+.chat-welcome__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(180, 216, 245, 0.4), rgba(150, 200, 232, 0.18));
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  margin-bottom: 4px;
+}
+.chat-welcome__title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: 0.01em;
+}
+.chat-welcome__sub {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ---------- I4：自定义按钮统一可见焦点环（键盘可达性） ---------- */
+.wb-session:focus-visible,
+.wb-reply:focus-visible,
+.wb-new:focus-visible,
+.wb-mobile-bar button:focus-visible,
+.chat-container__hot-btn:focus-visible,
+.chat-source__toggle:focus-visible {
+  outline: 2px solid var(--color-brand-dark);
+  outline-offset: 2px;
+}
+
+/* ---------- A5（建议书）：滚动条定制（海盐蓝细轨，与圆角卡片统一） ---------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(150, 200, 232, 0.55) transparent;
+}
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 200, 232, 0.55);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(83, 159, 216, 0.7);
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- V8/A6（建议书）：AI 消息品牌头像锚点（左侧 28px） ---------- */
+.chat-msg--ai {
+  align-items: flex-start;
+  gap: 8px;
+}
+.chat-msg__avatar {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(180, 216, 245, 0.5), rgba(150, 200, 232, 0.25));
+  border: 1px solid var(--border);
+}
+
+/* ---------- P2-2：会话满意度评价（内联条，非弹窗） ---------- */
+.chat-satisfaction {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px;
+}
+.chat-satisfaction__text {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.chat-satisfaction__hint {
+  font-size: 11px;
+  color: var(--text-4);
 }

@@ -1,4 +1,8 @@
-"""模型单测（BU-01 DoD + 规划书红线⑨）：全表含 tenant_id，quotas 唯一约束存在。"""
+"""模型单测（BU-01 DoD + 规划书红线⑨）：全表含 tenant_id。
+
+注：Quota ORM 模型已于 L5 移除（配额改为 Redis 原子闸门实现，
+见 services/quota.py 与 test_quota.py），故下表集合为 10 张。
+"""
 from __future__ import annotations
 
 import sqlalchemy as sa
@@ -28,15 +32,8 @@ def test_all_tables_have_tenant_id_index() -> None:
         assert f"ix_{name}_tenant_id" in index_names, f"表 {name} 缺少 ix_{name}_tenant_id 索引"
 
 
-def test_quotas_unique_constraint() -> None:
-    """quotas 唯一约束 (tenant_id, user_id, date) 必须存在（每日一行防超卖）。"""
-    table = Base.metadata.tables["quotas"]
-    unique_names = {c.name for c in table.constraints if isinstance(c, sa.UniqueConstraint)}
-    assert "uq_quotas_tenant_user_date" in unique_names
-
-
 def test_expected_table_set_present() -> None:
-    """覆盖规划 §4.1 的全部 11 张表。"""
+    """覆盖规划 §4.1 的全部 10 张表（L5 后 Quota 改 Redis，不再有 quotas 表）。"""
     tables = set(Base.metadata.tables)
     assert {
         "users",
@@ -48,6 +45,5 @@ def test_expected_table_set_present() -> None:
         "chunks",
         "chunk_context",
         "feedback",
-        "quotas",
         "tickets",
     } <= tables

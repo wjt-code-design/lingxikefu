@@ -4,3 +4,5 @@
 *.egg-info/
 .coverage
 coverage.xml
+# 双保险：绝不提交含密钥的 .env（即便根 .gitignore 被改）
+.env

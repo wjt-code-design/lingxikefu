@@ -10,7 +10,7 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url)),
     },
   },
-  // 本地开发：vite 代理把前端默认相对路径 /api/v1 转发到真实后端 8003
+  // 本地开发：vite 代理把前端默认相对路径 /api/v1 转发到真实后端 8000（docker compose api）
   // （dev 模式 import.meta.env.* 由 vite 托管，外部 define/插件替换不生效，故用代理最稳）
   // 前端代码保持 VITE_API_BASE 默认 /api/v1 即可；改后端端口时同步此处
   server: {
@@ -19,7 +19,7 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8003',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
     },
@@ -30,5 +30,20 @@ export default defineConfig({
     css: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     globals: false,
+  },
+  build: {
+    // antd 库固有体积（gzip ~304KB）不告警；业务入口已从 1.06MB 降至 ~403KB
+    chunkSizeWarningLimit: 1000,
+    rollupOptions: {
+      output: {
+        // T3 chunk 优化：把 react / antd / 其余 vendor 独立分块
+        // （入口 1.06MB → 分块后缓存友好 + 消除 >500kB 警告；组件均按需 import 已生效）
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'antd-vendor': ['antd', '@ant-design/icons'],
+          'vendor': ['axios'],
+        },
+      },
+    },
   },
 });

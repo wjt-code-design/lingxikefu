@@ -16,6 +16,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: 防止 aegisdesk-ai 那种「默认值三处自相矛盾 / 占位密钥泄漏」的坑。
 PLACEHOLDER_SECRET = "__CHANGE_ME__"
 
+#: 已知不安全的开发默认密钥（M5）：生产环境（ENV=prod）严禁使用，避免 token 被伪造。
+KNOWN_WEAK_SECRETS = {
+    "9f2a7c4e1b8d6a3f5c0e7b2d4a6f8c1e",  # 历史开发默认值
+}
+
+#: 生产环境 JWT_SECRET 最小长度（>=32 位强随机）。
+PROD_SECRET_MIN_LEN = 32
+
 
 class Settings(BaseSettings):
     """Lingxi 后端配置。
@@ -50,8 +58,23 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # --- 运行环境（M5：dev / prod；prod 强制强密钥） ---
+    ENV: str = "dev"
+
+    # --- 安全（M1：登录/注册防爆破限流；测试/内部环境可关闭，prod 必须开启） ---
+    RATE_LIMIT_ENABLED: bool = True
+
     # --- 配额（BU-08：每用户每日问答上限，Redis 计数） ---
     DAILY_QUOTA_LIMIT: int = 200
+
+    # --- 答案缓存（T10：省 token + 提速；可一键降级） ---
+    ANSWER_CACHE_ENABLED: bool = True
+    # 语义命中余弦阈值：实测 0.95 过高——同义改写句（"如何申请七天无理由退货" vs
+    # "七天无理由退货怎么申请"）余弦仅 0.94，被拒导致语义层形同虚设（只有一字不差命中）。
+    # 0.85：同义改写（0.84-0.94）命中、不同主题（0.43）拒绝，区分清晰；
+    # 串答风险由实体锁定（_entities_ok）+ kb_id/kb_version 校验兜底，阈值偏激进无副作用（miss 仅回落 LLM）。
+    ANSWER_CACHE_THRESHOLD: float = 0.85
+    ANSWER_CACHE_TTL_HOURS: int = 24
 
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
@@ -79,16 +102,26 @@ class Settings(BaseSettings):
     # rerank：MVP 关闭（管线预留节点，评测 recall@5 不达标再开）
     RAG_ENABLE_RERANK: bool = False
     RERANK_MODEL: str = "gte-rerank-v2"
+    # hybrid 检索（ADR-2026-08-16）：sparse(BM25 bigram) + dense + RRF。
+    # true 用 QDRANT_COLLECTION_HYBRID（named vectors dense+sparse，需重建索引）；
+    # false 回退纯 dense 旧集合（QDRANT_COLLECTION，无需重导，回滚路径）。
+    RAG_ENABLE_HYBRID: bool = True
 
     # --- 知识库导入（BU-04：分块 / 上传限制 / 向量集合） ---
     # 分块参数：中文按字符计；块内尽量保留段落结构，单段超长再硬切
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
+    # 检索 top_k（L4：与 RAG 调用默认对齐，统一为 8）
+    RETRIEVAL_TOP_K: int = 8
+    # 检索拒答阈值（L4：top-1 分数低于此值视为无可靠依据 → 拒答；原硬编码 0.30 提为配置）
+    MIN_SCORE: float = 0.30
     # 上传文件大小上限（MB），超出拒绝
     MAX_UPLOAD_MB: int = 10
     # Qdrant 集合名：带维度后缀（bge=768 / text-embedding-v3=1024），
     # 防换 embedding provider 后误写旧集合（维度不同 = 语义空间不同，必须重建）
     QDRANT_COLLECTION: str = "lingxi_bge_768"
+    # hybrid 专用集合：named vectors（dense+sparse），与纯 dense 旧集合物理隔离（回滚只需切开关）
+    QDRANT_COLLECTION_HYBRID: str = "lingxi_hybrid_bge_768"
 
     # --- CORS ---
     CORS_ORIGINS: list[str] = Field(
@@ -121,6 +154,17 @@ class Settings(BaseSettings):
             errors.append(
                 "LITELLM_MASTER_KEY 未配置或仍为占位值 __CHANGE_ME__（请由 LiteLLM 网关 secret 注入）"
             )
+
+        # M5：生产环境强制强密钥 —— 禁止开发默认密钥、要求 >=32 位随机值
+        if self.ENV == "prod":
+            if self.JWT_SECRET in KNOWN_WEAK_SECRETS:
+                errors.append(
+                    "生产环境 ENV=prod 禁止使用开发默认 JWT_SECRET，必须通过密钥管理注入随机值"
+                )
+            elif len(self.JWT_SECRET) < PROD_SECRET_MIN_LEN:
+                errors.append(
+                    f"生产环境 ENV=prod 的 JWT_SECRET 长度不足（{len(self.JWT_SECRET)} < {PROD_SECRET_MIN_LEN}），必须使用强随机密钥"
+                )
 
         for name, value in {
             "POSTGRES_HOST": self.POSTGRES_HOST,

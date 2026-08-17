@@ -30,6 +30,7 @@ class RefreshReq(BaseModel):
 
 class RefreshResp(BaseModel):
     access_token: str
+    refresh_token: str  # R-4：轮换后返回新 refresh（旧 token 已吊销），前端需覆盖存储
 
 
 class MeResp(BaseModel):

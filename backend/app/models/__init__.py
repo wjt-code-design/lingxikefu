@@ -9,7 +9,6 @@ from app.models.knowledge import (
     KnowledgeBase,
 )
 from app.models.message import Message, MessageRole, MessageSource
-from app.models.quota import Quota
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
@@ -29,7 +28,6 @@ __all__ = [
     "ChunkContext",
     "Feedback",
     "FeedbackRating",
-    "Quota",
     "Ticket",
     "TicketStatus",
 ]

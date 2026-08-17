@@ -19,7 +19,8 @@ from app.services.retrieval_service import RetrievedChunk
 
 
 def make_chunk(score: float, text: str = "保修条款内容", doc_id: str = "d1") -> RetrievedChunk:
-    return RetrievedChunk(chunk_id="c1", doc_id=doc_id, kb_id="kb1", idx=0, text=text, score=score)
+    # dense_score 与 score 一致：模拟纯 dense 相关性（拒答判定用 dense_score，ADR §3.5 解耦）
+    return RetrievedChunk(chunk_id="c1", doc_id=doc_id, kb_id="kb1", idx=0, text=text, score=score, dense_score=score)
 
 
 class FakeChat:
@@ -34,12 +35,17 @@ class FakeChat:
 
 @pytest.fixture(autouse=True)
 def patch(monkeypatch):
-    monkeypatch.setattr(
-        "app.services.rag_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.9)]
-    )
+    captured = {}
+
+    def _fake_search(q, kb, top_k=5):
+        captured["query"] = q
+        return [make_chunk(0.9)]
+
+    monkeypatch.setattr("app.services.rag_service.search_kb", _fake_search)
     monkeypatch.setattr("app.services.rag_service.settings.CHAT_MODEL", "qwen3.7-flash", raising=False)
     fake = FakeChat()
     monkeypatch.setattr("app.services.rag_service.get_chat_client", lambda: fake)
+    fake.captured = captured
     return fake
 
 
@@ -56,11 +62,35 @@ def test_intent_qa_default():
     assert classify_intent("退货运费谁出") == "qa"
 
 
+def test_intent_artificial_intelligence_not_handoff():
+    """M6 回归：「人工智能」不应被误判为转人工。"""
+    assert classify_intent("你们用了人工智能技术吗") == "qa"
+
+
+def test_intent_emotional_keywords_handoff():
+    """T1 分流升级：情绪词命中 → handoff（高优建单）。"""
+    assert classify_intent("你们服务太差我要退钱") == "handoff"
+    assert classify_intent("等太慢了差评") == "handoff"
+
+
+def test_intent_refund_not_handoff():
+    """T1 边界：`退款` 是 qa 高频词，不得误入情绪表 → 仍为 qa。"""
+    assert classify_intent("退款多久能到账") == "qa"
+    assert classify_intent("退款是原路退回吗") == "qa"
+
+
 # --- 管线 ---
 def test_pipeline_qa_retrieves_chunks(patch):
     r = run_pipeline("退货运费谁出", uuid4())
     assert r.intent == "qa"
     assert len(r.chunks) == 1 and not r.refuse
+
+
+def test_pipeline_search_uses_rewritten_query(patch):
+    """T9-S3：检索用改写文本（口语→规范），intent 仍为 qa（原文判定）。"""
+    r = run_pipeline("碎屏显咋换", uuid4())
+    assert r.intent == "qa"
+    assert patch.captured["query"] == "碎屏险怎么换"  # 检索入参为改写后
 
 
 def test_pipeline_low_score_refuses(patch, monkeypatch):
@@ -96,7 +126,10 @@ def test_build_qa_messages_contains_sources():
     msgs = build_qa_messages("保修多久", [make_chunk(0.9, "保修期12个月"), make_chunk(0.8, "电池6个月")])
     assert msgs[0]["role"] == "system"
     assert "[来源1]" in msgs[0]["content"] and "[来源2]" in msgs[0]["content"]
-    assert msgs[-1] == {"role": "user", "content": "保修多久"}
+    # 用户问题与历史通过 <<>> 分隔块放入 user 消息（M10 隔离）
+    assert msgs[-1]["role"] == "user"
+    assert "保修多久" in msgs[-1]["content"]
+    assert "<<用户问题>>" in msgs[-1]["content"]
 
 
 def test_prompt_forbids_metadata_and_allows_demo_data():
@@ -110,18 +143,24 @@ def test_prompt_forbids_metadata_and_allows_demo_data():
 
 def test_build_qa_messages_history():
     msgs = build_qa_messages("那电池呢", [make_chunk(0.9)], history=[{"role": "user", "content": "保修多久"}, {"role": "assistant", "content": "12个月"}])
-    assert "用户: 保修多久" in msgs[0]["content"]
-    assert "客服: 12个月" in msgs[0]["content"]
+    # 历史对话现置于 user 消息的 <<历史对话>> 分隔块内（M10）
+    assert msgs[-1]["role"] == "user"
+    assert "用户: 保修多久" in msgs[-1]["content"]
+    assert "客服: 12个月" in msgs[-1]["content"]
+    assert "<<历史对话>>" in msgs[-1]["content"]
 
 
 # --- 流式事件 ---
 async def test_stream_answer_events_order(patch):
     events = [e async for e in stream_answer("保修多久", uuid4())]
     types = [t for t, _ in events]
-    # 顺序：stage retrieving → stage generating → token* → sources → done
-    assert types[0] == "stage" and types[1] == "stage"
+    # 顺序（R-2）：intent → stage retrieving → stage generating → token* → sources → done
+    assert types[0] == "intent"
+    assert types[1] == "stage" and types[2] == "stage"
     assert "token" in types
     assert types[-2] == "sources" and types[-1] == "done"
+    # R-2：intent 事件携带真实判定
+    assert events[0][1]["intent"] == "qa"
 
 
 async def test_stream_answer_handoff_no_llm(patch):

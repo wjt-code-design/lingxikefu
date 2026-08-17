@@ -25,7 +25,8 @@ class FakeEmbedding:
 
 
 class FakeHit:
-    def __init__(self, score, payload):
+    def __init__(self, score, payload, pid=None):
+        self.id = pid or payload.get("chunk_id", "p")
         self.score = score
         self.payload = payload
 
@@ -53,8 +54,9 @@ class FakeQdrant:
                     "idx": 0,
                     "text": "退款政策第一条",
                 },
+                pid="c1",
             ),
-            FakeHit(0.8, {"chunk_id": "c2", "doc_id": "d1", "kb_id": "kb1", "idx": 1, "text": "退款政策第二条"}),
+            FakeHit(0.8, {"chunk_id": "c2", "doc_id": "d1", "kb_id": "kb1", "idx": 1, "text": "退款政策第二条"}, pid="c2"),
         ]
 
 
@@ -103,8 +105,11 @@ def test_search_kb_filter_tenant_and_kb(patch):
 
 
 def test_search_kb_top_k_passthrough(patch):
-    search_kb("发票", uuid4(), top_k=3)
-    assert patch["qd"].search_calls[0]["limit"] == 3
+    """hybrid：双路各取候选池（_HYBRID_CANDIDATES），RRF 融合后返回 top_k。"""
+    hits = search_kb("发票", uuid4(), top_k=3)
+    assert patch["qd"].search_calls[0]["limit"] == 24  # dense 候选池
+    assert len(patch["qd"].search_calls) == 2  # dense + sparse 双路
+    assert len(hits) <= 3
 
 
 def test_search_kb_empty_query_rejected(patch):

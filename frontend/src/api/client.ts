@@ -25,11 +25,20 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
 let refreshing: Promise<string | null> | null = null;
 
 function toApiError(error: unknown): ApiError {
-  const err = error as { response?: { data?: Record<string, unknown> }; message?: string };
+  const err = error as {
+    response?: { status?: number; data?: Record<string, unknown> };
+    message?: string;
+  };
   const data = err.response?.data;
+  const status = err.response?.status;
+  const message =
+    (typeof data?.message === 'string' && data.message) ||
+    (typeof data?.detail === 'string' && data.detail) || // H1 兜底：旧端点仍返回 {detail}
+    err.message ||
+    '网络错误';
   return {
-    code: typeof data?.code === 'string' ? data.code : 'UNKNOWN',
-    message: typeof data?.message === 'string' ? data.message : err.message || '网络错误',
+    code: typeof data?.code === 'string' ? data.code : String(status ?? 'UNKNOWN'),
+    message,
     request_id: typeof data?.request_id === 'string' ? data.request_id : '',
   };
 }
@@ -75,7 +84,11 @@ http.interceptors.response.use(
           refreshing = http
             .post<RefreshResp>('/auth/refresh', { refresh_token: refreshToken })
             .then((r) => {
-              useAuthStore.setState({ token: r.data.access_token });
+              // R-4：轮换后同步覆盖存储新 refresh token（旧 token 已吊销）
+              useAuthStore.setState({
+                token: r.data.access_token,
+                ...(r.data.refresh_token ? { refreshToken: r.data.refresh_token } : {}),
+              });
               return r.data.access_token;
             });
         }

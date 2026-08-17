@@ -1,10 +1,10 @@
 import { lazy, Suspense } from 'react';
+import { Skeleton } from 'antd';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import AuthLayout from '@/layouts/AuthLayout';
 import AdminLayout from '@/layouts/AdminLayout';
 import WidgetShell from '@/layouts/WidgetShell';
 import RequireAuth from '@/components/common/RequireAuth';
-import { EmptyState } from '@/components/common/EmptyState';
 import LoginPage from '@/pages/LoginPage';
 import RegisterPage from '@/pages/RegisterPage';
 import ChatPage from '@/pages/ChatPage';
@@ -26,12 +26,21 @@ import { useAuthStore } from '@/store/authStore';
 // 懒加载工作台/管理端模块（参考 dianshangkefu：客户侧主 chunk，内部工具独立 chunk）
 const AgentSessionsPage = lazy(() => import('@/pages/agent/SessionsPage'));
 const AgentCustomersPage = lazy(() => import('@/pages/agent/CustomersPage'));
+const AgentTicketsPage = lazy(() => import('@/pages/agent/TicketsPage')); // T1：工单流转
 const KnowledgePage = lazy(() => import('@/pages/admin/KnowledgePage'));
+const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
+const MyTicketsPage = lazy(() => import('@/pages/MyTicketsPage'));
 const UsersPage = lazy(() => import('@/pages/admin/UsersPage'));
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'));
+const FeedbackPage = lazy(() => import('@/pages/admin/FeedbackPage'));
 
 function RouteFallback() {
-  return <div className="route-fallback">加载中…</div>;
+  // U1：路由懒加载 fallback 用骨架屏（感知性能，替代"加载中…"文字）
+  return (
+    <div className="route-fallback" style={{ padding: 24 }}>
+      <Skeleton active paragraph={{ rows: 8 }} />
+    </div>
+  );
 }
 
 /** 按角色返回登录后首页（参考 dianshangkefu home 分流） */
@@ -68,6 +77,18 @@ export function AppRoutes() {
           <Route index element={<ChatPage />} />
         </Route>
 
+        {/* P2-1：用户「我的工单」（只读，user 可调） */}
+        <Route
+          path="/tickets"
+          element={
+            <RequireAuth>
+              <WidgetShell />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MyTicketsPage />} />
+        </Route>
+
         {/* Agent 工作台（参考 dianshangkefu /workbench 模块化） */}
         <Route
           path="/agent"
@@ -80,10 +101,7 @@ export function AppRoutes() {
           <Route index element={<Navigate to="/agent/sessions" replace />} />
           <Route path="sessions" element={<AgentSessionsPage />} />
           <Route path="customers" element={<AgentCustomersPage />} />
-          <Route
-            path="tickets"
-            element={<EmptyState title="工单列表" description="Phase2：工单流转视图" />}
-          />
+          <Route path="tickets" element={<AgentTicketsPage />} />
         </Route>
 
         <Route
@@ -98,10 +116,11 @@ export function AppRoutes() {
           <Route path="knowledge" element={<KnowledgePage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="stats" element={<StatsPage />} />
+          <Route path="feedback" element={<FeedbackPage />} />
         </Route>
 
         <Route path="/" element={<Navigate to={home} replace />} />
-        <Route path="*" element={<Navigate to={home} replace />} />
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Suspense>
   );

@@ -2,6 +2,7 @@ import { Menu } from 'antd';
 import {
   BarChartOutlined,
   BookOutlined,
+  DislikeOutlined,
   FileTextOutlined,
   MessageOutlined,
   TeamOutlined,
@@ -25,6 +26,7 @@ export function SideNav() {
           { key: '/admin/knowledge', icon: <BookOutlined />, label: '知识库' },
           { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
           { key: '/admin/stats', icon: <BarChartOutlined />, label: '运营统计' },
+          { key: '/admin/feedback', icon: <DislikeOutlined />, label: '踩反馈' },
         ]
       : []),
     ...(role === 'admin' || role === 'agent'

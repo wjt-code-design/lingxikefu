@@ -1,0 +1,11 @@
+# 灵犀评测基线冻结（P2-1 落地 + T9-S1 口语集）
+# 冻结日期：2026-08-16
+# 用途：防 metric-gaming——评测集与金标一旦冻结，任何改动都会使 hash 失配，
+#       锁定 faithfulness / recall@5 / 诚实性拒答等指标的可比基线。
+# 配套：评测问题库.md（100 问，其中 8 条诚实性拒答题）+ ground-truth.md（金标）
+#      + 口语化评测集.md（100 条口语变体，QueryRewrite 立尺子，T9-S1）。
+# 变更流程：如需改评测集，须先记录理由，再更新本文件 hash。
+
+7034bf8433f4b323b1acb60c95944f617f4db3c1597b3de24b3a3de2b595a17f *评测问题库.md
+8d0249474fd386110a57b1f2a831f2292c3eb198287803ded6c8dd92e99b820d *ground-truth.md
+135e00f9f54272aae992d199408690d01d8bf3d34e1ade632814f5e892a898c2 *口语化评测集.md

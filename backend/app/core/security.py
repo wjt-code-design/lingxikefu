@@ -1,10 +1,11 @@
-"""JWT 安全工具（BU-02 Auth 模块填充完整实现）。
+"""JWT 安全工具（BU-02 Auth 模块完整实现）。
 
-本单元（BU-01）仅提供占位实现：函数签名已就位，依赖 python-jose[cryptography]，
-真实签发 / 校验逻辑由 BU-02 在 auth 端点中接入。禁止在本文件硬编码任何密钥。
+密码哈希（pbkdf2）/ JWT 签发与校验（python-jose）均已接入 auth 端点。
+禁止在本文件硬编码任何密钥（密钥由 settings 注入）。
 """
 from __future__ import annotations
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from jose import jwt
@@ -27,11 +28,13 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 def create_access_token(subject: str, role: str) -> str:
-    """签发 access token（占位，BU-02 完善 claims / jti / 吊销校验）。"""
+    """签发 access token（M1：带 jti + type 以支持吊销）。"""
     now = datetime.now(UTC)
     payload = {
         "sub": subject,
         "role": role,
+        "type": "access",
+        "jti": str(uuid.uuid4()),
         "iat": now,
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     }
@@ -39,11 +42,12 @@ def create_access_token(subject: str, role: str) -> str:
 
 
 def create_refresh_token(subject: str) -> str:
-    """签发 refresh token（占位）。"""
+    """签发 refresh token（M1：带 jti 以支持吊销 / 登出失效）。"""
     now = datetime.now(UTC)
     payload = {
         "sub": subject,
         "type": "refresh",
+        "jti": str(uuid.uuid4()),
         "iat": now,
         "exp": now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     }
@@ -51,5 +55,5 @@ def create_refresh_token(subject: str) -> str:
 
 
 def decode_token(token: str) -> dict:
-    """解析并校验 token，失败抛 jose.JWTError（占位）。"""
+    """解析并校验 token，失败抛 jose.JWTError。"""
     return jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])

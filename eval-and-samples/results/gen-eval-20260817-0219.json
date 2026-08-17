@@ -1,0 +1,24 @@
+{
+ "timestamp": "2026-08-17T02:19:28",
+ "n_refuse": 2,
+ "n_qa": 2,
+ "refuse_honest_rate": 1.0,
+ "qa_false_rate": 0.0,
+ "qa_empty_rate": 0.0,
+ "qa_err_count": 0,
+ "qa_src_compliance_rate": 1.0,
+ "qa_numeric_suspects": 0,
+ "refuse_details": [
+  {
+   "no": "Q042",
+   "honest": true,
+   "head": "该信息资料未收录，建议转人工客服处理。"
+  },
+  {
+   "no": "Q069",
+   "honest": true,
+   "head": "该信息资料未收录，建议转人工客服处理。"
+  }
+ ],
+ "qa_issues": []
+}

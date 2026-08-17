@@ -3,14 +3,15 @@
 - 全部端点要求 admin（管理后台 / 知识库写操作），非 admin 403。
 - 上传：multipart 单文件；sha256 同 KB 去重（幂等返回已有文档）；解析失败（不支持类型/扫描件）
   直接 400 拒绝，不落库（failed 仅留给导入流程中 embedding/Qdrant 失败）。
-- 导入调度：优先 Celery 异步（``.delay``），broker 不可达时**显式降级同步**执行
-  （行为一致：同一 import_document 函数），不静默丢任务。
+- 导入调度：优先 Celery 异步（``.delay``），broker 不可达时**后台线程**异步执行
+  （不阻塞上传请求线程，状态由前端轮询），不静默丢任务。
 - 删除：先清 Qdrant 向量（失败 500 保持可重试，不留脏镜像），再删 PG（FK 级联 chunks）。
 """
 from __future__ import annotations
 
 import hashlib
 import logging
+import threading
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import SessionLocal, get_db
 from app.models.knowledge import DocumentStatus
 from app.repositories.document_repo import (
     DocumentRepository,
@@ -34,9 +35,33 @@ from app.schemas.knowledge import (
 )
 from app.services import vector_service
 from app.services.document_service import SUPPORTED_EXTENSIONS, UnsupportedFileError, extract_text
+from app.services.knowledge_import_service import ImportError_, import_document
 from app.services.vector_service import VectorStoreError
 
 logger = logging.getLogger(__name__)
+
+
+#: 并发导入信号量（Bug 修复）：批量上传每文档起一线程，无限制会让 embedding CPU 推理
+#: 线程爆炸（N 文档 = N 并发模型推理）。限 4 并发，超出排队（线程阻塞等待），防资源耗尽。
+_IMPORT_SEMAPHORE = threading.BoundedSemaphore(4)
+
+
+def _run_background_import(doc_id: str) -> None:
+    """后台线程执行导入（M9：避免阻塞上传请求线程）；独立 DB 会话；信号量限并发。"""
+    with _IMPORT_SEMAPHORE:
+        bg_db = SessionLocal()
+        try:
+            import_document(UUID(doc_id), bg_db)
+        except ImportError_:
+            logger.warning("后台导入文档 %s 失败（已标 failed）", doc_id)
+        except Exception:  # noqa: BLE001
+            logger.exception("后台导入文档 %s 异常", doc_id)
+        finally:
+            bg_db.close()
+
+
+def _enqueue_background_import(doc_id: str) -> None:
+    threading.Thread(target=_run_background_import, args=(doc_id,), daemon=True).start()
 
 #: KB 资源路由（/api/v1/knowledge-bases）
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge"])
@@ -147,19 +172,14 @@ def upload_document(
         raw_text=raw_text,
     )
 
-    # 调度导入：优先 Celery 异步，broker 不可达显式降级同步（不静默丢任务）
+    # 调度导入：优先 Celery 异步；broker 不可达 → 后台线程异步执行（M9：不阻塞请求）
     try:
         from app.workers.import_worker import import_document_task
 
         import_document_task.delay(str(doc.id))
     except Exception as e:  # noqa: BLE001 - broker 不可达（kombu 连接失败等）
-        logger.warning("Celery 调度失败，降级同步导入（%s）", e)
-        from app.services.knowledge_import_service import ImportError_, import_document
-
-        try:
-            import_document(doc.id, db)
-        except ImportError_ as ie:
-            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(ie)) from ie
+        logger.warning("Celery 调度失败，降级后台线程导入（%s）", e)
+        _enqueue_background_import(str(doc.id))
 
     db.refresh(doc)
     return _doc_item(doc)
@@ -181,4 +201,26 @@ def delete_document(
     except VectorStoreError as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e)) from e
     doc_repo.delete(doc)
+    return OkResp()
+
+
+@router.delete("/{kb_id}", response_model=OkResp)
+def delete_knowledge_base(
+    kb_id: UUID,
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> OkResp:
+    """删除知识库（T4）：清空其下全部文档向量 + PG（documents/chunks 级联删除）。"""
+    kb_repo = KnowledgeBaseRepository(db)
+    kb = kb_repo.get(kb_id)
+    if not kb:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "knowledge base not found")
+    docs = DocumentRepository(db).list_by_kb(kb_id)
+    # 先清所有文档向量（失败 500 保持可重试），再删 KB（documents CASCADE）
+    try:
+        for d in docs:
+            vector_service.delete_by_doc_id(d.id)
+    except VectorStoreError as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e)) from e
+    kb_repo.delete(kb)
     return OkResp()

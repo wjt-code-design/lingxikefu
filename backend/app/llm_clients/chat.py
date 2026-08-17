@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import AsyncGenerator
 from functools import lru_cache
@@ -17,7 +18,11 @@ import httpx
 from app.core.config import settings
 from app.llm_clients.base import ChatClient, ModelNotConfiguredError
 
+#: 流式默认 60s（边收边发足够）；非流式 complete 用 120s（推理模型长回答 + 慢网络兜底）
 _TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+_COMPLETE_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
+#: 429/5xx 重试 1 次（间隔 2s）：智谱/百炼 TPM 限流是分钟级窗口，偶发 429 重试可自愈
+_RETRY_STATUS = {429, 500, 502, 503}
 
 
 class OpenAILikeChatClient(ChatClient):
@@ -76,23 +81,35 @@ class OpenAILikeChatClient(ChatClient):
         }
         headers, body = self._request(payload)
         async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            async with client.stream("POST", self._api_url(), content=body, headers=headers) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line.startswith("data: "):
+            last_err: httpx.HTTPStatusError | None = None
+            for _attempt in range(2):  # 429/5xx 重试 1 次（TPM 分钟窗口偶发，2s 后自愈）
+                try:
+                    async with client.stream("POST", self._api_url(), content=body, headers=headers) as resp:
+                        resp.raise_for_status()
+                        async for line in resp.aiter_lines():
+                            if not line.startswith("data: "):
+                                continue
+                            data = line[6:].strip()
+                            if data == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data)
+                            except json.JSONDecodeError:
+                                continue
+                            choices = chunk.get("choices") or []
+                            if choices:
+                                delta = (choices[0].get("delta") or {}).get("content")
+                                if delta:
+                                    yield delta
+                        return
+                except httpx.HTTPStatusError as e:
+                    last_err = e
+                    if e.response.status_code in _RETRY_STATUS:
+                        await asyncio.sleep(2)
                         continue
-                    data = line[6:].strip()
-                    if data == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(data)
-                    except json.JSONDecodeError:
-                        continue
-                    choices = chunk.get("choices") or []
-                    if choices:
-                        delta = (choices[0].get("delta") or {}).get("content")
-                        if delta:
-                            yield delta
+                    raise
+            assert last_err is not None
+            raise last_err
 
     async def complete(self, messages: list[dict], model: str | None = None, **kwargs) -> str:
         payload = {
@@ -102,14 +119,25 @@ class OpenAILikeChatClient(ChatClient):
             **{k: v for k, v in kwargs.items() if k not in ("stream",)},
         }
         headers, body = self._request(payload)
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            resp = await client.post(self._api_url(), content=body, headers=headers)
-            resp.raise_for_status()
-            data = resp.json()
-            choices = data.get("choices") or []
-            if not choices:
-                return ""
-            return (choices[0].get("message") or {}).get("content") or ""
+        async with httpx.AsyncClient(timeout=_COMPLETE_TIMEOUT) as client:
+            last_err: httpx.HTTPStatusError | None = None
+            for _attempt in range(2):  # 429/5xx 重试 1 次（非流式长回答 + 偶发限流双兜底）
+                try:
+                    resp = await client.post(self._api_url(), content=body, headers=headers)
+                    resp.raise_for_status()
+                    data = resp.json()
+                    choices = data.get("choices") or []
+                    if not choices:
+                        return ""
+                    return (choices[0].get("message") or {}).get("content") or ""
+                except httpx.HTTPStatusError as e:
+                    last_err = e
+                    if e.response.status_code in _RETRY_STATUS:
+                        await asyncio.sleep(2)
+                        continue
+                    raise
+            assert last_err is not None
+            raise last_err
 
 
 @lru_cache(maxsize=1)

@@ -1,0 +1,1071 @@
+{
+ "timestamp": "2026-08-16T12:39:10",
+ "n_refuse": 8,
+ "n_qa": 82,
+ "refuse_honest_rate": 0.0,
+ "qa_false_rate": 0.0,
+ "qa_empty_rate": 0.0,
+ "qa_err_count": 82,
+ "qa_src_compliance_rate": 1.0,
+ "qa_numeric_suspects": 0,
+ "refuse_details": [
+  {
+   "no": "Q042",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到\"\"怎么查配送\"等场景。\n## 通用配送",
+    "# 模拟订单 · 物流轨迹（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"快递到哪儿了\"等物流查询场景。\n## 订单 SO20260"
+   ]
+  },
+  {
+   "no": "Q049",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "即生成物流单号，可在\"我的订单—物流详情\"实时跟踪。大家电由大件物流送装一体，物流信息以承运方为准。\n## 价保\n- 自订单付款之日起 7 天内，同商品（同店铺",
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货\n现货数码订单在每日 16:00（北京时"
+   ]
+  },
+  {
+   "no": "Q055",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计消费 ¥2000）\n- 金卡会员（累计消",
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子普通发票；企业抬头如需专票，请提供准确的"
+   ]
+  },
+  {
+   "no": "Q060",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子普通发票；企业抬头如需专票，请提供准确的",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回收的情形\n- 无法开机且无维修价值的严重"
+   ]
+  },
+  {
+   "no": "Q061",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款与外币支付。大额订单（单笔超过 ¥500",
+    "请耐心等待。\n五、支付安全\n请勿向任何人透露验证码、支付密码；客服不会以任何理由索要您的短信验证码。\n六、优惠券退款\n- 订单全额退款（未发货取消 / 质量问题"
+   ]
+  },
+  {
+   "no": "Q067",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "退货，来回运费均由星河智家承担。请保留故障照片或视频作为凭证，客服会在 24 小时内响应并引导检测。\n## 三、运费承担规则\n- 质量问题退货：来回运费均由星河",
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基础运费 ¥8。大家电（空调/冰箱等大件）"
+   ]
+  },
+  {
+   "no": "Q069",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、收货地址、订单与支付记录、与客服的对话内",
+    "时间核验。\n## 三、以旧换新协同\n参与以旧换新的新机，延保/碎屏险可叠加享受，不影响旧机回收抵扣。\n## 四、退费规则\n保障服务未触发理赔且在新机签收后 7 "
+   ]
+  },
+  {
+   "no": "Q071",
+   "honest": false,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://open.bigmodel.cn/api",
+   "chunks_head": [
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、收货地址、订单与支付记录、与客服的对话内",
+    "隐私政策（星河智家）\n一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、收货地址、订单与支\n付记录、与客服的对话内容、设备"
+   ]
+  }
+ ],
+ "qa_issues": [
+  {
+   "no": "Q001",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电",
+    "退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电视\n"
+   ]
+  },
+  {
+   "no": "Q002",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "退货，来回运费均由星河智家承担。请保留故障照片或视频作为凭证，客服会在 24 小时内响应并引导检测。\n## 三、运费承担",
+    "导检测。\n三、运费承担规则\n质量问题退货：来回运费均由星河智家承担。\n七天无理由退货：买家承担退回运费；若原订单为包邮，"
+   ]
+  },
+  {
+   "no": "Q003",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "退货，来回运费均由星河智家承担。请保留故障照片或视频作为凭证，客服会在 24 小时内响应并引导检测。\n## 三、运费承担",
+    "导检测。\n三、运费承担规则\n质量问题退货：来回运费均由星河智家承担。\n七天无理由退货：买家承担退回运费；若原订单为包邮，"
+   ]
+  },
+  {
+   "no": "Q004",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "退货，来回运费均由星河智家承担。请保留故障照片或视频作为凭证，客服会在 24 小时内响应并引导检测。\n## 三、运费承担",
+    "导检测。\n三、运费承担规则\n质量问题退货：来回运费均由星河智家承担。\n七天无理由退货：买家承担退回运费；若原订单为包邮，"
+   ]
+  },
+  {
+   "no": "Q005",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 退货退款进度（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"退货到哪一步了",
+    "检通过后 1-3 个工作日原路退回至支付账户。\n## 订单 SO2026080105 · 退款已完成\n- 订单号：SO2"
+   ]
+  },
+  {
+   "no": "Q006",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基",
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货"
+   ]
+  },
+  {
+   "no": "Q007",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基",
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货"
+   ]
+  },
+  {
+   "no": "Q008",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 物流轨迹（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"快递到哪儿了\"等物",
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到"
+   ]
+  },
+  {
+   "no": "Q009",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 物流轨迹（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"快递到哪儿了\"等物",
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到"
+   ]
+  },
+  {
+   "no": "Q010",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到",
+    "# 发货与时效（星河智家）\n## 一、现货发货\n现货数码商品在订单支付成功后 48 小时内发出（自然日，节假日顺延）。大"
+   ]
+  },
+  {
+   "no": "Q011",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发货与时效（星河智家）\n## 一、现货发货\n现货数码商品在订单支付成功后 48 小时内发出（自然日，节假日顺延）。大",
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到"
+   ]
+  },
+  {
+   "no": "Q012",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发货与时效（星河智家）\n## 一、现货发货\n现货数码商品在订单支付成功后 48 小时内发出（自然日，节假日顺延）。大",
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到"
+   ]
+  },
+  {
+   "no": "Q013",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "即生成物流单号，可在\"我的订单—物流详情\"实时跟踪。大家电由大件物流送装一体，物流信息以承运方为准。\n## 价保\n- 自",
+    "# 发货与时效（星河智家）\n## 一、现货发货\n现货数码商品在订单支付成功后 48 小时内发出（自然日，节假日顺延）。大"
+   ]
+  },
+  {
+   "no": "Q014",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计",
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基"
+   ]
+  },
+  {
+   "no": "Q015",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计",
+    "请耐心等待。\n五、支付安全\n请勿向任何人透露验证码、支付密码；客服不会以任何理由索要您的短信验证码。\n六、优惠券退款\n-"
+   ]
+  },
+  {
+   "no": "Q016",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回"
+   ]
+  },
+  {
+   "no": "Q017",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款",
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不"
+   ]
+  },
+  {
+   "no": "Q018",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回"
+   ]
+  },
+  {
+   "no": "Q019",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "# 模拟订单 · 物流轨迹（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"快递到哪儿了\"等物"
+   ]
+  },
+  {
+   "no": "Q020",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回"
+   ]
+  },
+  {
+   "no": "Q021",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款",
+    "请耐心等待。\n五、支付安全\n请勿向任何人透露验证码、支付密码；客服不会以任何理由索要您的短信验证码。\n六、优惠券退款\n-"
+   ]
+  },
+  {
+   "no": "Q022",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款",
+    "检通过后 1-3 个工作日原路退回至支付账户。\n## 订单 SO2026080105 · 退款已完成\n- 订单号：SO2"
+   ]
+  },
+  {
+   "no": "Q023",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款",
+    "退货，来回运费均由星河智家承担。请保留故障照片或视频作为凭证，客服会在 24 小时内响应并引导检测。\n## 三、运费承担"
+   ]
+  },
+  {
+   "no": "Q024",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "检通过后 1-3 个工作日原路退回至支付账户。\n## 订单 SO2026080105 · 退款已完成\n- 订单号：SO2",
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款"
+   ]
+  },
+  {
+   "no": "Q025",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "商品保修条款（星河智家）\n一、保修期限\n- 手机、平板、笔记本、智能音箱、扫地机器人等数码产品：自签收之日起 12 个月",
+    "商品保修条款（星河智家）\n一、保修期限\n手机、平板、笔记本、智能音箱、扫地机器人等数码产品：自签收之日起 12 个月整机"
+   ]
+  },
+  {
+   "no": "Q026",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "处理。\n五、不支持回收的情形\n无法开机且无维修价值的严重损坏机；\n涉及盗抢、来历不明的设备；\n屏幕完全碎裂且功能失效的（",
+    "# 模拟订单 · 保修与维修工单（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"保修期内坏了"
+   ]
+  },
+  {
+   "no": "Q027",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "置—关于本机—状态信息中可查）及激活时间截图；\n客服审核后提供返修地址或上门服务（部分城市支持）；\n工程师检测并维修，周",
+    "商品保修条款（星河智家）\n一、保修期限\n手机、平板、笔记本、智能音箱、扫地机器人等数码产品：自签收之日起 12 个月整机"
+   ]
+  },
+  {
+   "no": "Q028",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不",
+    "时间核验。\n## 三、以旧换新协同\n参与以旧换新的新机，延保/碎屏险可叠加享受，不影响旧机回收抵扣。\n## 四、退费规则"
+   ]
+  },
+  {
+   "no": "Q029",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 账号与安全（星河智家）\n## 一、注册与登录\n支持手机号或邮箱注册，密码长度不少于 8 位且含字母与数字。建议开启二",
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、"
+   ]
+  },
+  {
+   "no": "Q030",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、",
+    "隐私政策（星河智家）\n一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、收货地址、"
+   ]
+  },
+  {
+   "no": "Q031",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 账号与安全（星河智家）\n## 一、注册与登录\n支持手机号或邮箱注册，密码长度不少于 8 位且含字母与数字。建议开启二",
+    "隐私政策（星河智家）\n一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、收货地址、"
+   ]
+  },
+  {
+   "no": "Q032",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 常见问题 FAQ（星河智家）\n## 商品配置与参数\n数码商品的配置（处理器、内存、存储、屏幕材质等）标注在商品详情页",
+    "LED 屏存在个体差异的微弱亮度不均，非质量问题；如出现亮点/坏点在保修范围内（详见商品保修条款）。\n## 续航与系统\n"
+   ]
+  },
+  {
+   "no": "Q033",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 常见问题 FAQ（星河智家）\n## 商品配置与参数\n数码商品的配置（处理器、内存、存储、屏幕材质等）标注在商品详情页",
+    "商品保修条款（星河智家）\n一、保修期限\n- 手机、平板、笔记本、智能音箱、扫地机器人等数码产品：自签收之日起 12 个月"
+   ]
+  },
+  {
+   "no": "Q034",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 常见问题 FAQ（星河智家）\n## 商品配置与参数\n数码商品的配置（处理器、内存、存储、屏幕材质等）标注在商品详情页",
+    "LED 屏存在个体差异的微弱亮度不均，非质量问题；如出现亮点/坏点在保修范围内（详见商品保修条款）。\n## 续航与系统\n"
+   ]
+  },
+  {
+   "no": "Q035",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "处理。\n五、不支持回收的情形\n无法开机且无维修价值的严重损坏机；\n涉及盗抢、来历不明的设备；\n屏幕完全碎裂且功能失效的（",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回"
+   ]
+  },
+  {
+   "no": "Q036",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "超过保修期限；\n5. 电池正常充放电循环导致的容量自然衰减（低于 80% 属正常损耗，不属故障）。\n三、保修申请流程\n1",
+    "商品保修条款（星河智家）\n一、保修期限\n- 手机、平板、笔记本、智能音箱、扫地机器人等数码产品：自签收之日起 12 个月"
+   ]
+  },
+  {
+   "no": "Q041",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电",
+    "退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电视\n"
+   ]
+  },
+  {
+   "no": "Q043",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电",
+    "退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电视\n"
+   ]
+  },
+  {
+   "no": "Q044",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "即生成物流单号，可在\"我的订单—物流详情\"实时跟踪。大家电由大件物流送装一体，物流信息以承运方为准。\n## 价保\n- 自",
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基"
+   ]
+  },
+  {
+   "no": "Q045",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货",
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基"
+   ]
+  },
+  {
+   "no": "Q046",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货",
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到"
+   ]
+  },
+  {
+   "no": "Q047",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货",
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基"
+   ]
+  },
+  {
+   "no": "Q048",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到",
+    "# 发货与时效（星河智家）\n## 一、现货发货\n现货数码商品在订单支付成功后 48 小时内发出（自然日，节假日顺延）。大"
+   ]
+  },
+  {
+   "no": "Q050",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "后优先发出）。\n## 五、发货提醒\n您可在订单页开启\"发货提醒\"，商品出库后将通过短信/站内信通知。\n## 六、修改收货",
+    "复收取。\n## 五、运费查询\n结算页会自动计算运费；如对运费有疑问，可在提交订单前联系在线客服核实。\n## 六、加急发货"
+   ]
+  },
+  {
+   "no": "Q051",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "后优先发出）。\n## 五、发货提醒\n您可在订单页开启\"发货提醒\"，商品出库后将通过短信/站内信通知。\n## 六、修改收货",
+    "即生成物流单号，可在\"我的订单—物流详情\"实时跟踪。大家电由大件物流送装一体，物流信息以承运方为准。\n## 价保\n- 自"
+   ]
+  },
+  {
+   "no": "Q052",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计",
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不"
+   ]
+  },
+  {
+   "no": "Q053",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "检通过后 1-3 个工作日原路退回至支付账户。\n## 订单 SO2026080105 · 退款已完成\n- 订单号：SO2",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回"
+   ]
+  },
+  {
+   "no": "Q054",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计",
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不"
+   ]
+  },
+  {
+   "no": "Q056",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、"
+   ]
+  },
+  {
+   "no": "Q057",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到",
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子"
+   ]
+  },
+  {
+   "no": "Q058",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "# 以旧换新与旧机回收细则（星河智家）\n## 一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、"
+   ]
+  },
+  {
+   "no": "Q059",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "行退出账号、关闭\"查找我的设备\"、恢复出厂设置。未退出账号导致无法回收的，抵扣延迟至账号解除后处理。\n## 五、不支持回"
+   ]
+  },
+  {
+   "no": "Q062",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "请耐心等待。\n五、支付安全\n请勿向任何人透露验证码、支付密码；客服不会以任何理由索要您的短信验证码。\n六、优惠券退款\n-",
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款"
+   ]
+  },
+  {
+   "no": "Q063",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 退货退款进度（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"退货到哪一步了",
+    "检通过后 1-3 个工作日原路退回至支付账户。\n## 订单 SO2026080105 · 退款已完成\n- 订单号：SO2"
+   ]
+  },
+  {
+   "no": "Q064",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "支付与退款说明（星河智家）\n一、支持的支付方式\n本平台支持微信支付、支付宝、银联云闪付三种主流支付方式，暂不支持货到付款",
+    "# 模拟订单 · 退货退款进度（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"退货到哪一步了"
+   ]
+  },
+  {
+   "no": "Q065",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 发票政策（星河智家）\n## 一、可开票类型\n支持开具**电子普通发票**与**增值税专用发票**。个人抬头仅可开电子",
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不"
+   ]
+  },
+  {
+   "no": "Q066",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "处理。\n五、不支持回收的情形\n无法开机且无维修价值的严重损坏机；\n涉及盗抢、来历不明的设备；\n屏幕完全碎裂且功能失效的（",
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协"
+   ]
+  },
+  {
+   "no": "Q068",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协",
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条"
+   ]
+  },
+  {
+   "no": "Q070",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、",
+    "隐私政策（星河智家）\n一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、收货地址、"
+   ]
+  },
+  {
+   "no": "Q072",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、",
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不"
+   ]
+  },
+  {
+   "no": "Q073",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 隐私政策（星河智家）\n## 一、我们收集的信息\n为完成交易与提供客服，我们仅收集必要信息：账户信息（手机号/邮箱）、",
+    "# 账号与安全（星河智家）\n## 一、注册与登录\n支持手机号或邮箱注册，密码长度不少于 8 位且含字母与数字。建议开启二"
+   ]
+  },
+  {
+   "no": "Q074",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 常见问题 FAQ（星河智家）\n## 商品配置与参数\n数码商品的配置（处理器、内存、存储、屏幕材质等）标注在商品详情页",
+    "LED 屏存在个体差异的微弱亮度不均，非质量问题；如出现亮点/坏点在保修范围内（详见商品保修条款）。\n## 续航与系统\n"
+   ]
+  },
+  {
+   "no": "Q076",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "即生成物流单号，可在\"我的订单—物流详情\"实时跟踪。大家电由大件物流送装一体，物流信息以承运方为准。\n## 价保\n- 自",
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不"
+   ]
+  },
+  {
+   "no": "Q080",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "后优先发出）。\n## 五、发货提醒\n您可在订单页开启\"发货提醒\"，商品出库后将通过短信/站内信通知。\n## 六、修改收货",
+    "# 模拟订单 · 物流轨迹（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"快递到哪儿了\"等物"
+   ]
+  },
+  {
+   "no": "Q081",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "回收抵扣。\n四、退费规则\n保障服务未触发理赔且在新机签收后 7 天内，可申请退保，费用原路退回；超过 7\n天或已理赔的不",
+    "# 退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电"
+   ]
+  },
+  {
+   "no": "Q082",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 退换货政策（星河智家）\n> 适用范围：星河智家自营 3C 数码与智能家电商品。下文\"大家电\"指空调、冰箱、洗衣机、电",
+    "大家电换新可同步预约旧机回收（见《以旧换新与旧机回收细则》），回收与新机送装同一上门批次，减少打扰。\n## 五、收费标准"
+   ]
+  },
+  {
+   "no": "Q083",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基",
+    "大家电换新可同步预约旧机回收（见《以旧换新与旧机回收细则》），回收与新机送装同一上门批次，减少打扰。\n## 五、收费标准"
+   ]
+  },
+  {
+   "no": "Q084",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "大家电换新可同步预约旧机回收（见《以旧换新与旧机回收细则》），回收与新机送装同一上门批次，减少打扰。\n## 五、收费标准",
+    "# 运费与配送说明（星河智家）\n## 一、包邮规则\n单笔订单实付金额（不含运费券）满 ¥99 包邮；未满 ¥99 收取基"
+   ]
+  },
+  {
+   "no": "Q085",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到",
+    "# 大家电送装与安装说明（星河智家）\n## 一、预约配送\n空调、冰箱、洗衣机、电视、烤箱等大家电为预约配送，非现货直发。"
+   ]
+  },
+  {
+   "no": "Q086",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协",
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条"
+   ]
+  },
+  {
+   "no": "Q087",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 会员权益（星河智家）\n## 一、会员等级\n会员按累计消费金额分为四级：\n- 普通会员（注册即享）\n- 银卡会员（累计",
+    "请耐心等待。\n五、支付安全\n请勿向任何人透露验证码、支付密码；客服不会以任何理由索要您的短信验证码。\n六、优惠券退款\n-"
+   ]
+  },
+  {
+   "no": "Q088",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协",
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条"
+   ]
+  },
+  {
+   "no": "Q089",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 以旧换新与旧机回收细则（星河智家）\n## 一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、",
+    "以旧换新与旧机回收细则（星河智家）\n一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、笔记本、大"
+   ]
+  },
+  {
+   "no": "Q090",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 以旧换新与旧机回收细则（星河智家）\n## 一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、",
+    "以旧换新与旧机回收细则（星河智家）\n一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、笔记本、大"
+   ]
+  },
+  {
+   "no": "Q091",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协",
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条"
+   ]
+  },
+  {
+   "no": "Q092",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协",
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条"
+   ]
+  },
+  {
+   "no": "Q093",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协",
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条"
+   ]
+  },
+  {
+   "no": "Q094",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 以旧换新与旧机回收细则（星河智家）\n## 一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、",
+    "以旧换新与旧机回收细则（星河智家）\n一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、笔记本、大"
+   ]
+  },
+  {
+   "no": "Q095",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 以旧换新与旧机回收细则（星河智家）\n## 一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、",
+    "以旧换新与旧机回收细则（星河智家）\n一、适用范围\n星河智家支持以旧换新：不限品牌、不限渠道购买的旧手机、平板、笔记本、大"
+   ]
+  },
+  {
+   "no": "Q096",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "# 大家电送装与安装说明（星河智家）\n## 一、预约配送\n空调、冰箱、洗衣机、电视、烤箱等大家电为预约配送，非现货直发。",
+    "# 模拟订单 · 大家电送装预约（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"安装师傅什么"
+   ]
+  },
+  {
+   "no": "Q097",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协议条",
+    "# 延保与碎屏险服务协议（星河智家）\n> 本服务为法定保修之外的可选增值保障，与《商品保修条款》不冲突，购买后以本服务协"
+   ]
+  },
+  {
+   "no": "Q100",
+   "err": true,
+   "false": false,
+   "empty": false,
+   "src_ok": true,
+   "head": "[ERR] Client error '429 Too Many Requests' for url 'https://",
+   "chunks_head": [
+    "即生成物流单号，可在\"我的订单—物流详情\"实时跟踪。大家电由大件物流送装一体，物流信息以承运方为准。\n## 价保\n- 自",
+    "# 模拟订单 · 配送与签收说明（演示数据）\n> 以下为客服系统演示用的模拟订单数据，非真实订单。用于演示\"什么时候送到"
+   ]
+  }
+ ]
+}

@@ -17,6 +17,13 @@ x-api-environment: &api-env
   QDRANT_API_KEY: ${QDRANT_API_KEY:-}
   JWT_SECRET: ${JWT_SECRET:-__CHANGE_ME__}
   LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-__CHANGE_ME__}
+  DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}  # 百炼 LLM 密钥（备选 provider）
+  # 智谱 GLM（CHAT_PROVIDER=zhipu 时生效；用户主用智谱，.env 已配 ZHIPU_API_KEY）
+  CHAT_PROVIDER: ${CHAT_PROVIDER:-zhipu}
+  CHAT_MODEL: ${CHAT_MODEL:-glm-4.5-air}
+  ZHIPU_API_KEY: ${ZHIPU_API_KEY:-}
+  ZHIPU_BASE_URL: ${ZHIPU_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+  ZHIPU_CHAT_MODEL: ${ZHIPU_CHAT_MODEL:-glm-4.5-air}
   TENANT_DEFAULT: ${TENANT_DEFAULT:-default}
   CORS_ORIGINS: '["http://localhost:5173"]'
 
@@ -73,6 +80,10 @@ services:
     build:
       context: .
     environment: *api-env
+    volumes:
+      # T10 修复：embedding 模型（bge-base-zh-v1.5）挂载宿主 HF 缓存（容器重建不丢，HF 不可达兜底）
+      # 容器以 appuser 运行（HOME=/home/appuser）→ 挂到其 HOME 下
+      - ${HOME:-~}/.cache/huggingface:/home/appuser/.cache/huggingface:ro
     ports:
       - "8000:8000"
     depends_on:
