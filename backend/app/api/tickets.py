@@ -21,6 +21,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
+from app.services.audit_service import audit_log
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +148,15 @@ def create_ticket(
     db.add(t)
     db.commit()
     db.refresh(t)
+    # Phase4 审计埋点：工单创建（ticket.create）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="ticket.create",
+        resource="ticket",
+        resource_id=str(t.id),
+    )
     return _item(t)
 
 
@@ -233,6 +243,16 @@ def update_ticket(
         t.assignee_id = req.assignee_id
     db.commit()
     db.refresh(t)
+    # Phase4 审计埋点：工单状态变更（ticket.update，detail=新状态）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="ticket.update",
+        resource="ticket",
+        resource_id=str(ticket_id),
+        detail=str(t.status.value),
+    )
     return _item(t)
 
 

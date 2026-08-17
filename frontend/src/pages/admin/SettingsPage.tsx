@@ -1,45 +1,138 @@
-import {
-  Alert,
-  Button,
-  Card,
-  Form,
-  InputNumber,
-  Select,
-  Switch,
-  Typography,
-  message,
-} from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Alert, Card, Spin, Typography } from 'antd';
+import type { ReactNode } from 'react';
+import { getAdminSettings } from '@/api/admin';
 import './SettingsPage.css';
 
-/** 模型可选列表（占位，待后端配置接口开放后拉取真实模型清单） */
-const MODEL_OPTIONS = [{ value: 'glm-4.5-air', label: 'glm-4.5-air' }];
+/** 只读键值行（label 左、value 右，数字 tabular-nums） */
+function KVRow({
+  label,
+  children,
+  mono,
+}: {
+  label: string;
+  children: ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="settings-kv">
+      <span className="settings-kv__label">{label}</span>
+      <span className={mono ? 'settings-kv__value settings-kv__value--mono' : 'settings-kv__value'}>
+        {children}
+      </span>
+    </div>
+  );
+}
 
-/** 示例值（当前仅展示；配置项实际由后端 .env 管理，运行时不可改） */
-const EXAMPLE_VALUES = {
-  model: 'glm-4.5-air',
-  temperature: 0.7,
-  top_p: 0.9,
-  top_k: 5,
-  similarity_threshold: 0.65,
-  answer_cache: true,
-  rpm_limit: 20,
-  rate_limit_enabled: true,
-  daily_quota: 100,
-  quota_warn_ratio: 0.8,
-};
+/** 布尔徽标（开启/关闭，语义色区分） */
+function BoolBadge({ value }: { value: boolean }) {
+  return (
+    <span className={`settings-bool ${value ? 'settings-bool--on' : 'settings-bool--off'}`}>
+      {value ? '开启' : '关闭'}
+    </span>
+  );
+}
+
+/** 空值统一渲染为占位破折号 */
+const dash = (v: unknown) => (v == null || v === '' ? '—' : String(v));
 
 /**
- * 系统设置页（Phase3）：模型 / RAG 阈值 / 限流 / 配额 的可视化表单界面。
- * 后端当前无配置接口（配置在 .env，运行时不可改）→ 只读展示 + 表单骨架：
- * Form disabled 整体禁编辑，值均为占位/示例值，明确标注「待后端配置接口开放」。
- * 不调用任何不存在的 API。
+ * 系统设置页（Phase4）：只读展示后端真实配置（真源 .env）。
+ * - 数据：GET /admin/settings（需 admin），queryKey ['admin-settings']
+ * - 4 卡分组：模型 / RAG / 限流 / 配额；运行时不可在线修改。
  */
 export function SettingsPage() {
-  const [form] = Form.useForm();
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['admin-settings'],
+    queryFn: getAdminSettings,
+    staleTime: 30_000,
+  });
 
-  const handleSave = () => {
-    message.info('待后端配置接口开放后启用');
-  };
+  let body: ReactNode;
+  if (isLoading) {
+    body = <Spin className="settings-page__spin" />;
+  } else if (isError || !data) {
+    body = (
+      <div className="settings-page__error">
+        <Typography.Text type="secondary">系统配置读取失败，请稍后重试</Typography.Text>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="settings-grid">
+        {/* ① 模型配置 */}
+        <Card
+          className="settings-card"
+          title="模型配置"
+          extra={<span className="settings-card__tag">只读</span>}
+        >
+          <p className="settings-card__desc">对话与向量模型（真源 .env）</p>
+          <KVRow label="Provider">{dash(data.model.provider)}</KVRow>
+          <KVRow label="主模型">{dash(data.model.model)}</KVRow>
+          <KVRow label="备用模型">{dash(data.model.fallback)}</KVRow>
+          <KVRow label="Embedding Provider">{dash(data.model.embedding_provider)}</KVRow>
+          <KVRow label="Embedding 模型">{dash(data.model.embedding_model)}</KVRow>
+        </Card>
+
+        {/* ② RAG 配置 */}
+        <Card
+          className="settings-card"
+          title="RAG 配置"
+          extra={<span className="settings-card__tag">只读</span>}
+        >
+          <p className="settings-card__desc">检索召回与答案缓存策略</p>
+          <KVRow label="检索 top_k" mono>
+            {data.rag.top_k}
+          </KVRow>
+          <KVRow label="相似度阈值 min_score" mono>
+            {data.rag.min_score}
+          </KVRow>
+          <KVRow label="混合检索 hybrid">
+            <BoolBadge value={data.rag.hybrid} />
+          </KVRow>
+          <KVRow label="分块大小 chunk_size" mono>
+            {data.rag.chunk_size}
+          </KVRow>
+          <KVRow label="分块重叠 chunk_overlap" mono>
+            {data.rag.chunk_overlap}
+          </KVRow>
+          <KVRow label="答案缓存 answer_cache">
+            <BoolBadge value={data.rag.answer_cache_enabled} />
+          </KVRow>
+          <KVRow label="缓存阈值 answer_cache_threshold" mono>
+            {data.rag.answer_cache_threshold}
+          </KVRow>
+          <KVRow label="上传大小上限 max_upload_mb" mono>
+            {data.rag.max_upload_mb} MB
+          </KVRow>
+        </Card>
+
+        {/* ③ 限流配置 */}
+        <Card
+          className="settings-card"
+          title="限流配置"
+          extra={<span className="settings-card__tag">只读</span>}
+        >
+          <p className="settings-card__desc">接口调用频率控制</p>
+          <KVRow label="限流开关">
+            <BoolBadge value={data.rate_limit.enabled} />
+          </KVRow>
+        </Card>
+
+        {/* ④ 配额配置 */}
+        <Card
+          className="settings-card"
+          title="配额配置"
+          extra={<span className="settings-card__tag">只读</span>}
+        >
+          <p className="settings-card__desc">用户每日使用额度</p>
+          <KVRow label="每日对话配额" mono>
+            {data.quota.daily_limit}
+          </KVRow>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="page settings-page">
@@ -49,8 +142,9 @@ export function SettingsPage() {
             系统设置
           </Typography.Title>
           <Typography.Text className="settings-page__subtitle">
-            模型 / RAG 阈值 / 限流 / 配额配置
+            模型 / RAG / 限流 / 配额配置
           </Typography.Text>
+          {data?.env ? <span className="settings-page__env">{data.env}</span> : null}
         </div>
       </div>
 
@@ -58,92 +152,11 @@ export function SettingsPage() {
         className="settings-page__alert"
         type="info"
         showIcon
-        message="系统配置当前由环境变量管理，管理后台配置能力待后端开放"
-        description="以下配置项当前仅作展示，值为示例/占位，接口开放后将支持在线修改并即时生效。"
+        message="配置真源在 .env（环境变量），此处只读展示"
+        description="以下为后端当前生效的真实配置，运行时不可在线修改；调整配置需修改 .env 后重启服务。"
       />
 
-      <Form
-        form={form}
-        layout="vertical"
-        disabled
-        initialValues={EXAMPLE_VALUES}
-        className="settings-form"
-      >
-        <div className="settings-grid">
-          {/* ① 模型配置 */}
-          <Card
-            className="settings-card"
-            title="模型配置"
-            extra={<span className="settings-card__tag">仅展示</span>}
-          >
-            <p className="settings-card__desc">对话模型与采样参数</p>
-            <Form.Item label="模型名称" name="model">
-              <Select options={MODEL_OPTIONS} />
-            </Form.Item>
-            <Form.Item label="温度（temperature）" name="temperature" extra="越高回答越随机（0-2）">
-              <InputNumber min={0} max={2} step={0.1} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item label="top_p" name="top_p" extra="核采样概率（0-1）">
-              <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
-            </Form.Item>
-          </Card>
-
-          {/* ② RAG 阈值 */}
-          <Card
-            className="settings-card"
-            title="RAG 阈值"
-            extra={<span className="settings-card__tag">仅展示</span>}
-          >
-            <p className="settings-card__desc">检索召回与答案缓存策略</p>
-            <Form.Item label="检索 top_k" name="top_k" extra="每次召回切片数">
-              <InputNumber min={1} max={20} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item label="相似度阈值" name="similarity_threshold" extra="低于该值不召回（0-1）">
-              <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item label="答案缓存开关" name="answer_cache" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </Card>
-
-          {/* ③ 限流参数 */}
-          <Card
-            className="settings-card"
-            title="限流参数"
-            extra={<span className="settings-card__tag">仅展示</span>}
-          >
-            <p className="settings-card__desc">接口调用频率控制</p>
-            <Form.Item label="每用户每分钟请求上限" name="rpm_limit" extra="超出后返回 429">
-              <InputNumber min={1} max={120} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item label="限流开关" name="rate_limit_enabled" valuePropName="checked">
-              <Switch />
-            </Form.Item>
-          </Card>
-
-          {/* ④ 配额配置 */}
-          <Card
-            className="settings-card"
-            title="配额配置"
-            extra={<span className="settings-card__tag">仅展示</span>}
-          >
-            <p className="settings-card__desc">用户每日使用额度</p>
-            <Form.Item label="每日对话配额" name="daily_quota" extra="单用户每日消息数上限">
-              <InputNumber min={1} max={10000} style={{ width: '100%' }} />
-            </Form.Item>
-            <Form.Item label="配额提示阈值" name="quota_warn_ratio" extra="使用量达该比例时提醒（0-1）">
-              <InputNumber min={0} max={1} step={0.05} style={{ width: '100%' }} />
-            </Form.Item>
-          </Card>
-        </div>
-
-        <div className="settings-actions">
-          <Button type="primary" onClick={handleSave}>
-            保存配置
-          </Button>
-          <span className="settings-actions__hint">保存能力待后端配置接口开放后启用</span>
-        </div>
-      </Form>
+      {body}
     </div>
   );
 }

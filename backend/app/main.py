@@ -19,7 +19,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.responses import Response
 
-from app.api import admin, auth, chat, customers, feedback, knowledge, quota, sessions, telemetry, tickets
+from app.api import (
+    admin,
+    admin_settings,
+    audit_logs,
+    auth,
+    chat,
+    customers,
+    faq,
+    feedback,
+    knowledge,
+    knowledge_search,
+    quota,
+    sessions,
+    telemetry,
+    tickets,
+)
 from app.core.config import settings
 
 logger = logging.getLogger("lingxi")
@@ -152,6 +167,10 @@ for _router in (
     feedback.router,
     quota.router,
     admin.router,
+    admin_settings.router,
+    audit_logs.router,
+    faq.router,
+    knowledge_search.router,
     tickets.router,
     customers.router,
     telemetry.router,

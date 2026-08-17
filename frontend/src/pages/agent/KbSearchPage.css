@@ -1,6 +1,6 @@
 /* ============================================================
-   KbSearchPage · 知识库快搜（Phase3）
-   左栏知识库列表（点击高亮）+ 右栏文档表格，顶部关键词过滤。
+   KbSearchPage · 知识库快搜（Phase4）
+   左栏知识库列表（点击高亮）+ 右栏语义检索：命中片段列表。
    全浅色 workbench 调性，全部消费 tokens.css 语义变量
    （--color-* / --text-* / --border / --shadow-card / --radius-*），
    禁止硬编码 hex。仅本页引用。
@@ -24,18 +24,6 @@
   font-size: 13px;
   color: var(--text-3);
   margin-top: 2px;
-}
-
-/* 顶部提示条：amber 微光（说明当前为文档级检索） */
-.kbs-notice {
-  margin-bottom: 14px;
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text-3);
-  background: color-mix(in srgb, var(--color-amber) 14%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-amber) 32%, transparent);
 }
 
 /* ---- 左右布局 ---- */
@@ -137,7 +125,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ---- 右栏：搜索 + 文档表格 ---- */
+/* ---- 右栏：检索框 + 命中片段 ---- */
 .kbs-main {
   flex: 1 1 auto;
   min-width: 0;
@@ -153,10 +141,10 @@
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 .kbs-search {
-  max-width: 320px;
+  max-width: 480px;
 }
 .kbs-main__hint {
   font-size: 12px;
@@ -170,13 +158,69 @@
   justify-content: center;
   padding: 64px 0;
 }
-.kbs-doc-name {
-  display: inline-block;
-  max-width: 100%;
+
+/* ---- 命中片段列表 ---- */
+.kbs-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.kbs-hit {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  padding: 12px 14px;
+  transition: border-color var(--dur-fast) var(--ease-out);
+}
+.kbs-hit:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 55%, var(--border));
+}
+.kbs-hit__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.kbs-hit__title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
   overflow: hidden;
   text-overflow: ellipsis;
-  vertical-align: bottom;
+  white-space: nowrap;
 }
-.kbs-chunk {
+.kbs-hit__kb {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+  padding: 0 8px;
+  border-radius: 999px;
+}
+.kbs-hit__score {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-brand-dark);
   font-variant-numeric: tabular-nums;
+  background: var(--color-brand-soft);
+  padding: 0 8px;
+  border-radius: 999px;
+}
+.kbs-hit__snippet {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-2);
+}
+
+/* ---- 动效兜底 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .kbs-list__item,
+  .kbs-hit {
+    transition: none;
+  }
 }

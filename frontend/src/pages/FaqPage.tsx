@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react';
-import { Empty, Input, Typography } from 'antd';
+import { useQuery } from '@tanstack/react-query';
+import { Input, Typography } from 'antd';
 import {
   CarryOutOutlined,
   DownOutlined,
@@ -10,12 +11,15 @@ import {
   ToolOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { BrandEmpty } from '@/components/common/BrandEmpty';
+import { getPublicFaq } from '@/api/faq';
+import type { DocStatus, FaqKBItem } from '@/contracts/api';
 import './FaqPage.css';
 
 /**
- * FAQ 公开浏览页（Phase 3 · 匿名可访问，挂 User 端 WidgetShell 下）
- * - 数据说明：后端暂无「知识库 → 结构化 FAQ」接口（知识库接口仅 admin 可访问），
- *   故本页使用内置静态 FAQ 常量，页面顶部以说明条提示用户。
+ * FAQ 公开浏览页（Phase 4 · 匿名可访问，挂 User 端 WidgetShell 下）
+ * - 数据：GET /faq（公开无鉴权）→ 知识库 → 结构化 FAQ；有真实数据展示真实，
+ *   无数据时回退到内置静态 FAQ 兜底，页面顶部说明条随数据源切换文案。
  * - 交互：顶部关键词搜索（对 问题/答案 前端过滤）+ 分类 Tab 过滤 + 本地 state 手风琴展开。
  * - 视觉：User 端暖米底 + 海盐蓝点缀 + 大圆角低密度；仅消费 tokens.css 变量。
  */
@@ -23,6 +27,8 @@ import './FaqPage.css';
 interface FaqItem {
   q: string;
   a: string;
+  status?: DocStatus;
+  chunks?: number;
 }
 
 interface FaqCategory {
@@ -30,6 +36,41 @@ interface FaqCategory {
   name: string;
   icon: ReactNode;
   items: FaqItem[];
+}
+
+/** 文档状态文案（真实数据 → FAQ 条目标签） */
+const DOC_STATUS_TEXT: Record<string, string> = {
+  parsing: '解析中',
+  embedding: '向量化中',
+  indexed: '已索引',
+  failed: '失败',
+};
+
+/** 真实知识库分类图标池（按序循环分配） */
+const CAT_ICON_POOL: ReactNode[] = [
+  <UserOutlined key="u" />,
+  <CarryOutOutlined key="c" />,
+  <SwapOutlined key="s" />,
+  <ToolOutlined key="t" />,
+  <QuestionCircleOutlined key="q" />,
+  <InfoCircleOutlined key="i" />,
+];
+
+/** 将后端 /faq 返回的知识库结构映射为 FAQ 分类（文档 → 问答条目） */
+function buildRealCategories(items: FaqKBItem[]): FaqCategory[] {
+  return items.map((kb, i) => ({
+    key: `kb:${kb.kb_id}`,
+    name: kb.kb_name,
+    icon: CAT_ICON_POOL[i % CAT_ICON_POOL.length],
+    items: (kb.docs ?? []).map((d) => ({
+      q: d.name,
+      a: kb.description
+        ? `${kb.description}（本条目对应知识库「${kb.kb_name}」，收录 ${d.chunks} 个内容分块。）`
+        : `本条目来自知识库「${kb.kb_name}」，当前收录 ${d.chunks} 个内容分块，可在在线客服中检索引用。`,
+      status: d.status,
+      chunks: d.chunks,
+    })),
+  }));
 }
 
 const FAQ_CATEGORIES: FaqCategory[] = [
@@ -182,15 +223,30 @@ const FAQ_CATEGORIES: FaqCategory[] = [
   },
 ];
 
-/** 全部问题展平（供搜索 / 计数） */
-const FLAT_ITEMS: { item: FaqItem; cat: FaqCategory }[] = FAQ_CATEGORIES.flatMap((cat) =>
-  cat.items.map((item) => ({ item, cat })),
-);
-
 export function FaqPage() {
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState('all');
   const [openId, setOpenId] = useState<string | null>(null);
+
+  // Phase4：真实知识库 → FAQ（有数据展示真实，无数据静态兜底）
+  const { data: faqData } = useQuery({
+    queryKey: ['public-faq'],
+    queryFn: getPublicFaq,
+  });
+  const faqItems: FaqKBItem[] = faqData?.items ?? [];
+  const useReal = faqItems.some((kb) => (kb.docs?.length ?? 0) > 0);
+
+  /** 当前分类集（真实数据优先，空则静态兜底） */
+  const categories: FaqCategory[] = useMemo(
+    () => (useReal ? buildRealCategories(faqItems) : FAQ_CATEGORIES),
+    [useReal, faqItems],
+  );
+
+  /** 全部问题展平（供搜索 / 计数） */
+  const flatItems = useMemo(
+    () => categories.flatMap((cat) => cat.items.map((item) => ({ item, cat }))),
+    [categories],
+  );
 
   /** 分类 Tab 点击：切换分类并收起已展开的条目 */
   const handleCatChange = (key: string) => {
@@ -201,21 +257,21 @@ export function FaqPage() {
   /** 根据关键词过滤（对问题与答案做前端匹配） */
   const filtered = useMemo(() => {
     const kw = query.trim().toLowerCase();
-    if (!kw) return FLAT_ITEMS;
-    return FLAT_ITEMS.filter(({ item }) => {
+    if (!kw) return flatItems;
+    return flatItems.filter(({ item }) => {
       const text = `${item.q} ${item.a}`.toLowerCase();
       return text.includes(kw);
     });
-  }, [query]);
+  }, [query, flatItems]);
 
   /** 当前展示的分类（搜索时覆盖为全部分类，展示带分类标签的平铺结果） */
   const visibleCats = useMemo(() => {
     const kw = query.trim();
-    if (kw) return FAQ_CATEGORIES;
+    if (kw) return categories;
     return activeCat === 'all'
-      ? FAQ_CATEGORIES
-      : FAQ_CATEGORIES.filter((c) => c.key === activeCat);
-  }, [activeCat, query]);
+      ? categories
+      : categories.filter((c) => c.key === activeCat);
+  }, [activeCat, query, categories]);
 
   const hasResult = filtered.length > 0;
 
@@ -229,7 +285,11 @@ export function FaqPage() {
         {/* 顶部说明条 */}
         <div className="faq__notice" role="note">
           <InfoCircleOutlined aria-hidden="true" />
-          <span>当前为通用帮助内容，知识库结构化 FAQ 将在后续版本接入</span>
+          <span>
+            {useReal
+              ? '以下内容来自企业知识库，由系统自动生成'
+              : '知识库暂无可展示内容，以下为通用帮助，接入知识库后将自动替换'}
+          </span>
         </div>
 
         {/* 头部 */}
@@ -266,7 +326,7 @@ export function FaqPage() {
           >
             全部
           </button>
-          {FAQ_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               type="button"
               key={cat.key}
@@ -296,11 +356,9 @@ export function FaqPage() {
 
         {/* 问答列表 */}
         {!hasResult ? (
-          <Empty
-            className="faq__empty"
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description="没有找到相关问题，换个关键词试试"
-          />
+          <div className="faq__empty">
+            <BrandEmpty title="没有找到相关问题" hint="换个关键词试试" />
+          </div>
         ) : query.trim() ? (
           /* 搜索态：平铺展示，每条带分类标签 */
           <div className="faq__list">
@@ -376,6 +434,12 @@ function FaqItemRow({ id, item, catName, isOpen, onToggle }: FaqItemRowProps) {
           <QuestionCircleOutlined />
         </span>
         <span className="faq-item__q-text">{item.q}</span>
+        {item.status ? (
+          <span className="faq-item__meta">
+            {DOC_STATUS_TEXT[item.status] ?? item.status}
+            {item.chunks != null ? ` · ${item.chunks} 分块` : ''}
+          </span>
+        ) : null}
         {catName ? <span className="faq-item__cat">{catName}</span> : null}
         <span className={`faq-item__chevron ${isOpen ? 'is-open' : ''}`} aria-hidden="true">
           <DownOutlined />

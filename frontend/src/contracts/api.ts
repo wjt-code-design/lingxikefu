@@ -151,6 +151,46 @@ export interface DocumentListResp {
   items: DocItem[];
 }
 
+// ---------- Knowledge · Semantic Search（Phase4） ----------
+export interface KnowledgeSearchReq {
+  query: string;
+  kb_id: string;
+  top_k?: number;
+}
+export interface KnowledgeHit {
+  chunk_id: string;
+  doc_id: string;
+  doc_title: string;
+  kb_id: string;
+  kb_name: string;
+  snippet: string;
+  score: number;
+  dense_score: number;
+}
+export interface KnowledgeSearchResp {
+  query: string;
+  hits: KnowledgeHit[];
+}
+
+// ---------- FAQ（公开 · Phase4） ----------
+export interface FaqDoc {
+  doc_id: string;
+  name: string;
+  status: DocStatus;
+  chunks: number;
+}
+export interface FaqKBItem {
+  kb_id: string;
+  kb_name: string;
+  description?: string;
+  doc_count: number;
+  chunk_count: number;
+  docs: FaqDoc[];
+}
+export interface PublicFaqResp {
+  items: FaqKBItem[];
+}
+
 // ---------- Feedback ----------
 export interface FeedbackReq {
   rating: 'up' | 'down';
@@ -196,6 +236,64 @@ export interface UserListResp {
 }
 export interface RoleUpdateReq {
   role: Role;
+}
+
+// ---------- Admin · System Settings（Phase4） ----------
+export interface AdminSettingsModel {
+  provider: string;
+  model: string;
+  fallback?: string;
+  embedding_provider?: string;
+  embedding_model?: string;
+}
+export interface AdminSettingsRag {
+  top_k: number;
+  min_score: number;
+  hybrid: boolean;
+  chunk_size: number;
+  chunk_overlap: number;
+  answer_cache_enabled: boolean;
+  answer_cache_threshold: number;
+  max_upload_mb: number;
+}
+export interface AdminSettingsRateLimit {
+  enabled: boolean;
+}
+export interface AdminSettingsQuota {
+  daily_limit: number;
+}
+export interface AdminSettings {
+  env: string;
+  model: AdminSettingsModel;
+  rag: AdminSettingsRag;
+  rate_limit: AdminSettingsRateLimit;
+  quota: AdminSettingsQuota;
+}
+
+// ---------- Admin · Audit Logs（Phase4） ----------
+export interface AuditLogItem {
+  audit_id: string;
+  actor_email: string;
+  actor_role: Role;
+  action: string;
+  resource: string;
+  resource_id?: string | null;
+  detail?: string | null;
+  ip?: string | null;
+  created_at: string;
+}
+export interface AuditLogListReq {
+  action?: string;
+  resource?: string;
+  actor?: string;
+  start?: string;
+  end?: string;
+  page?: number;
+  size?: number;
+}
+export interface AuditLogListResp {
+  items: AuditLogItem[];
+  total: number;
 }
 
 // ---------- 统一错误模型 ----------

@@ -31,6 +31,7 @@ from app.schemas.admin import (
     UserListResp,
 )
 from app.schemas.knowledge import OkResp
+from app.services.audit_service import audit_log
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -99,6 +100,16 @@ def update_user_role(
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "不能降级最后一个管理员")
     u.role = UserRole(req.role)
     db.commit()
+    # Phase4 审计埋点：用户角色变更（user.role，detail=新角色）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="user.role",
+        resource="user",
+        resource_id=str(user_id),
+        detail=req.role,
+    )
     return OkResp()
 
 

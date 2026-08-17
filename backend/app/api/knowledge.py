@@ -6,6 +6,7 @@
 - 导入调度：优先 Celery 异步（``.delay``），broker 不可达时**后台线程**异步执行
   （不阻塞上传请求线程，状态由前端轮询），不静默丢任务。
 - 删除：先清 Qdrant 向量（失败 500 保持可重试，不留脏镜像），再删 PG（FK 级联 chunks）。
+- Phase4：KB 创建/删除、文档上传/删除成功路径埋点审计（audit_log，fail-open 不影响主流程）。
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ from app.schemas.knowledge import (
     OkResp,
 )
 from app.services import vector_service
+from app.services.audit_service import audit_log
 from app.services.document_service import SUPPORTED_EXTENSIONS, UnsupportedFileError, extract_text
 from app.services.knowledge_import_service import ImportError_, import_document
 from app.services.vector_service import VectorStoreError
@@ -81,7 +83,7 @@ def _doc_item(doc) -> DocItem:
 
 @router.get("", response_model=KBListResp)
 def list_knowledge_bases(
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> KBListResp:
     repo = KnowledgeBaseRepository(db)
@@ -100,18 +102,27 @@ def list_knowledge_bases(
 @router.post("", response_model=KBItem, status_code=status.HTTP_201_CREATED)
 def create_knowledge_base(
     req: CreateKBReq,
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> KBItem:
     repo = KnowledgeBaseRepository(db)
     kb = repo.create(name=req.name, description=req.description)
+    # Phase4 审计埋点：KB 创建（resource=knowledge_base）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="kb.create",
+        resource="knowledge_base",
+        resource_id=str(kb.id),
+    )
     return KBItem(kb_id=str(kb.id), name=kb.name, doc_count=0, chunk_count=0)
 
 
 @router.get("/{kb_id}/documents", response_model=DocumentListResp)
 def list_documents(
     kb_id: UUID,
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> DocumentListResp:
     kb_repo = KnowledgeBaseRepository(db)
@@ -129,7 +140,7 @@ def list_documents(
 def upload_document(
     kb_id: UUID,
     file: UploadFile = File(...),
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> DocItem:
     repo = KnowledgeBaseRepository(db)
@@ -182,13 +193,23 @@ def upload_document(
         _enqueue_background_import(str(doc.id))
 
     db.refresh(doc)
+    # Phase4 审计埋点：文档上传成功（resource=document）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="doc.upload",
+        resource="document",
+        resource_id=str(doc.id),
+        detail=filename,
+    )
     return _doc_item(doc)
 
 
 @documents_router.delete("/documents/{doc_id}", response_model=OkResp)
 def delete_document(
     doc_id: UUID,
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> OkResp:
     doc_repo = DocumentRepository(db)
@@ -201,13 +222,23 @@ def delete_document(
     except VectorStoreError as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e)) from e
     doc_repo.delete(doc)
+    # Phase4 审计埋点：文档删除（resource=document）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="doc.delete",
+        resource="document",
+        resource_id=str(doc_id),
+        detail=doc.name,
+    )
     return OkResp()
 
 
 @router.delete("/{kb_id}", response_model=OkResp)
 def delete_knowledge_base(
     kb_id: UUID,
-    _: dict = Depends(require_admin),
+    payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> OkResp:
     """删除知识库（T4）：清空其下全部文档向量 + PG（documents/chunks 级联删除）。"""
@@ -223,4 +254,14 @@ def delete_knowledge_base(
     except VectorStoreError as e:
         raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR, str(e)) from e
     kb_repo.delete(kb)
+    # Phase4 审计埋点：KB 删除（resource=knowledge_base）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="kb.delete",
+        resource="knowledge_base",
+        resource_id=str(kb_id),
+        detail=kb.name,
+    )
     return OkResp()

@@ -5,6 +5,8 @@ import type {
   DocumentListResp,
   KBItem,
   KBListResp,
+  KnowledgeSearchReq,
+  KnowledgeSearchResp,
   OkResp,
 } from '@/contracts/api';
 
@@ -37,5 +39,11 @@ export async function uploadDocument(kbId: string, file: File): Promise<DocItem>
 /** DELETE /documents/{docId} → OkResp */
 export async function deleteDocument(docId: string): Promise<OkResp> {
   const r = await http.delete<OkResp>(`/documents/${docId}`);
+  return r.data;
+}
+
+/** POST /knowledge/search → KnowledgeSearchResp（Phase4：语义检索） */
+export async function searchKnowledge(req: KnowledgeSearchReq): Promise<KnowledgeSearchResp> {
+  const r = await http.post<KnowledgeSearchResp>('/knowledge/search', req);
   return r.data;
 }

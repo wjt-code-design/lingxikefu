@@ -1,8 +1,8 @@
 /* ============================================================
-   LogsPage · 操作审计日志（Phase3）
-   日志表格骨架 + 筛选栏 + 品牌化空态（后端接口待开放）。
+   LogsPage · 操作审计日志（Phase4）
+   真实审计日志列表 + 筛选栏（时间/动作/资源/操作人）+ 分页 + 品牌化空态。
    全浅色、克制：白卡 + 发丝线 + 小圆角，全部消费 tokens.css
-   语义变量（--color-* / --text-* / --border），禁止硬编码 hex；
+   语义变量（--color-* / --text-* / --border / --radius-*），禁止硬编码 hex；
    本文件仅 LogsPage 引用。
    ============================================================ */
 .logs-page {
@@ -28,10 +28,6 @@
 .logs-page__subtitle {
   font-size: 13px;
   color: var(--text-3);
-}
-.logs-page__alert {
-  margin-bottom: 16px;
-  border-radius: var(--radius-sm);
 }
 
 /* ---- 筛选栏（白卡 + 发丝线） ---- */
@@ -73,7 +69,7 @@
   margin-left: auto;
 }
 
-/* ---- 日志表格卡（空态内联品牌化） ---- */
+/* ---- 日志表格卡（分页 + 品牌化空态） ---- */
 .logs-table.ant-card {
   background: var(--color-surface);
   border: 1px solid var(--border);

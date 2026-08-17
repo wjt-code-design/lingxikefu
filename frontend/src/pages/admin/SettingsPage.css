@@ -1,8 +1,8 @@
 /* ============================================================
-   SettingsPage · 系统设置（Phase3）
-   只读展示 + 表单骨架：模型 / RAG / 限流 / 配额 分组卡片。
+   SettingsPage · 系统设置（Phase4）
+   只读展示后端真实配置（真源 .env）：模型 / RAG / 限流 / 配额 分组卡片。
    全浅色、克制：浅冷灰底（继承 .app-workbench）+ 白卡 + 发丝线 + 小圆角。
-   全部消费 tokens.css 语义变量（--color-* / --text-* / --border），
+   全部消费 tokens.css 语义变量（--color-* / --text-* / --border / --radius-*），
    禁止硬编码 hex；本文件仅 SettingsPage 引用。
    ============================================================ */
 .settings-page {
@@ -29,9 +29,33 @@
   font-size: 13px;
   color: var(--text-3);
 }
+.settings-page__env {
+  font-size: 12px;
+  line-height: 1;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+  font-variant-numeric: tabular-nums;
+}
 .settings-page__alert {
   margin-bottom: 16px;
   border-radius: var(--radius-sm);
+}
+.settings-page__spin {
+  display: flex;
+  justify-content: center;
+  padding: 80px 0;
+}
+.settings-page__error {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 80px 0;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
 }
 
 /* ---- 配置卡片网格（白卡 + 发丝线 + 小圆角） ---- */
@@ -65,33 +89,52 @@
   padding: 0 8px;
 }
 .settings-card__desc {
-  margin: 0 0 14px;
+  margin: 0 0 6px;
   font-size: 12px;
   color: var(--text-3);
 }
 
-/* ---- 表单（整体禁用态，仅展示） ---- */
-.settings-card .ant-form-item {
-  margin-bottom: 12px;
+/* ---- 只读键值行 ---- */
+.settings-kv {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
 }
-.settings-card .ant-form-item-label > label {
+.settings-kv:last-child {
+  border-bottom: none;
+}
+.settings-kv__label {
   font-size: 13px;
-  color: var(--text-2);
+  color: var(--text-3);
+  flex-shrink: 0;
 }
-.settings-card .ant-form-item-extra {
-  font-size: 12px;
-  color: var(--text-4);
-  min-height: auto;
+.settings-kv__value {
+  font-size: 13px;
+  color: var(--text-1);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.settings-kv__value--mono {
+  font-variant-numeric: tabular-nums;
 }
 
-/* ---- 底部保存操作 ---- */
-.settings-actions {
-  display: flex;
+/* ---- 布尔徽标（开启/关闭，语义色） ---- */
+.settings-bool {
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 20px;
-}
-.settings-actions__hint {
+  padding: 2px 8px;
+  border-radius: 999px;
   font-size: 12px;
+  line-height: 18px;
+}
+.settings-bool--on {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+}
+.settings-bool--off {
   color: var(--text-4);
+  background: color-mix(in srgb, var(--text-4) 12%, transparent);
 }

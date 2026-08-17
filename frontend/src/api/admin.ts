@@ -1,6 +1,9 @@
 import { http } from '@/api/client';
 import type {
+  AdminSettings,
   AdminStats,
+  AuditLogListReq,
+  AuditLogListResp,
   OkResp,
   Role,
   StatsTrendResp,
@@ -43,5 +46,17 @@ export async function listFeedback(page = 1, size = 20): Promise<{ items: Feedba
 /** 运营趋势（P1）：近 N 天会话/消息/工单按日计数。 */
 export async function getStatsTrend(days = 14): Promise<StatsTrendResp> {
   const r = await http.get<StatsTrendResp>('/admin/stats/trend', { params: { days } });
+  return r.data;
+}
+
+/** GET /admin/settings → AdminSettings（真源 .env，只读） */
+export async function getAdminSettings(): Promise<AdminSettings> {
+  const r = await http.get<AdminSettings>('/admin/settings');
+  return r.data;
+}
+
+/** GET /admin/audit-logs → AuditLogListResp（筛选 + 分页） */
+export async function getAuditLogs(req: AuditLogListReq = {}): Promise<AuditLogListResp> {
+  const r = await http.get<AuditLogListResp>('/admin/audit-logs', { params: req });
   return r.data;
 }

@@ -19,6 +19,7 @@ from app.models.message import Message
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
+from app.services.audit_service import audit_log
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -200,6 +201,15 @@ def delete_session(
         raise HTTPException(status_code=409, detail="会话存在未关闭工单，请先处理工单")
     db.delete(s)
     db.commit()
+    # Phase4 审计埋点：删除会话（session.delete）
+    audit_log(
+        db,
+        actor_id=payload["sub"],
+        actor_role=payload.get("role"),
+        action="session.delete",
+        resource="session",
+        resource_id=str(session_id),
+    )
     return OkResp()
 
 
