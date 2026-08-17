@@ -263,7 +263,7 @@ body {
 .chat-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   width: 100%;
   max-width: 780px;
   margin: 0 auto;
@@ -344,13 +344,13 @@ body {
 .chat-msg__text {
   margin: 0 0 4px;
   font-size: 14px;
-  line-height: 1.75;
+  line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
 }
 /* Markdown 渲染 */
 .chat-msg__text p {
-  margin: 0 0 8px;
+  margin: 0 0 6px;
   white-space: normal;
 }
 .chat-msg__text p:last-child {
@@ -386,7 +386,7 @@ body {
 .chat-msg__text h1,
 .chat-msg__text h2,
 .chat-msg__text h3 {
-  margin: 8px 0 4px;
+  margin: 6px 0 4px;
   white-space: normal;
 }
 
