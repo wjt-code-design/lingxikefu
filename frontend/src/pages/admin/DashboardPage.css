@@ -1,0 +1,235 @@
+/* ============================================================
+   DashboardPage 运营总览（Phase3，替代 /admin/dashboard 重定向）
+   全浅色工作台：白卡 + 发丝线 + 小圆角，消费现有 token
+   （--color-* / --text-* / --border / --shadow-card / --radius-*），
+   禁止硬编码 hex（SVG 图表内部除外）。动效克制，尊重减弱动效。
+   ============================================================ */
+.dash-page {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+.dash-page__header {
+  margin-bottom: 16px;
+}
+.dash-page__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dash-page__title {
+  margin: 0 !important;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-1);
+}
+.dash-page__subtitle {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.dash-page__spin {
+  display: block;
+  text-align: center;
+  padding: 72px 0;
+}
+
+/* ---------- KPI 卡片行（自绘，白卡 + 发丝线 + tabular-nums） ---------- */
+.dash-kpi-card {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px 14px;
+  height: 100%;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.dash-kpi-card:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--border));
+}
+.dash-kpi-card__label {
+  font-size: 13px;
+  color: var(--text-3);
+  margin-bottom: 6px;
+}
+.dash-kpi-card__value {
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.dash-kpi-card__suffix {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-3);
+  margin-left: 4px;
+}
+.dash-kpi-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+}
+.dash-kpi-card__caption {
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+.dash-sparkline {
+  flex: none;
+  opacity: 0.92;
+}
+
+/* ---------- 通用区块卡（白卡 + 发丝线 + 小圆角） ---------- */
+.dash-card.ant-card {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.dash-card .ant-card-head {
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+}
+.dash-card .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.dash-card__hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-4);
+}
+.dash-card__spin {
+  display: block;
+  text-align: center;
+  padding: 48px 0;
+}
+
+/* ---------- 待办工单列表 ---------- */
+.dash-ticket-list .ant-list-item {
+  padding: 0;
+}
+.dash-ticket {
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  padding: 10px 6px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.dash-ticket:hover {
+  background: var(--color-brand-soft);
+}
+.dash-ticket__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.dash-ticket__id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.dash-ticket__time {
+  font-size: 12px;
+  color: var(--text-4);
+  white-space: nowrap;
+}
+
+/* ---------- 告警列表 ---------- */
+.dash-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+.dash-alert__icon {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 1px;
+  border-radius: 50%;
+  text-align: center;
+  line-height: 20px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-surface);
+}
+.dash-alert--latency .dash-alert__icon {
+  background: var(--color-danger);
+}
+.dash-alert--gap .dash-alert__icon {
+  background: var(--color-amber);
+}
+.dash-alert__body {
+  min-width: 0;
+}
+.dash-alert__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.dash-alert__desc {
+  font-size: 12px;
+  color: var(--text-3);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-alert--gap .dash-alert__desc {
+  white-space: normal;
+}
+
+/* ---------- 快捷入口 ---------- */
+.dash-quick {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 18px 16px;
+  cursor: pointer;
+  height: 100%;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    transform var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.dash-quick:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--border));
+  transform: translateY(-2px);
+}
+.dash-quick__icon {
+  font-size: 22px;
+  color: var(--color-brand-dark);
+  margin-bottom: 10px;
+}
+.dash-quick__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 4px;
+}
+.dash-quick__desc {
+  font-size: 12px;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+
+/* 尊重系统减弱动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  .dash-kpi-card,
+  .dash-ticket,
+  .dash-quick {
+    transition: none;
+  }
+  .dash-quick:hover {
+    transform: none;
+  }
+}

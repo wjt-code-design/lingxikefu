@@ -1,0 +1,88 @@
+/* ============================================================
+   LogsPage · 操作审计日志（Phase3）
+   日志表格骨架 + 筛选栏 + 品牌化空态（后端接口待开放）。
+   全浅色、克制：白卡 + 发丝线 + 小圆角，全部消费 tokens.css
+   语义变量（--color-* / --text-* / --border），禁止硬编码 hex；
+   本文件仅 LogsPage 引用。
+   ============================================================ */
+.logs-page {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.logs-page__header {
+  margin-bottom: 16px;
+}
+.logs-page__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.logs-page__title {
+  margin: 0 !important;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-1);
+}
+.logs-page__subtitle {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.logs-page__alert {
+  margin-bottom: 16px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- 筛选栏（白卡 + 发丝线） ---- */
+.logs-filter.ant-card {
+  margin-bottom: 16px;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.logs-filter .ant-card-body {
+  padding: 16px;
+}
+.logs-filter__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.logs-filter__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.logs-filter__label {
+  font-size: 13px;
+  color: var(--text-3);
+  white-space: nowrap;
+}
+.logs-filter__select {
+  width: 160px;
+}
+.logs-filter__input {
+  width: 200px;
+}
+.logs-filter__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* ---- 日志表格卡（空态内联品牌化） ---- */
+.logs-table.ant-card {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.logs-table .ant-card-body {
+  padding: 8px;
+}
+.logs-table .brand-empty {
+  padding: 48px 16px;
+}

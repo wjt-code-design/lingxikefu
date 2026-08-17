@@ -1,0 +1,122 @@
+/* ============================================================
+   SessionsAuditPage 会话审计（Phase3）
+   全浅色工作台：筛选栏 + 白卡表格 + Drawer 对话气泡，
+   消费现有 token（--color-* / --text-* / --border / --shadow-card /
+   --radius-*），禁止硬编码 hex。动效克制，尊重减弱动效。
+   ============================================================ */
+.audit-page {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+.audit-page__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.audit-page__title {
+  margin: 0 !important;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-1);
+}
+.audit-page__subtitle {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ---------- 筛选栏 ---------- */
+.audit-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.audit-filters__input {
+  width: 320px;
+  max-width: 100%;
+}
+.audit-filters__count {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.audit-spin {
+  display: block;
+  text-align: center;
+  padding: 72px 0;
+}
+
+/* ---------- 表格容器（白卡 + 发丝线 + 小圆角） ---------- */
+.audit-table {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.audit-cell {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Drawer 会话对话（气泡左右区分） ---------- */
+.audit-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.audit-msg {
+  display: flex;
+}
+.audit-msg--user {
+  justify-content: flex-end;
+}
+.audit-msg--assistant {
+  justify-content: flex-start;
+}
+.audit-msg__bubble {
+  max-width: 85%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+}
+.audit-msg--assistant .audit-msg__bubble {
+  border-bottom-left-radius: 6px;
+}
+.audit-msg--user .audit-msg__bubble {
+  background: var(--color-brand-soft);
+  border-color: color-mix(in srgb, var(--color-brand) 40%, var(--border));
+  border-bottom-right-radius: 6px;
+}
+.audit-msg__meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.audit-msg__role {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-brand-dark);
+}
+.audit-msg--user .audit-msg__role {
+  color: var(--text-3);
+}
+.audit-msg__time {
+  font-size: 11px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+}
+.audit-msg__content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

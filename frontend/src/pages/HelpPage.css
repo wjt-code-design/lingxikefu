@@ -1,0 +1,212 @@
+/* ============================================================
+   帮助中心公开页（Phase 3 · User 端）
+   暖米底（透出 body 渐变）+ 海盐蓝点缀 + 大圆角低密度，克制动效。
+   仅消费 tokens.css 变量，禁止硬编码 hex。
+   挂在 WidgetShell 下（.widget-shell__body overflow:hidden），
+   本页根节点自身负责滚动（flex:1 + overflow-y:auto）。
+   ============================================================ */
+
+.help {
+  flex: 1;
+  overflow-y: auto;
+  padding: 40px 24px 64px;
+}
+
+.help__inner {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ---------- 顶部主标题 + 简介 ---------- */
+.help__hero {
+  text-align: center;
+  padding: 12px 0 4px;
+}
+.help__title {
+  font-size: 34px !important;
+  letter-spacing: 0.01em;
+  margin-bottom: 10px !important;
+}
+.help__sub {
+  font-size: 16px;
+  color: var(--text-3);
+  max-width: 560px;
+  margin: 0 auto !important;
+}
+
+/* ---------- 三块帮助卡片 ---------- */
+.help__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.help__card {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 22px;
+}
+
+.help__card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.help__card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: var(--color-brand-soft);
+  color: var(--color-brand-dark);
+  font-size: 20px;
+}
+.help__card-no {
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--color-brand-soft);
+  letter-spacing: 0.02em;
+}
+
+.help__card-title {
+  margin: 0 0 6px;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+.help__card-desc {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+
+/* ---------- 步骤列表 ---------- */
+.help__steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.help__step {
+  display: flex;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+.help__step:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.help__step-num {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-top: 7px;
+  border-radius: 999px;
+  background: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-soft);
+}
+.help__step-body {
+  min-width: 0;
+}
+.help__step-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+  margin-bottom: 2px;
+}
+.help__step-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-3);
+}
+
+/* ---------- 联系客服提示条 ---------- */
+.help__contact {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  border-radius: var(--radius-md);
+  background: var(--color-brand-soft);
+  border: 1px solid var(--border);
+}
+.help__contact-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-brand-dark);
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.help__contact-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.help__contact-text strong {
+  font-size: 14px;
+  color: var(--text-1);
+}
+.help__contact-text span {
+  font-size: 13px;
+  color: var(--text-3);
+  line-height: 1.6;
+}
+.help__contact-cta {
+  flex-shrink: 0;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 960px) {
+  .help__grid {
+    grid-template-columns: 1fr;
+  }
+}
+@media (max-width: 640px) {
+  .help {
+    padding: 24px 16px 48px;
+  }
+  .help__title {
+    font-size: 26px !important;
+  }
+  .help__contact {
+    flex-wrap: wrap;
+  }
+  .help__contact-cta {
+    width: 100%;
+  }
+  .help__contact-cta .ant-btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help__card,
+  .help__contact {
+    transition: none;
+  }
+}

@@ -1,0 +1,97 @@
+/* ============================================================
+   SettingsPage · 系统设置（Phase3）
+   只读展示 + 表单骨架：模型 / RAG / 限流 / 配额 分组卡片。
+   全浅色、克制：浅冷灰底（继承 .app-workbench）+ 白卡 + 发丝线 + 小圆角。
+   全部消费 tokens.css 语义变量（--color-* / --text-* / --border），
+   禁止硬编码 hex；本文件仅 SettingsPage 引用。
+   ============================================================ */
+.settings-page {
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.settings-page__header {
+  margin-bottom: 16px;
+}
+.settings-page__head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.settings-page__title {
+  margin: 0 !important;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  color: var(--text-1);
+}
+.settings-page__subtitle {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.settings-page__alert {
+  margin-bottom: 16px;
+  border-radius: var(--radius-sm);
+}
+
+/* ---- 配置卡片网格（白卡 + 发丝线 + 小圆角） ---- */
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.settings-card.ant-card {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+.settings-card .ant-card-head {
+  min-height: 48px;
+  border-bottom: 1px solid var(--border);
+}
+.settings-card .ant-card-head-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.settings-card__tag {
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+  border-radius: 999px;
+  padding: 0 8px;
+}
+.settings-card__desc {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* ---- 表单（整体禁用态，仅展示） ---- */
+.settings-card .ant-form-item {
+  margin-bottom: 12px;
+}
+.settings-card .ant-form-item-label > label {
+  font-size: 13px;
+  color: var(--text-2);
+}
+.settings-card .ant-form-item-extra {
+  font-size: 12px;
+  color: var(--text-4);
+  min-height: auto;
+}
+
+/* ---- 底部保存操作 ---- */
+.settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 20px;
+}
+.settings-actions__hint {
+  font-size: 12px;
+  color: var(--text-4);
+}
