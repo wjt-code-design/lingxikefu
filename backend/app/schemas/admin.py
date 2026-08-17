@@ -39,3 +39,16 @@ class AdminStats(BaseModel):
     feedback_down: int
     avg_first_token_ms: float
     hot_gaps: list[HotGap] = []
+
+
+class TrendPoint(BaseModel):
+    """单日计数（P1：stats/trend）。"""
+
+    date: str  # YYYY-MM-DD
+    sessions: int
+    messages: int
+    tickets: int
+
+
+class StatsTrendResp(BaseModel):
+    days: list[TrendPoint]

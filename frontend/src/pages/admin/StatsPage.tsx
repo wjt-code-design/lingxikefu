@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Col, Empty, List, Row, Spin, Statistic, Typography, message } from 'antd';
 import { CopyOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { getAdminStats } from '@/api/admin';
+import { getAdminStats, getStatsTrend } from '@/api/admin';
+import { TrendChart } from '@/components/common/TrendChart';
 
 function StatCard({ title, value }: { title: string; value: number | string }) {
   return (
@@ -24,6 +25,11 @@ export function StatsPage() {
   const { data: stats, isLoading } = useQuery({
     queryKey: ['admin-stats'],
     queryFn: getAdminStats,
+  });
+  // P1：近 14 天运营趋势（会话/消息/工单按日）
+  const { data: trend } = useQuery({
+    queryKey: ['admin-stats-trend'],
+    queryFn: () => getStatsTrend(14),
   });
   const [copiedQ, setCopiedQ] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,6 +64,13 @@ export function StatsPage() {
             <StatCard title="踩" value={stats?.feedback_down ?? 0} />
             <StatCard title="平均首字时延(ms)" value={stats?.avg_first_token_ms ?? 0} />
           </Row>
+          <Card title="近 14 天运营趋势" style={{ marginTop: 16 }}>
+            {trend?.days.length ? (
+              <TrendChart days={trend.days} />
+            ) : (
+              <Empty description="暂无趋势数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+            )}
+          </Card>
           <Card title="待补录问题 Top10（转人工/拒答高频）" style={{ marginTop: 16 }}>
             {gaps.length === 0 ? (
               <Empty description="暂无待补录问题" />

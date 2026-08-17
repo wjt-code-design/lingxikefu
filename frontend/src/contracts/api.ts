@@ -201,3 +201,15 @@ export interface ApiError {
   message: string;
   request_id: string;
 }
+
+// ---------- AdminStats Trend（P1：stats/trend） ----------
+export interface TrendPoint {
+  date: string; // YYYY-MM-DD
+  sessions: number;
+  messages: number;
+  tickets: number;
+}
+
+export interface StatsTrendResp {
+  days: TrendPoint[];
+}

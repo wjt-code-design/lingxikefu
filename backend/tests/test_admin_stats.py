@@ -12,6 +12,7 @@ from app.models.feedback import Feedback
 from app.models.knowledge import Document
 from app.models.message import Message, MessageRole
 from app.models.session import Session
+from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -45,7 +46,7 @@ def client():
             c.server_default = None
     Base.metadata.create_all(
         engine,
-        tables=[User.__table__, Session.__table__, Message.__table__, Document.__table__, Feedback.__table__],
+        tables=[User.__table__, Session.__table__, Message.__table__, Document.__table__, Feedback.__table__, Ticket.__table__],
     )
     Local = sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -108,4 +109,42 @@ def test_admin_feedback_lists_down_only(client):
     assert "items" in data and "total" in data
 
     r2 = client.get(f"{API}/admin/feedback", headers=_h(USER, "user"))
+    assert r2.status_code == 403
+
+
+def test_stats_trend_aggregates_days(client):
+    """P1：stats/trend 按日聚合会话/消息/工单 + 无数据日期补零 + 权限 403。"""
+    from datetime import datetime, timedelta
+    from app.models.ticket import Ticket
+
+    # 用 fixture 已有的 SID 会话 + 补历史数据（2 天前）
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        old = datetime.now() - timedelta(days=2)
+        s_old = Session(id=uuid.uuid4(), user_id=USER, tenant_id="default", created_at=old)
+        db.add(s_old)
+        db.add(Message(id=uuid.uuid4(), session_id=s_old.id, tenant_id="default",
+                       role=MessageRole.user, content="两天前的消息", created_at=old))
+        db.add(Ticket(id=uuid.uuid4(), session_id=s_old.id, tenant_id="default", created_at=old))
+        db.commit()
+    finally:
+        gen.close()
+
+    r = client.get(f"{API}/admin/stats/trend?days=7", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    days = r.json()["days"]
+    assert len(days) == 7
+    by_date = {d["date"]: d for d in days}
+    # 2 天前：1 会话 + 1 消息 + 1 工单；今天：至少 1 会话（fixture SID）
+    old_key = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    assert by_date[old_key]["sessions"] == 1
+    assert by_date[old_key]["messages"] == 1
+    assert by_date[old_key]["tickets"] == 1
+    today_key = datetime.now().strftime("%Y-%m-%d")
+    assert by_date[today_key]["sessions"] >= 1
+    # 无数据日期补零（连续轴）
+    assert all(d["sessions"] >= 0 for d in days)
+    # 权限：user → 403
+    r2 = client.get(f"{API}/admin/stats/trend", headers=_h(USER, "user"))
     assert r2.status_code == 403

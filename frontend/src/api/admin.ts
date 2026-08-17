@@ -3,6 +3,7 @@ import type {
   AdminStats,
   OkResp,
   Role,
+  StatsTrendResp,
   UserListResp,
 } from '@/contracts/api';
 
@@ -36,5 +37,11 @@ export async function listFeedback(page = 1, size = 20): Promise<{ items: Feedba
   const r = await http.get<{ items: FeedbackItem[]; total: number }>('/admin/feedback', {
     params: { page, size },
   });
+  return r.data;
+}
+
+/** 运营趋势（P1）：近 N 天会话/消息/工单按日计数。 */
+export async function getStatsTrend(days = 14): Promise<StatsTrendResp> {
+  const r = await http.get<StatsTrendResp>('/admin/stats/trend', { params: { days } });
   return r.data;
 }

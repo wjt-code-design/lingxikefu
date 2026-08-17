@@ -1102,3 +1102,31 @@ body {
   display: block;
   margin: 80px auto;
 }
+
+/* P1：运营趋势折线图（自绘 SVG，零依赖） */
+.trend-chart {
+  width: 100%;
+}
+.trend-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.trend-chart__legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+.trend-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.trend-chart__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}

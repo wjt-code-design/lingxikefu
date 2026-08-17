@@ -6,6 +6,7 @@ from uuid import UUID
 import re
 import unicodedata
 
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -18,8 +19,17 @@ from app.models.feedback import Feedback, FeedbackRating
 from app.models.knowledge import Document
 from app.models.message import Message, MessageRole
 from app.models.session import Session
+from app.models.ticket import Ticket
 from app.models.user import User, UserRole
-from app.schemas.admin import AdminStats, HotGap, RoleUpdateReq, UserItem, UserListResp
+from app.schemas.admin import (
+    AdminStats,
+    HotGap,
+    RoleUpdateReq,
+    StatsTrendResp,
+    TrendPoint,
+    UserItem,
+    UserListResp,
+)
 from app.schemas.knowledge import OkResp
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -190,3 +200,55 @@ def list_feedback(
         for r in rows
     ]
     return FeedbackListResp(items=items, total=total)
+
+def _day_key(dt) -> str:
+    """统一日期键（兼容 sqlite naive / pg tz-aware）。"""
+    if getattr(dt, "tzinfo", None) is not None:
+        dt = dt.astimezone()
+    return dt.date().isoformat()
+
+
+@router.get("/stats/trend", response_model=StatsTrendResp)
+def get_stats_trend(
+    days: int = Query(14, ge=7, le=90),
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> StatsTrendResp:
+    """运营趋势（P1）：近 N 天会话/消息/工单按日计数。
+
+    - Python 侧聚合（数据量小，与 stats 的 latency 聚合同风格，兼容 sqlite/pg）；
+    - 无数据日期补 0，保证折线图连续。
+    """
+    tenant = settings.TENANT_DEFAULT
+    since = datetime.now(timezone.utc) - timedelta(days=days - 1)
+    axis = [(since + timedelta(days=i)).date().isoformat() for i in range(days)]
+
+    s_dates = db.scalars(
+        select(Session.created_at).where(Session.tenant_id == tenant, Session.created_at >= since)
+    ).all()
+    m_dates = db.scalars(
+        select(Message.created_at).where(Message.tenant_id == tenant, Message.created_at >= since)
+    ).all()
+    t_dates = db.scalars(
+        select(Ticket.created_at).where(Ticket.tenant_id == tenant, Ticket.created_at >= since)
+    ).all()
+
+    def bucket(rows) -> dict[str, int]:
+        c: dict[str, int] = {}
+        for r in rows:
+            k = _day_key(r)
+            c[k] = c.get(k, 0) + 1
+        return c
+
+    sb, mb, tb = bucket(s_dates), bucket(m_dates), bucket(t_dates)
+    return StatsTrendResp(
+        days=[
+            TrendPoint(
+                date=d,
+                sessions=sb.get(d, 0),
+                messages=mb.get(d, 0),
+                tickets=tb.get(d, 0),
+            )
+            for d in axis
+        ]
+    )
