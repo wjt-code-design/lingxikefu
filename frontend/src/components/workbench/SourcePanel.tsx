@@ -1,4 +1,5 @@
-import { Empty, Typography } from 'antd';
+import { Typography } from 'antd';
+import { BrandEmpty } from '@/components/common/BrandEmpty';
 import type { MessageSource } from '@/contracts/api';
 
 /** 快捷话术：点击填入输入框（onUse），供用户在 Composer 修改后发送。 */
@@ -28,11 +29,7 @@ export function SourcePanel({
         <Typography.Text className="wb-section__title">RAG 溯源</Typography.Text>
         <div className="wb-sources">
           {!sources.length ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无引用来源"
-              className="wb-empty"
-            />
+            <BrandEmpty title="暂无引用来源" hint="开始对话后，这里会显示引用的知识来源" />
           ) : (
             sources.map((s, i) => (
               <div key={`${s.chunk_id}-${i}`} className="wb-source">

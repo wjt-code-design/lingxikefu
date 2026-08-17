@@ -5,13 +5,14 @@ import {
   Input,
   Modal,
   Popconfirm,
-  Select,
-  Space,
+  Spin,
   Tag,
+  Tree,
   Typography,
   Upload,
   message,
 } from 'antd';
+import type { DataNode, TreeProps } from 'antd/es/tree';
 import type { ColumnsType } from 'antd/es/table';
 import type { UploadProps } from 'antd/es/upload';
 import { AppTable } from '@/components/common/AppTable';
@@ -23,6 +24,7 @@ import {
   uploadDocument,
 } from '@/api/knowledge';
 import type { ApiError, DocItem, DocStatus, KBItem } from '@/contracts/api';
+import './KnowledgePage.css';
 
 const STATUS_META: Record<DocStatus, { color: string; text: string }> = {
   parsing: { color: 'processing', text: '解析中' },
@@ -34,9 +36,10 @@ const STATUS_META: Record<DocStatus, { color: string; text: string }> = {
 const POLLING_STATUSES: DocStatus[] = ['parsing', 'embedding'];
 
 /**
- * 知识库管理页（FE-04 + T8 落地）：React Query 统一服务端状态。
+ * 知识库管理页（FE-04 + T8 + T14 落地）：React Query 统一服务端状态。
  * - kbs 列表 / docs 列表（依赖 kbId）均走 useQuery，缓存 + invalidate 一致
  * - 异步导入轮询：refetchInterval 仅在存在 parsing/embedding 时启用
+ * - T14：左侧知识库树形导航（替代顶部 Select），右侧文档列表 / 上传。
  */
 export function KnowledgePage() {
   const [kbId, setKbId] = useState<string | undefined>();
@@ -78,6 +81,54 @@ export function KnowledgePage() {
     }
     prevStatusRef.current = Object.fromEntries(docs.map((d) => [d.doc_id, d.status]));
   }, [docs]);
+
+  /* ---- T14：左侧知识库树形导航 ---- */
+  // 展开态：数据就绪后默认全部展开（每个知识库节点下带「全部文档」分组）
+  const [expandedKeys, setExpandedKeys] = useState<string[]>([]);
+  useEffect(() => {
+    setExpandedKeys(kbs.map((k) => k.kb_id));
+  }, [kbs]);
+
+  // key → kb_id 解析映射（父节点=知识库，子节点=库内文档分组）
+  const keyToKb = useMemo(() => {
+    const map = new Map<string, string>();
+    kbs.forEach((k) => {
+      map.set(k.kb_id, k.kb_id);
+      map.set(`${k.kb_id}:all`, k.kb_id);
+    });
+    return map;
+  }, [kbs]);
+
+  const treeData: DataNode[] = useMemo(
+    () =>
+      kbs.map((k) => ({
+        key: k.kb_id,
+        title: (
+          <span className="kb-tree-node">
+            <span className="kb-tree-node__name">{k.name}</span>
+            <span className="kb-tree-node__meta">{k.doc_count} 篇</span>
+          </span>
+        ),
+        children: [
+          {
+            key: `${k.kb_id}:all`,
+            title: <span className="kb-tree-node kb-tree-node--group">全部文档</span>,
+            selectable: false,
+            isLeaf: true,
+          },
+        ],
+      })),
+    [kbs],
+  );
+
+  const handleTreeSelect: TreeProps['onSelect'] = (keys) => {
+    const key = typeof keys[0] === 'string' ? keys[0] : undefined;
+    if (!key) return;
+    const target = keyToKb.get(key);
+    if (target) setKbId(target);
+  };
+
+  const currentKb = useMemo(() => kbs.find((k) => k.kb_id === kbId), [kbs, kbId]);
 
   const handleCreate = () => {
     if (!newName.trim()) {
@@ -155,36 +206,76 @@ export function KnowledgePage() {
   return (
     <div className="page">
       <Typography.Title level={3}>知识库管理</Typography.Title>
-      <Space style={{ marginBottom: 16 }} wrap>
-        <Select
-          style={{ minWidth: 240 }}
-          placeholder="选择知识库"
-          loading={kbsLoading}
-          value={kbId}
-          onChange={setKbId}
-          options={kbs.map((k) => ({ label: `${k.name}（${k.doc_count} 篇）`, value: k.kb_id }))}
-        />
-        <Button type="primary" onClick={() => setCreateOpen(true)}>
-          新建知识库
-        </Button>
-        <Upload
-          accept=".pdf,.docx,.txt,.md"
-          showUploadList={false}
-          beforeUpload={handleUpload}
-          disabled={!kbId || uploading}
-        >
-          <Button loading={uploading}>上传文档</Button>
-        </Upload>
-      </Space>
 
-      <AppTable<DocItem>
-        rowKey="doc_id"
-        loading={docsFetching}
-        columns={columns}
-        dataSource={docs}
-        pagination={{ pageSize: 10, showSizeChanger: false }}
-        locale={{ emptyText: kbId ? '该知识库暂无文档' : '请先选择知识库' }}
-      />
+      <div className="kb-layout">
+        {/* 左侧：知识库树形导航 */}
+        <aside className="kb-sidebar">
+          <div className="kb-sidebar__header">
+            <span className="kb-sidebar__title">知识库</span>
+            <Button
+              type="link"
+              size="small"
+              className="kb-sidebar__new"
+              onClick={() => setCreateOpen(true)}
+            >
+              + 新建
+            </Button>
+          </div>
+          <div className="kb-sidebar__body">
+            {kbsLoading ? (
+              <div className="kb-sidebar__loading">
+                <Spin size="small" />
+              </div>
+            ) : kbs.length === 0 ? (
+              <div className="kb-sidebar__empty">暂无知识库</div>
+            ) : (
+              <Tree
+                className="kb-tree"
+                treeData={treeData}
+                selectedKeys={kbId ? [kbId] : []}
+                expandedKeys={expandedKeys}
+                onExpand={(keys) => setExpandedKeys(keys.map(String))}
+                onSelect={handleTreeSelect}
+                blockNode
+              />
+            )}
+          </div>
+        </aside>
+
+        {/* 右侧：文档列表 + 上传 */}
+        <section className="kb-main">
+          <div className="kb-main__toolbar">
+            <span className="kb-main__current">
+              {currentKb ? (
+                <>
+                  当前知识库：<b>{currentKb.name}</b>（{currentKb.doc_count} 篇）
+                </>
+              ) : (
+                '请先在左侧选择知识库'
+              )}
+            </span>
+            <Upload
+              accept=".pdf,.docx,.txt,.md"
+              showUploadList={false}
+              beforeUpload={handleUpload}
+              disabled={!kbId || uploading}
+            >
+              <Button type="primary" loading={uploading} disabled={!kbId || uploading}>
+                上传文档
+              </Button>
+            </Upload>
+          </div>
+
+          <AppTable<DocItem>
+            rowKey="doc_id"
+            loading={docsFetching}
+            columns={columns}
+            dataSource={docs}
+            pagination={{ pageSize: 10, showSizeChanger: false }}
+            locale={{ emptyText: kbId ? '该知识库暂无文档' : '请先选择知识库' }}
+          />
+        </section>
+      </div>
 
       <Modal
         title="新建知识库"

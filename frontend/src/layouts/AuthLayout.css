@@ -1,0 +1,201 @@
+/* ============================================================
+   认证外壳：登录/注册页品牌化（Phase 2 task 12 · 海盐蓝治愈系）
+   左右分屏：左品牌区(50%) + 右表单区(50%)；窄屏(<768px)折叠为顶部品牌条。
+   仅消费 tokens.css 变量，禁止散落硬编码 hex（SVG 插画内部除外）。
+   ============================================================ */
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+}
+
+/* ---------- 左：品牌区（约 50%） ---------- */
+.auth-brand {
+  width: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+  position: relative;
+  overflow: hidden;
+  /* 海盐蓝渐变（token 驱动，不落硬编码色值） */
+  background:
+    radial-gradient(
+      120% 90% at 15% 8%,
+      color-mix(in srgb, var(--color-surface) 32%, transparent) 0%,
+      transparent 52%
+    ),
+    linear-gradient(
+      155deg,
+      color-mix(in srgb, var(--color-brand) 72%, var(--color-surface)) 0%,
+      var(--color-brand) 48%,
+      var(--color-brand-dark) 100%
+    );
+}
+
+/* 装饰光斑（右上 + 左下，通透治愈感） */
+.auth-brand::before,
+.auth-brand::after {
+  content: '';
+  position: absolute;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-surface) 16%, transparent);
+  pointer-events: none;
+}
+.auth-brand::before {
+  width: 340px;
+  height: 340px;
+  top: -120px;
+  right: -110px;
+}
+.auth-brand::after {
+  width: 260px;
+  height: 260px;
+  bottom: -110px;
+  left: -80px;
+}
+
+.auth-brand__inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 26px;
+  text-align: center;
+  max-width: 440px;
+}
+
+.auth-brand__logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--color-surface);
+}
+.auth-brand__logo-mark {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--color-surface);
+  box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-surface) 28%, transparent);
+}
+
+.auth-brand__art {
+  width: min(320px, 78%);
+  height: auto;
+  display: block;
+}
+
+.auth-brand__slogan {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--color-surface);
+}
+
+.auth-brand__features {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: color-mix(in srgb, var(--color-surface) 88%, transparent);
+}
+
+/* ---------- 右：表单区（约 50%） ---------- */
+.auth-form {
+  width: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 32px;
+  background: var(--color-surface);
+}
+.auth-form__inner {
+  width: 100%;
+  max-width: 400px;
+}
+
+/* 页面表单容器（Login/Register 共用 .auth-card） */
+.auth-card {
+  width: 100%;
+}
+.auth-card__title {
+  text-align: center;
+  color: var(--text-1) !important;
+}
+.auth-card__sub {
+  text-align: center;
+  color: var(--text-3);
+  margin-bottom: 28px;
+}
+.auth-card__extra {
+  text-align: right;
+  margin: -8px 0 4px;
+}
+.auth-card__extra a,
+.auth-card__terms a {
+  color: var(--color-brand-dark);
+}
+.auth-card__extra a:hover,
+.auth-card__terms a:hover {
+  color: var(--color-brand-dark);
+  text-decoration: underline;
+}
+.auth-card__terms {
+  color: var(--text-3);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.auth-card__switch {
+  text-align: center;
+  color: var(--text-3);
+  margin-top: 16px;
+}
+.auth-card__switch a {
+  color: var(--color-brand-dark);
+}
+
+/* ---------- 响应式：窄屏（<768px）压缩为顶部品牌条 ---------- */
+@media (max-width: 767px) {
+  .auth-shell {
+    flex-direction: column;
+  }
+  .auth-brand {
+    width: 100%;
+    min-height: 132px;
+    padding: 22px 20px;
+    border-radius: 0 0 24px 24px;
+    box-shadow: var(--shadow-card);
+  }
+  /* 窄屏隐藏插画，品牌区压缩为顶部品牌条 */
+  .auth-brand__art {
+    display: none;
+  }
+  .auth-brand__inner {
+    gap: 10px;
+  }
+  .auth-brand__logo {
+    font-size: 17px;
+  }
+  .auth-brand__slogan {
+    font-size: 16px;
+  }
+  .auth-brand__features {
+    font-size: 13px;
+  }
+  .auth-form {
+    width: 100%;
+    flex: 1;
+    align-items: flex-start;
+    padding: 32px 20px;
+  }
+}

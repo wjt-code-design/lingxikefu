@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuthStore } from '@/store/authStore';
 import { Button, Typography, message } from 'antd';
 import { CopyOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
@@ -19,6 +20,8 @@ export function MessageBubble({
   onRate: (rating: 'up' | 'down') => void;
 }) {
   const isUser = msg.role === 'user';
+  const authUser = useAuthStore((s) => s.user);
+  const userInitial = (authUser?.email?.charAt(0) ?? '我').toUpperCase();
   const [copied, setCopied] = useState(false);
   // P0-1：sending 态半透明 + failed 态红色提示（可重试）
   const statusCls = msg.status === 'sending' ? ' chat-msg__bubble--sending' : msg.status === 'failed' ? ' chat-msg__bubble--failed' : '';
@@ -37,7 +40,12 @@ export function MessageBubble({
 
   return (
     <div className={`chat-msg chat-msg--${isUser ? 'user' : 'ai'}`}>
-      {!isUser && (
+      {isUser && (
+      <div className="chat-msg__avatar chat-msg__avatar--user" aria-hidden="true">
+        {userInitial}
+      </div>
+    )}
+    {!isUser && (
         <div className="chat-msg__avatar" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
             <path

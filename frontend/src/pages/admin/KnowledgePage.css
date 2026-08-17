@@ -1,0 +1,136 @@
+/* ============================================================
+   KnowledgePage · 知识库树形导航（Phase2 / T14）
+   全浅色、精密克制：浅冷灰底 + 白色卡片 + 发丝线 + 小圆角。
+   全部消费 tokens.css 语义变量（--color-* / --text-* / --border），
+   禁止散落硬编码 hex；本文件仅 KnowledgePage 引用。
+   ============================================================ */
+
+/* ---- 左右布局 ---- */
+.kb-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+/* ---- 左侧知识库树 ---- */
+.kb-sidebar {
+  flex: 0 0 264px;
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 12px;
+}
+
+.kb-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 10px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.kb-sidebar__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+  letter-spacing: 0.5px;
+}
+
+.kb-sidebar__new {
+  color: var(--color-brand-dark) !important;
+  font-size: 12px;
+}
+
+.kb-sidebar__body {
+  min-height: 320px;
+}
+
+.kb-sidebar__loading,
+.kb-sidebar__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 0;
+  color: var(--text-4);
+  font-size: 13px;
+}
+
+/* ---- 树节点：hover / 选中 = 品牌浅底 + 深一档文字 ---- */
+.kb-tree {
+  background: transparent;
+}
+.kb-tree .ant-tree-treenode {
+  padding: 2px 0;
+}
+.kb-tree .ant-tree-node-content-wrapper {
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+.kb-tree .ant-tree-node-content-wrapper:hover {
+  background: var(--color-brand-soft);
+}
+.kb-tree .ant-tree-node-selected {
+  background: var(--color-brand-soft) !important;
+}
+.kb-tree .ant-tree-node-selected .kb-tree-node__name {
+  color: var(--color-brand-dark);
+  font-weight: 600;
+}
+.kb-tree .ant-tree-switcher {
+  color: var(--text-4);
+}
+
+/* 节点内容：名称 + 元信息 */
+.kb-tree-node {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.kb-tree-node__name {
+  color: var(--text-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-tree-node__meta {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-4);
+}
+.kb-tree-node--group {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+/* ---- 右侧主区：文档列表 + 上传 ---- */
+.kb-main {
+  flex: 1;
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 16px;
+}
+
+.kb-main__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.kb-main__current {
+  font-size: 13px;
+  color: var(--text-3);
+}
+.kb-main__current b {
+  color: var(--color-brand-dark);
+  font-weight: 600;
+}

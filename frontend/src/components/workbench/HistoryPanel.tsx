@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { Empty, Spin, Typography } from 'antd';
+import { Spin, Typography } from 'antd';
+import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { useNavigate } from 'react-router-dom';
 import { listKnowledgeBases } from '@/api/knowledge';
 import { listSessions } from '@/api/sessions';
@@ -69,11 +70,7 @@ export function HistoryPanel() {
           {sessionsLoading ? (
             <Spin size="small" className="wb-spin" />
           ) : !sessions?.items.length ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无历史对话"
-              className="wb-empty"
-            />
+            <BrandEmpty title="暂无历史对话" hint="开始对话后，这里会显示历史记录" />
           ) : (
             sessions.items.map((s) => (
               <button
@@ -101,11 +98,7 @@ export function HistoryPanel() {
           {kbsLoading ? (
             <Spin size="small" className="wb-spin" />
           ) : !kbs?.items.length ? (
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description="暂无知识库"
-              className="wb-empty"
-            />
+            <BrandEmpty title="暂无知识库" hint="创建知识库后，这里会显示分类" />
           ) : (
             kbs.items.map((kb) => (
               <div key={kb.kb_id} className="wb-kb">

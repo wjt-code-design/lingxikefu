@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { MouseEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
@@ -8,6 +9,9 @@ import { useAuthStore } from '@/store/authStore';
 /**
  * 登录页（FE-02）：表单 → login() → 写入 token → me() 取档案 → 跳回来源页或 /chat。
  * 路由守卫 RequireAuth 将受保护路径存入 location.state.from（L6：登录后回到来源页）。
+ * Phase 2 task 12：品牌化布局改造（左品牌区/右表单区，样式在 AuthLayout.css）；
+ * 新增「忘记密码」占位链接（后端暂无密码重置流程，仅提示，不实现跳转）。
+ * 表单提交/校验/路由跳转逻辑保持完全不变。
  */
 export function LoginPage() {
   const navigate = useNavigate();
@@ -36,11 +40,20 @@ export function LoginPage() {
     }
   };
 
+  // 占位提示：后端暂无密码重置流程，不实现实际跳转
+  const onForgotPassword = (e: MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    message.info('密码重置功能开发中，敬请期待');
+  };
+
   return (
     <div className="auth-card">
-      <Typography.Title level={3} style={{ textAlign: 'center', marginBottom: 24 }}>
+      <Typography.Title level={3} className="auth-card__title" style={{ marginBottom: 8 }}>
         登录灵犀客服
       </Typography.Title>
+      <Typography.Paragraph className="auth-card__sub">
+        欢迎回来，7×24 随时为你解答
+      </Typography.Paragraph>
       <Form form={form} layout="vertical" onFinish={onFinish} requiredMark={false}>
         <Form.Item
           name="account"
@@ -56,13 +69,18 @@ export function LoginPage() {
         >
           <Input.Password size="large" placeholder="密码" autoComplete="current-password" />
         </Form.Item>
+        <div className="auth-card__extra">
+          <a href="#" onClick={onForgotPassword}>
+            忘记密码？
+          </a>
+        </div>
         <Form.Item style={{ marginBottom: 8 }}>
           <Button type="primary" htmlType="submit" size="large" block loading={loading}>
             登录
           </Button>
         </Form.Item>
       </Form>
-      <Typography.Paragraph type="secondary" style={{ textAlign: 'center', margin: 0 }}>
+      <Typography.Paragraph type="secondary" className="auth-card__switch" style={{ margin: 0 }}>
         还没有账号？<Link to="/register">立即注册</Link>
       </Typography.Paragraph>
     </div>

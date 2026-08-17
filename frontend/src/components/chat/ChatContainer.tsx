@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Button } from 'antd';
 import { useSearchParams, Link } from 'react-router-dom';
+import { SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
 import { createSession, getSessionDetail, rateSatisfaction } from '@/api/sessions';
 import { escalateSession } from '@/api/tickets';
@@ -11,8 +11,39 @@ import { MessageList } from './MessageList';
 import { SatisfactionBar } from './SatisfactionBar';
 import type { ChatMessage } from './types';
 
-/** F3：widget 首屏热门问题快捷入口（点击直接发送，移动端零门槛） */
-const HOT_QUESTIONS = ['七天无理由退货怎么申请？', '保修多久？', '退款一般多久到账？', '支持哪些支付方式？'];
+/** F3：首屏快捷问题场景化卡片（图标 + 标题 + 描述，点击直接发送，移动端零门槛） */
+const HOT_SCENARIOS = [
+  {
+    key: 'return',
+    icon: <SwapOutlined />,
+    title: '售后退换',
+    questions: [
+      { q: '七天无理由退货怎么申请？', d: '在线申请 · 快速退款' },
+      { q: '退款一般多久到账？', d: '原路退回 · 1-3 个工作日' },
+    ],
+  },
+  {
+    key: 'logistics',
+    icon: <TruckOutlined />,
+    title: '配送物流',
+    questions: [
+      { q: '支持哪些支付方式？', d: '微信 / 支付宝 / 银联' },
+      { q: '可以开发票吗？', d: '电子发票 · 随时申请' },
+    ],
+  },
+  {
+    key: 'warranty',
+    icon: <ToolOutlined />,
+    title: '保修维修',
+    questions: [{ q: '保修多久？', d: '整机保修 · 全国联保' }],
+  },
+  {
+    key: 'account',
+    icon: <SafetyCertificateOutlined />,
+    title: '账户支付',
+    questions: [{ q: '如何修改收货地址？', d: '个人中心 · 随时修改' }],
+  },
+];
 
 /**
  * 对话挂件容器（FE-03 核心）：
@@ -235,16 +266,27 @@ export function ChatContainer({
               <div className="chat-welcome__sub">可点击下方问题快速开始，或直接输入您的问题</div>
             </div>
             <div className="chat-container__hot">
-              {HOT_QUESTIONS.map((q) => (
-                <Button
-                  key={q}
-                  size="small"
-                  onClick={() => onSend(q)}
-                  disabled={creating}
-                  className="chat-container__hot-btn"
-                >
-                  {q}
-                </Button>
+              {HOT_SCENARIOS.map((g) => (
+                <div key={g.key} className="hot-card">
+                  <div className="hot-card__head">
+                    <span className="hot-card__icon">{g.icon}</span>
+                    <span className="hot-card__title">{g.title}</span>
+                  </div>
+                  <div className="hot-card__list">
+                    {g.questions.map((it) => (
+                      <button
+                        key={it.q}
+                        type="button"
+                        className="hot-card__item"
+                        onClick={() => onSend(it.q)}
+                        disabled={creating}
+                      >
+                        <span className="hot-card__q">{it.q}</span>
+                        <span className="hot-card__d">{it.d}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </div>

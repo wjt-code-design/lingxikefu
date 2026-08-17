@@ -268,7 +268,7 @@ body {
   justify-content: flex-start;
 }
 .chat-msg__bubble {
-  max-width: 82%;
+  max-width: 680px;
   padding: 10px 14px;
   border-radius: var(--radius-md);
   background: var(--color-surface);
@@ -530,7 +530,7 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 236px minmax(0, 1fr) 276px;
+  grid-template-columns: 260px minmax(0, 1fr) 300px;
   gap: 12px;
   padding: 12px;
 }
@@ -1142,4 +1142,168 @@ body {
   height: 10px;
   border-radius: 50%;
   display: inline-block;
+}
+
+/* ================= Phase 2 UX 优化（task 9/10/11/15） ================= */
+
+/* task 11：AI 头像加大 36px + 用户首字母头像（海盐蓝渐变圆形） */
+.chat-msg--user {
+  align-items: flex-start;
+  gap: 8px;
+}
+.chat-msg__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+}
+.chat-msg__avatar--user {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #539fd8, #3e7cb1);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  box-shadow: var(--shadow-card);
+}
+
+/* task 11：来源折叠区左侧品牌色竖线 + 浅底色视觉边界 */
+.chat-source__panel {
+  border-left: 2px solid var(--color-brand);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: rgba(150, 200, 232, 0.08);
+  padding-left: 12px;
+}
+
+/* task 9：首屏快捷问题场景化卡片（图标 + 标题 + 描述） */
+.chat-container__hot {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
+  gap: 12px;
+  width: 100%;
+  max-width: 780px;
+  padding: 0 24px;
+  margin-top: 16px;
+}
+.hot-card {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  padding: 12px 14px;
+  text-align: left;
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.hot-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(148, 198, 232, 0.22);
+}
+.hot-card__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.hot-card__icon {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: var(--color-brand-soft);
+  color: var(--color-brand-dark);
+  font-size: 15px;
+}
+.hot-card__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+.hot-card__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hot-card__item {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.hot-card__item:hover {
+  border-color: var(--color-brand);
+  background: rgba(150, 200, 232, 0.08);
+}
+.hot-card__item:active {
+  background: rgba(150, 200, 232, 0.16);
+}
+.hot-card__item:focus-visible {
+  outline: 2px solid var(--color-brand-dark);
+  outline-offset: 2px;
+}
+.hot-card__q {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-2);
+}
+.hot-card__d {
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+/* task 15：移动端热区 ≥44px + 100dvh 键盘适配 */
+@media (max-width: 767px) {
+  .page--chat {
+    height: 100dvh;
+  }
+  .hot-card__item {
+    min-height: 44px;
+  }
+  .chat-composer textarea {
+    min-height: 44px;
+  }
+  .chat-composer .ant-btn {
+    min-height: 44px;
+  }
+  .chat-welcome {
+    padding: 16px;
+    margin-top: 24px;
+  }
+}
+
+/* Phase 2 task 9：品牌化空态（替代 antd Empty，左右栏） */
+.brand-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  text-align: center;
+}
+.brand-empty__icon {
+  width: 56px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: var(--color-brand-soft);
+}
+.brand-empty__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-2);
+}
+.brand-empty__hint {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-3);
 }
