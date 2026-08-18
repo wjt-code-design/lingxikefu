@@ -13,7 +13,7 @@ interface RequireAuthProps {
 /**
  * 路由守卫：
  * - 未登录访问受保护路由 → 重定向 /login（记录来源 from）
- * - 已登录但角色不在 roles 内（如普通用户访问 /admin/*）→ 重定向 /login
+ * - 已登录但角色不在 roles 内（如普通用户访问 /admin/*）→ 渲染 403 无权限页（不踢回登录）
  */
 export function RequireAuth({ roles, children }: RequireAuthProps) {
   const token = useAuthStore((s) => s.token);

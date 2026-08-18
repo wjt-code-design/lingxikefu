@@ -1,5 +1,6 @@
 import { Avatar, Dropdown, Tag, Typography } from 'antd';
 import {
+  DashboardOutlined,
   FileTextOutlined,
   LogoutOutlined,
   ProfileOutlined,
@@ -17,7 +18,10 @@ const ROLE_TAG: Record<Role, { label: string; color: string }> = {
 };
 
 /**
- * 用户菜单（三端复用）：头像（账号首字符）+ 角色徽标 + 下拉（个人中心/我的工单/退出）。
+ * 用户菜单（三端复用，角色化收敛 2026-08-18）：
+ * - 通用项：个人中心 / 退出登录；
+ * - user：我的工单（/tickets，只读追踪自己的工单进度）；
+ * - agent/admin：客服工作台 / 后台管理（/agent 或 /admin，回到工作台）+ 工单管理（/agent/tickets 处理页）。
  * 由 AppHeader 与 WidgetShell 接入；无登录态时渲染 null。
  */
 export function UserMenu() {
@@ -28,6 +32,8 @@ export function UserMenu() {
 
   const initial = (user.email || user.phone || '客').slice(0, 1).toUpperCase();
   const tag = ROLE_TAG[role];
+  const isStaff = role === 'agent' || role === 'admin';
+  const workbenchPath = role === 'admin' ? '/admin/dashboard' : '/agent/dashboard';
 
   const handleLogout = async () => {
     try {
@@ -45,14 +51,24 @@ export function UserMenu() {
       menu={{
         items: [
           { key: 'profile', icon: <ProfileOutlined />, label: '个人中心' },
-          { key: 'tickets', icon: <FileTextOutlined />, label: '我的工单' },
+          ...(isStaff
+            ? [
+                {
+                  key: 'workbench',
+                  icon: <DashboardOutlined />,
+                  label: role === 'admin' ? '后台管理' : '客服工作台',
+                },
+                { key: 'tickets', icon: <FileTextOutlined />, label: '工单管理' },
+              ]
+            : [{ key: 'tickets', icon: <FileTextOutlined />, label: '我的工单' }]),
           { type: 'divider' },
           { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
         ],
         onClick: ({ key }) => {
           if (key === 'logout') void handleLogout();
           else if (key === 'profile') navigate('/profile');
-          else if (key === 'tickets') navigate('/tickets');
+          else if (key === 'workbench') navigate(workbenchPath);
+          else if (key === 'tickets') navigate(isStaff ? '/agent/tickets' : '/tickets');
         },
       }}
     >

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Card, Empty, Select, Spin, Typography } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { Button, Card, Empty, Select, Spin, Typography } from 'antd';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
 import { listMyTickets } from '@/api/tickets';
@@ -49,6 +50,14 @@ export function MyTicketsPage() {
 
   return (
     <div className="page">
+      <Button
+        type="text"
+        icon={<ArrowLeftOutlined />}
+        onClick={() => navigate('/chat')}
+        className="my-tickets__back"
+      >
+        返回对话
+      </Button>
       <Card title="我的工单" style={{ borderRadius: 16 }}>
         <div style={{ marginBottom: 12 }}>
           <Select
@@ -68,7 +77,9 @@ export function MyTicketsPage() {
           </div>
         ) : !data?.items.length ? (
           <Empty description="暂无工单" style={{ padding: '32px 0' }}>
-            <Typography.Text type="secondary">需要人工服务时点击对话中的「转人工」即可创建工单</Typography.Text>
+            <Typography.Link onClick={() => navigate('/chat')}>
+              需要人工服务时点击对话中的「转人工」即可创建工单
+            </Typography.Link>
           </Empty>
         ) : (
           <AppTable

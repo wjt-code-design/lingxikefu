@@ -1,12 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card, Col, Row, Spin, Tag, Typography } from 'antd';
+import { Button, Card, Col, Row, Spin, Tag, Typography } from 'antd';
+import { ArrowLeftOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { me as fetchMe } from '@/api/auth';
 import { listSessions } from '@/api/sessions';
+import { useAuthStore } from '@/store/authStore';
 
 const ROLE_LABEL: Record<string, string> = { user: '普通用户', agent: '客服', admin: '管理员' };
 
 /** 个人中心（T4'）：账号信息 + 额度 + 最近会话（GET /auth/me 已有）。 */
 export function ProfilePage() {
+  const navigate = useNavigate();
+  const role = useAuthStore((s) => s.role);
+  // 返回目标：user→对话，agent/admin→工作台（与 WidgetShell 品牌跳转一致）
+  const backPath = role === 'admin' ? '/admin/dashboard' : role === 'agent' ? '/agent/dashboard' : '/chat';
   const { data: me, isLoading } = useQuery({ queryKey: ['profile-me'], queryFn: fetchMe });
   const { data: sessions } = useQuery({
     queryKey: ['profile-sessions'],
@@ -18,6 +25,9 @@ export function ProfilePage() {
 
   return (
     <div className="profile">
+      <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)} className="profile__back">
+        返回{role === 'admin' || role === 'agent' ? '工作台' : '对话'}
+      </Button>
       <Card className="profile__card">
         <Typography.Title level={4}>个人中心</Typography.Title>
         <Row gutter={[16, 12]}>

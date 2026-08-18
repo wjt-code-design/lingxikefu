@@ -179,6 +179,29 @@ body {
   overflow-y: auto;
 }
 
+/* 品牌按钮（导航闭环 2026-08-18）：可点击回角色首页，去掉按钮默认样式 */
+.widget-shell__brand {
+  border: none;
+  background: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+}
+.widget-shell__brand:hover {
+  color: var(--color-brand-dark);
+}
+
+/* 我的工单 / 个人中心 返回按钮（导航闭环 2026-08-18） */
+.my-tickets__back,
+.profile__back {
+  margin-bottom: 12px;
+  padding-left: 0 !important;
+}
+
 /* 顶栏 */
 .app-header {
   display: flex;
