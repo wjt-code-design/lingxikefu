@@ -40,7 +40,8 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill }
         maxLength={4000}
         showCount
         onPressEnter={(e) => {
-          if (!e.shiftKey) {
+          // C3：中文输入法组词中（isComposing）回车不发送，避免半句话误发
+          if (!e.shiftKey && !e.nativeEvent.isComposing) {
             e.preventDefault();
             submit();
           }

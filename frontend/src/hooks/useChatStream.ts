@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_PREFIX, type ChatStreamReq, type MessageSource, type SSEEvent } from '@/contracts/api';
 import { useAuthStore } from '@/store/authStore';
 
@@ -56,6 +56,9 @@ export function useChatStream() {
   const [state, setState] = useState<ChatStreamState>(INITIAL);
   const abortRef = useRef<AbortController | null>(null);
 
+  // C1：组件卸载时中止进行中的流（防连接泄漏 + 已卸载组件上的 setState）
+  useEffect(() => () => abortRef.current?.abort(), []);
+
   const reset = useCallback(() => {
     abortRef.current?.abort();
     setState(INITIAL);
@@ -98,6 +101,7 @@ export function useChatStream() {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let buf = '';
+
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;

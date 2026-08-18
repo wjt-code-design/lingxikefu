@@ -70,7 +70,8 @@ export function ChatContainer({
   const [searchParams] = useSearchParams();
   const sessionParam = searchParams.get('session');
   // 当前流式对应的用户消息（P0-1：done/error 时按 id 定位并更新；text 用于失败重试兜底）
-  const streamingUserRef = useRef<{ id: string; text: string } | null>(null);
+  // C1/C2：记录发起流时的 user 消息 + 会话；finalize 时比对 sessionId 防串台、防 ref 覆盖丢回答
+  const streamingUserRef = useRef<{ id: string; text: string; sessionId: string | null } | null>(null);
   // P0-4：手动转人工结果气泡（独立于 SSE 流，HTTP 响应驱动）
   const [manualTicket, setManualTicket] = useState<{ id: string; loading: boolean; error: string | null } | null>(null);
   // P2-2：会话满意度——对话轮次 ≥2 后内联出现，评分一次后隐藏
@@ -98,10 +99,12 @@ export function ChatContainer({
         streamingUserRef.current = null;
         setTurnCount(0); // P2-2：新会话重置满意度轮次
         setSatisfactionRated(false);
+        reset(); // C1：切到新会话 → abort 旧流
       }
       return;
     }
     if (sessionParam === sessionId) return;
+    reset(); // C1：切换到另一会话 → abort 旧流
     getSessionDetail(sessionParam)
       .then((d) => {
         setSessionId(d.id);
@@ -118,7 +121,7 @@ export function ChatContainer({
       .catch(() => {
         // 加载失败保留空态，不阻断页面
       });
-  }, [sessionParam, sessionId]);
+  }, [sessionParam, sessionId, reset]);
 
   // P0-1：流式结束（done/error）→ 按 user 消息 id 更新状态 + 追加 assistant（不重复追加 user）
   // 防重：streamingUserRef 在首次 finalize 时被置空；uid 为空 → 已 finalize，直接 return（防止
@@ -128,6 +131,8 @@ export function ChatContainer({
     const u = streamingUserRef.current;
     if (!u) return; // 已 finalize 过 → 不重复追加
     streamingUserRef.current = null;
+    // C1：流发起时的会话已切换 → 丢弃本流 finalize（旧回答不写入新会话）
+    if (u.sessionId !== sessionId) return;
     const uid = u.id;
     const assistant: ChatMessage = {
       id: `a-${Date.now()}`,
@@ -152,10 +157,12 @@ export function ChatContainer({
     if (stage === 'done') setTurnCount((n) => n + 1);
     reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 不参与依赖（防 done 后点赞等触发重复 finalize）
-  }, [stage, tokens, sources, messageId, ticketId, error, reset]);
+  }, [stage, tokens, sources, messageId, ticketId, error, reset, sessionId]);
 
   const onSend = useCallback(
     async (text: string): Promise<boolean> => {
+      // C2：流式中拒绝并发新发送（Composer/热门卡片已 disabled，此处兜底防 ref 覆盖丢回答）
+      if (streaming) return true;
       setCreateError(null); // 新发送清空创建错误
       setRetryText(null); // 新发送即清空重试标记
       let sid = sessionId;
@@ -182,7 +189,7 @@ export function ChatContainer({
       }
       // P0-1：发送后立即显示用户消息（sending 态），失败时标 failed 支持重试
       const uid = `u-${Date.now()}`;
-      streamingUserRef.current = { id: uid, text };
+      streamingUserRef.current = { id: uid, text, sessionId: sid };
       setMessages((prev) => [
         ...prev,
         { id: uid, role: 'user', content: text, status: 'sending' },
@@ -194,7 +201,7 @@ export function ChatContainer({
       }
       return true;
     },
-    [sessionId, stream]
+    [sessionId, stream, streaming]
   );
 
   // U1：一键重试——重发失败的那条用户消息
@@ -279,7 +286,7 @@ export function ChatContainer({
                         type="button"
                         className="hot-card__item"
                         onClick={() => onSend(it.q)}
-                        disabled={creating}
+                        disabled={creating || streaming}
                       >
                         <span className="hot-card__q">{it.q}</span>
                         <span className="hot-card__d">{it.d}</span>
