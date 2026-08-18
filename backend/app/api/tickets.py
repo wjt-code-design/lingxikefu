@@ -13,7 +13,7 @@ from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user, require_admin
@@ -52,6 +52,7 @@ class TicketItem(BaseModel):
     assignee_id: str | None
     created_at: str
     updated_at: str
+    version: int  # S2 乐观锁版本号：客户端流转时回传，服务端以原子条件比较防并发覆盖
 
 
 class TicketListResp(BaseModel):
@@ -62,6 +63,7 @@ class TicketListResp(BaseModel):
 class StatusUpdateReq(BaseModel):
     status: TicketStatus
     assignee_id: uuid.UUID | None = None
+    version: int  # S2 乐观锁：客户端回传当前版本，与服务端不匹配返回 409
 
 
 class OkResp(BaseModel):
@@ -78,6 +80,7 @@ def _item(t: Ticket) -> TicketItem:
         assignee_id=str(t.assignee_id) if t.assignee_id else None,
         created_at=t.created_at.isoformat(),
         updated_at=t.updated_at.isoformat(),
+        version=t.version,
     )
 
 
@@ -252,19 +255,43 @@ def update_ticket(
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ) -> TicketItem:
-    """状态流转 + 分配（agent/admin）；校验合法迁移，closed 为终态。"""
+    """状态流转 + 分配（agent/admin）；校验合法迁移 + S2 乐观锁（version 原子比较，冲突 409）。
+
+    并发双客服操作同一工单时，以 ``UPDATE ... WHERE version=req.version`` 原子比较：
+    后提交方 rowcount=0 → 409（已被人更新），杜绝「后者静默覆盖」的审计与实况不一致。
+    """
     if payload.get("role") not in ("admin", "agent"):
         raise HTTPException(status_code=403, detail="agent/admin role required")
     t = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.tenant_id == settings.TENANT_DEFAULT))
     if not t:
         raise HTTPException(status_code=404, detail="ticket not found")
+    # 迁移合法性校验（读当前状态，不提交）
     cur = t.status
+    if req.status != cur and req.status not in _ALLOWED_TRANSITIONS.get(cur, set()):
+        raise HTTPException(status_code=400, detail=f"非法状态迁移: {cur.value} -> {req.status.value}")
+    # S2 乐观锁：原子 UPDATE ... WHERE version = 客户端回传版本
+    values: dict = {}
     if req.status != cur:
-        if req.status not in _ALLOWED_TRANSITIONS.get(cur, set()):
-            raise HTTPException(status_code=400, detail=f"非法状态迁移: {cur.value} -> {req.status.value}")
-        t.status = req.status
+        values["status"] = req.status
     if req.assignee_id is not None:
-        t.assignee_id = req.assignee_id
+        values["assignee_id"] = req.assignee_id
+    if not values:
+        # 无实际变更（同状态且未传 assignee）：仅校验版本一致，直接返回当前
+        if t.version != req.version:
+            raise HTTPException(status_code=409, detail="工单已被其他客服更新，请刷新后重试")
+        return _item(t)
+    res = db.execute(
+        update(Ticket)
+        .where(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            Ticket.version == req.version,
+        )
+        .values(**values, version=Ticket.version + 1)
+    )
+    if res.rowcount == 0:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="工单已被其他客服更新，请刷新后重试")
     db.commit()
     db.refresh(t)
     # Phase4 审计埋点：工单状态变更（ticket.update，detail=新状态）

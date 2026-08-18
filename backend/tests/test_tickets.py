@@ -1,4 +1,4 @@
-"""Tickets API 测试（T1 工单闭环）：建单幂等 / 列表过滤 / 状态流转 / 权限。"""
+"""Tickets API 测试（T1 工单闭环）：建单幂等 / 列表过滤 / 状态流转 / 权限 / S2 乐观锁。"""
 from __future__ import annotations
 
 import uuid
@@ -79,17 +79,44 @@ def test_list_tickets_status_filter(client):
 
 def test_status_transition_valid_and_invalid(client):
     """合法迁移 open→processing→resolved→closed；非法迁移（open→resolved 直接跳）拒绝。"""
-    tid = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h()).json()["ticket_id"]
-    # open → processing
-    r = client.patch(f"{API}/tickets/{tid}", json={"status": "processing", "assignee_id": str(AGENT_ID)}, headers=_agent_h())
+    t0 = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h()).json()
+    tid = t0["ticket_id"]
+    assert t0["version"] == 0  # S2：新建工单版本从 0 起
+    # open → processing（version 0 → 1）
+    r = client.patch(
+        f"{API}/tickets/{tid}",
+        json={"status": "processing", "assignee_id": str(AGENT_ID), "version": 0},
+        headers=_agent_h(),
+    )
     assert r.status_code == 200 and r.json()["status"] == "processing"
-    assert r.json()["assignee_id"] == str(AGENT_ID)
-    # processing → resolved → closed
-    assert client.patch(f"{API}/tickets/{tid}", json={"status": "resolved"}, headers=_agent_h()).json()["status"] == "resolved"
-    assert client.patch(f"{API}/tickets/{tid}", json={"status": "closed"}, headers=_agent_h()).json()["status"] == "closed"
+    assert r.json()["assignee_id"] == str(AGENT_ID) and r.json()["version"] == 1
+    # processing → resolved → closed（version 1 → 2 → 3）
+    assert (
+        client.patch(f"{API}/tickets/{tid}", json={"status": "resolved", "version": 1}, headers=_agent_h()).json()["version"]
+        == 2
+    )
+    assert (
+        client.patch(f"{API}/tickets/{tid}", json={"status": "closed", "version": 2}, headers=_agent_h()).json()["version"]
+        == 3
+    )
     # closed 终态：不可再流转
-    r = client.patch(f"{API}/tickets/{tid}", json={"status": "open"}, headers=_agent_h())
+    r = client.patch(f"{API}/tickets/{tid}", json={"status": "open", "version": 3}, headers=_agent_h())
     assert r.status_code == 400
+
+
+def test_update_ticket_optimistic_lock_conflict(client):
+    """S2：并发更新 version 不匹配 → 409（防后者静默覆盖，审计与实况一致）。"""
+    t0 = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h()).json()
+    tid = t0["ticket_id"]
+    # 客服 A 用 version 0 更新成功 → version 变 1
+    r1 = client.patch(f"{API}/tickets/{tid}", json={"status": "processing", "version": 0}, headers=_agent_h())
+    assert r1.status_code == 200 and r1.json()["version"] == 1
+    # 客服 B 仍持旧 version 0 提交 → 409
+    r2 = client.patch(f"{API}/tickets/{tid}", json={"status": "resolved", "version": 0}, headers=_agent_h())
+    assert r2.status_code == 409
+    # 刷新拿到最新 version 1 再更新 → 成功
+    r3 = client.patch(f"{API}/tickets/{tid}", json={"status": "resolved", "version": 1}, headers=_agent_h())
+    assert r3.status_code == 200 and r3.json()["version"] == 2
 
 
 def test_user_cannot_access_tickets(client):

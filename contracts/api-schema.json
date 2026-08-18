@@ -1860,7 +1860,7 @@
           "tickets"
         ],
         "summary": "Update Ticket",
-        "description": "状态流转 + 分配（agent/admin）；校验合法迁移，closed 为终态。",
+        "description": "状态流转 + 分配（agent/admin）；校验合法迁移 + S2 乐观锁（version 原子比较，冲突 409）。\n\n并发双客服操作同一工单时，以 ``UPDATE ... WHERE version=req.version`` 原子比较：\n后提交方 rowcount=0 → 409（已被人更新），杜绝「后者静默覆盖」的审计与实况不一致。",
         "operationId": "update_ticket_api_v1_tickets__ticket_id__patch",
         "security": [
           {
@@ -3346,9 +3346,9 @@
           },
           "password": {
             "type": "string",
-            "minLength": 6,
+            "minLength": 8,
             "title": "Password",
-            "description": "至少 6 位"
+            "description": "至少 8 位，且同时包含字母和数字（D1 密码强度）"
           },
           "role": {
             "anyOf": [
@@ -3642,11 +3642,16 @@
               }
             ],
             "title": "Assignee Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
           }
         },
         "type": "object",
         "required": [
-          "status"
+          "status",
+          "version"
         ],
         "title": "StatusUpdateReq"
       },
@@ -3698,6 +3703,10 @@
           "updated_at": {
             "type": "string",
             "title": "Updated At"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
           }
         },
         "type": "object",
@@ -3708,7 +3717,8 @@
           "status",
           "assignee_id",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "version"
         ],
         "title": "TicketItem"
       },

@@ -57,6 +57,10 @@ class Ticket(Base):
         nullable=True,
     )
     external_ref: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    # S2 乐观锁版本号：每次状态流转/分配 version+1；并发更新时以 version 条件做原子比较，防后者静默覆盖
+    version: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False, default=0, server_default="0"
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         nullable=False,

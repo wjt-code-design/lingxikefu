@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { me as fetchMe } from '@/api/auth';
 import { listSessions } from '@/api/sessions';
 import { useAuthStore } from '@/store/authStore';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 
 const ROLE_LABEL: Record<string, string> = { user: '普通用户', agent: '客服', admin: '管理员' };
 
@@ -14,7 +15,10 @@ export function ProfilePage() {
   const role = useAuthStore((s) => s.role);
   // 返回目标：user→对话，agent/admin→工作台（与 WidgetShell 品牌跳转一致）
   const backPath = role === 'admin' ? '/admin/dashboard' : role === 'agent' ? '/agent/dashboard' : '/chat';
-  const { data: me, isLoading } = useQuery({ queryKey: ['profile-me'], queryFn: fetchMe });
+  const { data: me, isLoading, isError, refetch } = useQuery({
+    queryKey: ['profile-me'],
+    queryFn: fetchMe,
+  });
   const { data: sessions } = useQuery({
     queryKey: ['profile-sessions'],
     queryFn: () => listSessions({ page: 1, size: 5 }),
@@ -22,6 +26,7 @@ export function ProfilePage() {
   });
 
   if (isLoading) return <Spin className="profile-loading" />;
+  if (isError || !me) return <QueryErrorState title="个人信息加载失败" onRetry={() => refetch()} />;
 
   return (
     <div className="profile">

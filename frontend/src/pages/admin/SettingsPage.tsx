@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Alert, Card, Spin, Typography } from 'antd';
 import type { ReactNode } from 'react';
 import { getAdminSettings } from '@/api/admin';
+import { QueryErrorState } from '@/components/common/QueryErrorState';
 import './SettingsPage.css';
 
 /** 只读键值行（label 左、value 右，数字 tabular-nums） */
@@ -42,7 +43,7 @@ const dash = (v: unknown) => (v == null || v === '' ? '—' : String(v));
  * - 4 卡分组：模型 / RAG / 限流 / 配额；运行时不可在线修改。
  */
 export function SettingsPage() {
-  const { data, isLoading, isError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-settings'],
     queryFn: getAdminSettings,
     staleTime: 30_000,
@@ -52,11 +53,7 @@ export function SettingsPage() {
   if (isLoading) {
     body = <Spin className="settings-page__spin" />;
   } else if (isError || !data) {
-    body = (
-      <div className="settings-page__error">
-        <Typography.Text type="secondary">系统配置读取失败，请稍后重试</Typography.Text>
-      </div>
-    );
+    body = <QueryErrorState title="系统配置读取失败" onRetry={() => refetch()} />;
   } else {
     body = (
       <div className="settings-grid">

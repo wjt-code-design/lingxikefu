@@ -77,10 +77,14 @@ export function RegisterPage() {
           label="密码"
           rules={[
             { required: true, message: '请输入密码' },
-            { min: 6, message: '密码至少 6 位' },
+            { min: 8, message: '密码至少 8 位' },
+            {
+              pattern: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+              message: '密码需同时包含字母和数字',
+            },
           ]}
         >
-          <Input.Password size="large" placeholder="至少 6 位" autoComplete="new-password" />
+          <Input.Password size="large" placeholder="至少 8 位，含字母和数字" autoComplete="new-password" />
         </Form.Item>
         <Form.Item style={{ marginBottom: 8 }}>
           <Checkbox

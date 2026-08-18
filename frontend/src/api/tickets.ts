@@ -1,5 +1,5 @@
 import { http } from './client';
-import type { TicketItem, TicketListResp, TicketStatus } from '@/contracts/api';
+import type { StatusUpdateReq, TicketItem, TicketListResp, TicketStatus } from '@/contracts/api';
 
 /** 工单列表（agent/admin；status 可选过滤） */
 export function listTickets(status?: TicketStatus, page = 1, size = 20): Promise<TicketListResp> {
@@ -10,11 +10,8 @@ export function listTickets(status?: TicketStatus, page = 1, size = 20): Promise
     .then((r) => r.data);
 }
 
-/** 状态流转 + 分配（agent/admin） */
-export function updateTicket(
-  ticketId: string,
-  data: { status: TicketStatus; assignee_id?: string }
-): Promise<TicketItem> {
+/** 状态流转 + 分配（agent/admin）；S2 乐观锁：须回传当前 version，冲突返回 409 */
+export function updateTicket(ticketId: string, data: StatusUpdateReq): Promise<TicketItem> {
   return http.patch<TicketItem>(`/tickets/${ticketId}`, data).then((r) => r.data);
 }
 

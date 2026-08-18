@@ -28,6 +28,9 @@ export function MessageList({
   // 用 ref 而非 state：不因滚动触发重渲染，token 流式期间保持 60fps。
   const stickToBottom = useRef(true);
 
+  const isStreaming =
+    !!stream && (stream.stage === 'retrieving' || stream.stage === 'generating');
+
   // 滚动容器是 .chat-list 的父级（.chat-container__body，overflow-y: auto），结构见 ChatContainer
   useEffect(() => {
     const scroller = listRef.current?.parentElement;
@@ -41,14 +44,17 @@ export function MessageList({
   }, []);
 
   useEffect(() => {
-    // jsdom 等无头环境没有 scrollIntoView（测试/SSR），存在性保护
-    if (stickToBottom.current) {
-      endRef.current?.scrollIntoView?.({ behavior: 'smooth' });
-    }
-  }, [messages.length, stream?.tokens.length]);
-
-  const isStreaming =
-    !!stream && (stream.stage === 'retrieving' || stream.stage === 'generating');
+    if (!stickToBottom.current) return;
+    // C6：rAF 节流合并同一帧内多次滚动 —— 高速吐字时避免 smooth 动画排队抖动；
+    // 流式中用 auto 即时定位（逐 token 不排队），非流式（新消息/历史加载）保留 smooth 平滑体验。
+    const raf = requestAnimationFrame(() => {
+      // jsdom 等无头环境没有 scrollIntoView（测试/SSR），存在性保护
+      endRef.current?.scrollIntoView?.({
+        behavior: isStreaming ? 'auto' : 'smooth',
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [messages.length, stream?.tokens.length, isStreaming]);
 
   return (
     <div ref={listRef} className="chat-list">

@@ -102,10 +102,16 @@ export interface TicketItem {
   assignee_id?: string | null;
   created_at: string;
   updated_at: string;
+  version: number; // S2 乐观锁版本号：流转时回传，服务端原子比较防并发覆盖
 }
 export interface TicketListResp {
   items: TicketItem[];
   total: number;
+}
+export interface StatusUpdateReq {
+  status: TicketStatus;
+  assignee_id?: string; // 可选：分配客服
+  version: number; // S2 乐观锁：客户端回传当前版本，与服务端不匹配返回 409
 }
 
 // ---------- Customers（T6 客户画像） ----------

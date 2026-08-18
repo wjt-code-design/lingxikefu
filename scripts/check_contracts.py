@@ -28,14 +28,15 @@ AUTO_MODELS = {'HTTPValidationError', 'ValidationError'}
 # - 契约已有对应（命名差异）：AdminSettingsResp↔AdminSettings、KnowledgeSearchHit↔KnowledgeHit、
 #   FaqDocItem↔FaqDoc、FaqKbItem↔FaqKBItem、FaqListResp↔PublicFaqResp、UserRole↔Role
 # - 后端模型未回填契约（KNOWN_GAP，见 contracts/README.md，待后续轮次回填）：CreateSessionReq、
-#   CreateTicketReq、SatisfactionReq、StatusUpdateReq、AgentReplyReq、FrontendErrorReq、SessionItem、
+#   CreateTicketReq、SatisfactionReq、AgentReplyReq、FrontendErrorReq、SessionItem、
 #   SessionMessage、FeedbackItem、FeedbackListResp、FeedbackResp、ModelSettings、QuotaSettings、
 #   RagSettings、RateLimitSettings、FeedbackRating
+# - R3：StatusUpdateReq 已回填契约（S2 乐观锁），移出本列表按 A 类正常比对
 IGNORE_EXTRA = {
     'ModelSettings', 'QuotaSettings', 'RagSettings', 'RateLimitSettings',
     'UserRole', 'FeedbackRating', 'Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post',
     'AdminSettingsResp', 'KnowledgeSearchHit', 'FaqDocItem', 'FaqKbItem', 'FaqListResp',
-    'CreateSessionReq', 'CreateTicketReq', 'SatisfactionReq', 'StatusUpdateReq', 'AgentReplyReq',
+    'CreateSessionReq', 'CreateTicketReq', 'SatisfactionReq', 'AgentReplyReq',
     'FrontendErrorReq', 'SessionItem', 'SessionMessage', 'FeedbackItem', 'FeedbackListResp', 'FeedbackResp',
 }
 

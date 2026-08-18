@@ -48,12 +48,21 @@ export function TicketsPage() {
   });
 
   const changeStatus = (t: TicketItem, next: TicketStatus) => {
-    updateTicket(t.ticket_id, { status: next })
+    // S2 乐观锁：回传当前 version，冲突 409 时提示并刷新最新状态
+    updateTicket(t.ticket_id, { status: next, version: t.version })
       .then((r) => {
         message.success(`已更新为「${STATUS_TEXT[r.status]}」`);
         queryClient.invalidateQueries({ queryKey: ['tickets'] });
       })
-      .catch((e: unknown) => message.error((e as ApiError).message || '更新失败'));
+      .catch((e: unknown) => {
+        const err = e as ApiError;
+        if (err.code === '409') {
+          message.error('工单已被其他客服更新，已刷新最新状态，请重试');
+          queryClient.invalidateQueries({ queryKey: ['tickets'] });
+        } else {
+          message.error(err.message || '更新失败');
+        }
+      });
   };
 
   const columns: ColumnsType<TicketItem> = [
