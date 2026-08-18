@@ -47,16 +47,22 @@ export async function me(): Promise<MeResp> {
  * 由 main.tsx 在 createRoot 前 await 调用，避免路由守卫把已登录用户闪跳到 /login。
  */
 export async function bootstrapAuth(): Promise<void> {
-  const { token, refreshToken, setAuth } = useAuthStore.getState();
+  const { token, refreshToken } = useAuthStore.getState();
   if (token || !refreshToken) return; // 已有 token 或未登录，无需续期
   try {
     const resp = await refresh({ refresh_token: refreshToken });
+    // BUG-FIX: refresh 成功后必须先写回新 token，后续 me() 的请求拦截器才能带上 Bearer；
+    // 否则 me() 仍用旧的空 token → 401 → 整个续期失败 → 登录态被误清，会话创建也 401。
+    useAuthStore.setState({
+      token: resp.access_token,
+      refreshToken: resp.refresh_token ?? refreshToken,
+    });
     const meResp = await me();
-    setAuth(
+    useAuthStore.getState().setAuth(
       {
         user_id: meResp.user_id,
         access_token: resp.access_token,
-        refresh_token: resp.refresh_token,
+        refresh_token: resp.refresh_token ?? refreshToken,
       },
       meResp
     );

@@ -98,6 +98,9 @@ body {
 
 /* 工单提示条（amber 微光，柔和化） */
 .chat-msg__ticket {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 8px;
   padding: 6px 10px;
   border-radius: 10px;
@@ -106,6 +109,14 @@ body {
   color: var(--text-3);
   background: color-mix(in srgb, var(--color-amber) 16%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-amber) 38%, transparent);
+}
+.chat-msg__ticket::before {
+  content: '';
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-amber);
 }
 
 /* 认证外壳 */
@@ -229,7 +240,7 @@ body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
 .chat-container__empty {
   margin-top: 64px;
@@ -238,10 +249,10 @@ body {
 .chat-container__hot {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 6px;
   justify-content: center;
-  padding: 0 24px;
-  margin-top: 8px;
+  padding: 0 16px;
+  margin-top: 6px;
 }
 .chat-container__hot-btn {
   border-radius: 999px;
@@ -256,16 +267,16 @@ body {
 }
 .chat-container__footer {
   border-top: 1px solid var(--border);
-  padding: 10px 16px;
+  padding: 8px 14px;
   background: var(--color-surface);
 }
 /* 消息列表与气泡 */
 .chat-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  max-width: 780px;
+  max-width: 760px;
   margin: 0 auto;
 }
 .chat-msg {
@@ -278,8 +289,8 @@ body {
   justify-content: flex-start;
 }
 .chat-msg__bubble {
-  max-width: 640px;
-  padding: 10px 14px;
+  max-width: 600px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   background: var(--color-surface);
   position: relative;
@@ -343,14 +354,14 @@ body {
 }
 .chat-msg__text {
   margin: 0 0 4px;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13.5px;
+  line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
 }
 /* Markdown 渲染 */
 .chat-msg__text p {
-  margin: 0 0 6px;
+  margin: 0 0 3px;
   white-space: normal;
 }
 .chat-msg__text p:last-child {
@@ -358,11 +369,11 @@ body {
 }
 .chat-msg__text ul,
 .chat-msg__text ol {
-  margin: 0 0 8px;
-  padding-left: 20px;
+  margin: 0 0 3px;
+  padding-left: 16px;
 }
 .chat-msg__text li {
-  margin: 2px 0;
+  margin: 0;
 }
 .chat-msg__text code {
   background: var(--color-brand-soft);
@@ -387,20 +398,26 @@ body {
 .chat-msg__text h2,
 .chat-msg__text h3 {
   margin: 6px 0 4px;
+  padding: 3px 8px 3px 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  background: var(--color-brand-soft, rgba(83,159,216,0.15));
+  border-left: 3px solid var(--color-brand, #539FD8);
+  border-radius: 0 6px 6px 0;
   white-space: normal;
 }
 
 /* 来源折叠（海盐蓝胶囊） */
 .chat-source {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 .chat-source__toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 2px 12px;
+  padding: 1px 10px;
   font-size: 12px;
-  line-height: 22px;
+  line-height: 20px;
   color: var(--color-brand-dark);
   background: rgba(150, 200, 232, 0.1);
   border: 1px solid var(--color-brand);
@@ -412,10 +429,10 @@ body {
   background: rgba(150, 200, 232, 0.2);
 }
 .chat-source__panel {
-  margin-top: 8px;
+  margin-top: 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: rgba(150, 200, 232, 0.05);
 }
 .chat-source__group {
@@ -438,12 +455,17 @@ body {
 .chat-source__snippet {
   font-size: 12px;
   color: var(--text-3);
-  max-height: 120px;
+  max-height: 96px;
   overflow-y: auto;
   white-space: pre-wrap;
 }
 .chat-source__chunk {
-  padding: 3px 0;
+  padding: 2px 6px;
+  border-radius: 6px;
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.chat-source__chunk:hover {
+  background: rgba(150, 200, 232, 0.08);
 }
 .chat-source__ref {
   color: var(--color-brand-dark);
@@ -503,7 +525,7 @@ body {
 /* 输入区（海盐蓝胶囊 + 激活光晕） */
 .chat-composer {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: flex-end;
 }
 .chat-composer .ant-input-textarea {
@@ -514,6 +536,10 @@ body {
   border-color: var(--border) !important;
   border-radius: var(--radius-md) !important;
   transition: box-shadow var(--dur-base) var(--ease-out);
+}
+.chat-composer textarea::placeholder {
+  font-size: 13px;
+  color: var(--text-4);
 }
 .chat-composer .ant-btn-primary {
   background: var(--color-brand) !important;
@@ -542,11 +568,11 @@ body {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 300px;
-  gap: 12px;
-  padding: 12px;
+  grid-template-columns: 240px minmax(0, 1fr) 280px;
+  gap: 10px;
+  padding: 10px;
   width: 100%;
-  max-width: 1280px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 .wb-col {
@@ -562,7 +588,7 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   overflow-y: auto;
-  padding: 14px 12px;
+  padding: 12px 10px;
 }
 .wb-col--main {
   background: var(--color-surface);
@@ -625,7 +651,7 @@ body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 6px 8px;
   border: none;
   border-radius: var(--radius-sm);
   background: transparent;
@@ -684,10 +710,10 @@ body {
 }
 /* 右栏：溯源 */
 .wb-source {
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   background: rgba(150, 200, 232, 0.04);
 }
 .wb-source__head {
@@ -731,15 +757,15 @@ body {
 .wb-replies {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 .wb-reply {
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   background: var(--color-surface);
   color: var(--text-2);
-  font-size: 13px;
+  font-size: 12.5px;
   text-align: left;
   cursor: pointer;
   transition:
@@ -883,13 +909,13 @@ body {
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  margin-top: 48px;
-  padding: 24px 32px;
+  margin-top: 32px;
+  padding: 16px 24px;
   text-align: center;
 }
 .chat-welcome__icon {
-  width: 56px;
-  height: 56px;
+  width: 48px;
+  height: 48px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -900,13 +926,13 @@ body {
   margin-bottom: 4px;
 }
 .chat-welcome__title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-1);
   letter-spacing: 0.01em;
 }
 .chat-welcome__sub {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-3);
 }
 
@@ -927,8 +953,8 @@ body {
   scrollbar-color: rgba(150, 200, 232, 0.55) transparent;
 }
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 4px;
+  height: 4px;
 }
 ::-webkit-scrollbar-thumb {
   background: rgba(150, 200, 232, 0.55);
@@ -944,19 +970,23 @@ body {
 /* ---------- V8/A6（建议书）：AI 消息品牌头像锚点（左侧 28px） ---------- */
 .chat-msg--ai {
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
 }
 .chat-msg__avatar {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  margin-top: 2px;
+  width: 26px;
+  height: 26px;
+  margin-top: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 8px;
   background: linear-gradient(135deg, rgba(180, 216, 245, 0.5), rgba(150, 200, 232, 0.25));
   border: 1px solid var(--border);
+}
+.chat-msg__avatar svg {
+  width: 100%;
+  height: 100%;
 }
 
 /* ---------- P2-2：会话满意度评价（内联条，非弹窗） ---------- */
@@ -1168,20 +1198,15 @@ body {
 /* task 11：AI 头像加大 36px + 用户首字母头像（海盐蓝渐变圆形） */
 .chat-msg--user {
   align-items: flex-start;
-  gap: 8px;
-}
-.chat-msg__avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 12px;
+  gap: 6px;
 }
 .chat-msg__avatar--user {
-  width: 36px;
-  height: 36px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   background: linear-gradient(135deg, #539fd8, #3e7cb1);
   color: #fff;
-  font-size: 15px;
+  font-size: 12px;
   font-weight: 600;
   border: none;
   box-shadow: var(--shadow-card);
@@ -1198,19 +1223,19 @@ body {
 /* task 9：首屏快捷问题场景化卡片（图标 + 标题 + 描述） */
 .chat-container__hot {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
   width: 100%;
-  max-width: 780px;
-  padding: 0 24px;
-  margin-top: 16px;
+  max-width: 760px;
+  padding: 0 16px;
+  margin-top: 12px;
 }
 .hot-card {
   background: var(--color-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  padding: 12px 14px;
+  padding: 10px 12px;
   text-align: left;
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -1221,36 +1246,36 @@ body {
 .hot-card__head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 .hot-card__icon {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 9px;
+  border-radius: 8px;
   background: var(--color-brand-soft);
   color: var(--color-brand-dark);
-  font-size: 15px;
+  font-size: 13px;
 }
 .hot-card__title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-1);
 }
 .hot-card__list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
 }
 .hot-card__item {
   display: flex;
   flex-direction: column;
   gap: 1px;
   text-align: left;
-  padding: 8px 10px;
+  padding: 6px 8px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
@@ -1269,12 +1294,12 @@ body {
   outline-offset: 2px;
 }
 .hot-card__q {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 500;
   color: var(--text-2);
 }
 .hot-card__d {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--text-3);
 }
 
@@ -1303,21 +1328,21 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 28px 16px;
+  gap: 6px;
+  padding: 20px 12px;
   text-align: center;
 }
 .brand-empty__icon {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 18px;
+  border-radius: 14px;
   background: var(--color-brand-soft);
 }
 .brand-empty__title {
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 600;
   color: var(--text-2);
 }

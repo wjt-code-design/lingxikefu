@@ -7,8 +7,8 @@
 import type { ThemeConfig } from 'antd';
 
 export const lightTokens: ThemeConfig['token'] = {
-  colorPrimary: '#96C8E8',
-  colorInfo: '#96C8E8',
+  colorPrimary: '#539FD8',
+  colorInfo: '#539FD8',
   colorSuccess: '#73C9A8',
   colorWarning: '#F6C38E',
   colorError: '#E58E8E',
