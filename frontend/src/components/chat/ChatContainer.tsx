@@ -61,17 +61,18 @@ export function ChatContainer({
   /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel） */
   onRegisterFill?: (fill: (text: string) => void) => void;
 }) {
-  const { stage, tokens, sources, messageId, ticketId, error, reset, stream } = useChatStream();
+  const { stage, tokens, sources, messageId, userMessageId, ticketId, error, reset, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null); // I-1：会话创建失败提示
-  const [retryText, setRetryText] = useState<string | null>(null); // U1：最近失败消息 → 一键重试
+  const [retryText, setRetryText] = useState<{ text: string; clientMsgId: string } | null>(null); // U1：最近失败消息 → 一键重试（含幂等键，重试复用不重复扣费）
   const [searchParams] = useSearchParams();
   const sessionParam = searchParams.get('session');
   // 当前流式对应的用户消息（P0-1：done/error 时按 id 定位并更新；text 用于失败重试兜底）
   // C1/C2：记录发起流时的 user 消息 + 会话；finalize 时比对 sessionId 防串台、防 ref 覆盖丢回答
-  const streamingUserRef = useRef<{ id: string; text: string; sessionId: string | null } | null>(null);
+  // R2：clientMsgId 为客户端提问幂等键（重试复用，配额幂等扣费）
+  const streamingUserRef = useRef<{ id: string; text: string; sessionId: string | null; clientMsgId: string | null } | null>(null);
   // P0-4：手动转人工结果气泡（独立于 SSE 流，HTTP 响应驱动）
   const [manualTicket, setManualTicket] = useState<{ id: string; loading: boolean; error: string | null } | null>(null);
   // P2-2：会话满意度——对话轮次 ≥2 后内联出现，评分一次后隐藏
@@ -135,7 +136,8 @@ export function ChatContainer({
     if (u.sessionId !== sessionId) return;
     const uid = u.id;
     const assistant: ChatMessage = {
-      id: `a-${Date.now()}`,
+      // C4：done 后本地 id 直接采用后端 message_id（唯一可引用）；失败态无后端 id 用本地占位
+      id: stage === 'done' && messageId ? messageId : `a-${Date.now()}`,
       role: 'assistant',
       content: tokens || (stage === 'error' ? error?.message || '服务异常，请稍后重试' : ''),
       sources,
@@ -146,21 +148,26 @@ export function ChatContainer({
     setMessages((prev) => {
       const next = prev.map((m) =>
         m.id === uid
-          ? { ...m, status: (stage === 'done' ? 'done' : 'failed') as ChatMessage['status'] }
+          ? {
+              ...m,
+              status: (stage === 'done' ? 'done' : 'failed') as ChatMessage['status'],
+              // C4：done 后用后端真 id 对齐本地 user 消息 id（供引用/编辑/定位）
+              ...(stage === 'done' && userMessageId ? { id: userMessageId } : {}),
+            }
           : m
       );
       return [...next, assistant];
     });
-    // U1：失败时记住用户消息 → Composer 旁"重试"按钮；成功/新发送时清空
-    setRetryText(stage === 'error' ? u.text : null);
+    // U1：失败时记住用户消息 → Composer 旁"重试"按钮；成功/新发送时清空（重试复用幂等键，不重复扣费）
+    setRetryText(stage === 'error' && u.clientMsgId ? { text: u.text, clientMsgId: u.clientMsgId } : null);
     // P2-2：成功完成一轮对话 → 轮次 +1（done 才计，error 不计）
     if (stage === 'done') setTurnCount((n) => n + 1);
     reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 不参与依赖（防 done 后点赞等触发重复 finalize）
-  }, [stage, tokens, sources, messageId, ticketId, error, reset, sessionId]);
+  }, [stage, tokens, sources, messageId, userMessageId, ticketId, error, reset, sessionId]);
 
   const onSend = useCallback(
-    async (text: string): Promise<boolean> => {
+    async (text: string, clientMsgId?: string): Promise<boolean> => {
       // C2：流式中拒绝并发新发送（Composer/热门卡片已 disabled，此处兜底防 ref 覆盖丢回答）
       if (streaming) return true;
       setCreateError(null); // 新发送清空创建错误
@@ -187,15 +194,16 @@ export function ChatContainer({
         }
         setCreating(false);
       }
-      // P0-1：发送后立即显示用户消息（sending 态），失败时标 failed 支持重试
-      const uid = `u-${Date.now()}`;
-      streamingUserRef.current = { id: uid, text, sessionId: sid };
+      // R2/C4：客户端提问幂等键（重试复用，配额幂等扣费）；本地消息 id 用稳定值，done 后对齐后端真 id
+      const cmid = clientMsgId || `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const uid = `u-${cmid}`;
+      streamingUserRef.current = { id: uid, text, sessionId: sid, clientMsgId: cmid };
       setMessages((prev) => [
         ...prev,
         { id: uid, role: 'user', content: text, status: 'sending' },
       ]);
       try {
-        await stream({ session_id: sid!, content: text });
+        await stream({ session_id: sid!, content: text, client_msg_id: cmid });
       } catch {
         // stream 内部错误已通过 SSE error 事件处理；此处兜底
       }
@@ -204,9 +212,9 @@ export function ChatContainer({
     [sessionId, stream, streaming]
   );
 
-  // U1：一键重试——重发失败的那条用户消息
+  // U1：一键重试——重发失败的那条用户消息（复用幂等键，后端不重复扣费）
   const onRetry = useCallback(() => {
-    if (retryText) onSend(retryText);
+    if (retryText) onSend(retryText.text, retryText.clientMsgId);
   }, [retryText, onSend]);
 
   // P0-4：主动转人工 → escalate 端点（独立 HTTP 响应气泡，非 SSE）
@@ -335,7 +343,7 @@ export function ChatContainer({
         <Composer
           disabled={streaming || creating}
           onSend={onSend}
-          retry={retryText ? { text: retryText, onRetry } : null}
+          retry={retryText ? { text: retryText.text, onRetry } : null}
           onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
           onRegisterFill={onRegisterFill}
         />

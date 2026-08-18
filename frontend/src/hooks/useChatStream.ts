@@ -10,6 +10,7 @@ export interface ChatStreamState {
   tokens: string;
   sources: MessageSource[];
   messageId?: string;
+  userMessageId?: string; // R2/C4：本次提问的后端真 id（done 回传，本地消息 id 对齐用）
   ticketId?: string; // T1：handoff 建单后携带工单号
   error?: { code: string; message: string };
 }
@@ -40,6 +41,7 @@ function applyEvent(state: ChatStreamState, ev: SSEEvent): ChatStreamState {
         ...state,
         stage: 'done',
         messageId: ev.data.message_id,
+        userMessageId: ev.data.user_message_id, // R2/C4：后端 user 消息真 id
         ticketId: ev.data.ticket_id, // T1：handoff 建单工单号
       };
     case 'error':

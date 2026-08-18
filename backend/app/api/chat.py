@@ -9,9 +9,8 @@
 + message_sources 真源（知识来源唯一真源）→ 成功扣减配额。
 MVP 单知识库策略：取当前租户最新一个 KB（多 KB 选择留 Phase2）。
 
-R-6 断连语义（已知约束）：配额在 stream 开始前原子扣减（防刷）、user 消息在
-判定前落库。若客户端中途断开，assistant 消息不落库 → 配额白扣 + 孤儿 user 消息；
-重试会再次扣减。MVP 阶段接受（防刷优先），Phase2 引入断连续传时再改。
+R-6 断连语义（R2 已解决）：配额在 stream 开始前原子扣减（防刷）+ client_msg_id 幂等；
+若中途断开 / 知识库为空 / 系统异常，refund 回滚已扣配额（不白扣）；重试同一 client_msg_id 不重复扣费。
 """
 from __future__ import annotations
 
@@ -50,6 +49,8 @@ class ChatStreamReq(BaseModel):
     session_id: str = Field(min_length=1)
     content: str = Field(min_length=1, max_length=4000)
     stream: bool = True
+    # R2：客户端提问幂等键（前端生成、重试复用）——配额幂等扣费，断连重试不重复扣
+    client_msg_id: str | None = Field(default=None, max_length=64)
 
 
 class AgentReplyReq(BaseModel):
@@ -264,8 +265,9 @@ async def chat_stream(
     is_agent_reply = s.user_id != user_id  # 代答：来源 agent/admin
 
     # 2) 配额原子扣减闸门（M2：try_consume 修复 TOCTOU，fail-closed 超额拒答）
+    #    R2：client_msg_id 作幂等键 —— 断连重试同一请求不重复扣费
     quota = get_quota_service()
-    allowed, _ = quota.try_consume(str(user_id), 1)
+    allowed, _ = quota.try_consume(str(user_id), 1, idem_key=req.client_msg_id)
     if not allowed:
         return StreamingResponse(
             _sse({"event": "error", "data": {"code": "QUOTA_EXCEEDED", "message": "今日问答额度已用完"}}),
@@ -273,19 +275,24 @@ async def chat_stream(
         )
 
     # 3) 写 user 消息（T5：代答时记录 agent 身份，溯源用）
-    user_msg = Message(
-        session_id=session_id,
-        role=MessageRole.user,
-        content=req.content,
-        intent="qa",
-        meta={"agent_id": str(user_id)} if is_agent_reply else None,
-    )
-    db.add(user_msg)
-    db.commit()
-    db.refresh(user_msg)
-    # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
-    s.updated_at = datetime.now(timezone.utc)
-    db.commit()
+    #    R2：落库失败 → 回滚已扣配额（消息没写成不扣费）
+    try:
+        user_msg = Message(
+            session_id=session_id,
+            role=MessageRole.user,
+            content=req.content,
+            intent="qa",
+            meta={"agent_id": str(user_id)} if is_agent_reply else None,
+        )
+        db.add(user_msg)
+        db.commit()
+        db.refresh(user_msg)
+        # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
+        s.updated_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception:
+        quota.refund(str(user_id), 1, req.client_msg_id)
+        raise
 
     kb_id = await run_in_threadpool(_latest_kb_id, db)
 
@@ -298,8 +305,10 @@ async def chat_stream(
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
         if await request.is_disconnected():
             logger.info("chat stream aborted: client disconnected (pre)")
+            quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额，不白扣
             return
         if kb_id is None:
+            quota.refund(str(user_id), 1, req.client_msg_id)  # R2：无知识库未生成 → 不扣费
             yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
             return
 
@@ -317,6 +326,7 @@ async def chat_stream(
             # BUG-09：RAG/LLM 生成前再确认连接（检索可能耗时数秒）
             if await request.is_disconnected():
                 logger.info("chat stream aborted: client disconnected (pre-llm)")
+                quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额
                 return
             async for event, data in stream_answer(
                 req.content, kb_id, history=history, kb_version=kb_version
@@ -324,6 +334,7 @@ async def chat_stream(
                 # BUG-09：每收到一个事件检查客户端连接，断开即终止（不再消费下一个事件）
                 if await request.is_disconnected():
                     logger.info("chat stream aborted: client disconnected during %s", event)
+                    quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额
                     return
                 if event == "intent":
                     # R-2：真实意图（qa/handoff/chitchat）——落库用 + 转发客户端
@@ -384,7 +395,12 @@ async def chat_stream(
                                 logger.exception("缓存回填失败（不影响响应）")
                     # T1：done 携带 ticket_id（handoff 场景前端展示工单号）
                     # T10 修复：转发 cache_hit（stream_answer 命中时前端可感知缓存答案）
-                    done_data: dict = {"message_id": msg_id, "ticket_id": ticket_id}
+                    # R2/C4：done 回传 user_message_id（本次提问后端真 id）→ 前端本地消息 id 对齐后端
+                    done_data: dict = {
+                        "message_id": msg_id,
+                        "ticket_id": ticket_id,
+                        "user_message_id": str(user_msg.id),
+                    }
                     if cache_hit:
                         done_data["cache_hit"] = True
                     yield _sse({"event": "done", "data": done_data})
@@ -392,6 +408,7 @@ async def chat_stream(
                     yield _sse({"event": "error", "data": data})
         except Exception:  # pragma: no cover - 兜底，不向客户端泄漏内部细节
             logger.exception("chat stream 处理异常")
+            quota.refund(str(user_id), 1, req.client_msg_id)  # R2：异常未完成 → 回滚配额
             yield _sse({"event": "error", "data": {"code": "SYS_ERROR", "message": "服务异常，请稍后重试"}})
 
     return StreamingResponse(gen(), media_type="text/event-stream")
