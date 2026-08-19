@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { Button } from 'antd';
-import { SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
+import { SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
 import { createSession, getSessionDetail, rateSatisfaction } from '@/api/sessions';
 import { escalateSession } from '@/api/tickets';
@@ -266,6 +266,32 @@ export function ChatContainer({
 
   return (
     <div className="chat-container">
+      {observeMode && (
+        <div className="chat-header">
+          <div className="chat-header__info">
+            <div className="chat-header__avatar" aria-hidden="true">
+              <UserOutlined />
+            </div>
+            <div>
+              <div className="chat-header__name">会话 {sessionId?.slice(0, 8) ?? '...'}</div>
+              <div className="chat-header__status">
+                <span className="chat-header__dot" />
+                {streaming ? 'AI 回复中…' : manualTicket?.id ? '已转人工' : 'AI 自动接待'}
+              </div>
+            </div>
+          </div>
+          <div className="chat-header__actions">
+            <Button
+              size="small"
+              icon={<SwapOutlined />}
+              disabled={!!manualTicket?.loading}
+              onClick={onEscalate}
+            >
+              {manualTicket?.loading ? '转接中…' : '转人工'}
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="chat-container__body">
         {messages.length === 0 && !streaming && (
           <div className="chat-container__empty-wrap">
