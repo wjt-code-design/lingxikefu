@@ -298,7 +298,7 @@ body {
 .chat-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 14px;
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
