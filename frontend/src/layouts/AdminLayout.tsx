@@ -13,7 +13,7 @@ export function AdminLayout() {
   return (
     <Layout className="admin-layout app-workbench" hasSider>
       <Layout.Sider collapsible width={220} className="admin-layout__sider">
-        <div className="admin-layout__logo">灵犀 · 星河智家</div>
+        <div className="admin-layout__logo">灵犀</div>
         <SideNav />
       </Layout.Sider>
       <Layout className="admin-layout__main">

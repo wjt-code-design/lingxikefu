@@ -9,9 +9,9 @@ import { UserMenu } from './UserMenu';
 export function AppHeader() {
   return (
     <Layout.Header className="app-header">
-      <Typography.Text strong className="app-header__title">
-        灵犀 · 星河智家 智能客服
-      </Typography.Text>
+        <Typography.Text strong className="app-header__title">
+          灵犀 · 智能客服
+        </Typography.Text>
       <Space className="app-header__actions">
         <NotificationBell />
         <UserMenu />

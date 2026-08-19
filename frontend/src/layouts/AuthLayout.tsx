@@ -16,7 +16,7 @@ export function AuthLayout({ children }: { children?: ReactNode }) {
         <div className="auth-brand__inner">
           <div className="auth-brand__logo">
             <span className="auth-brand__logo-mark" aria-hidden="true" />
-            灵犀 · Lingxi
+            灵犀
           </div>
           <BrandIllustration />
           <h2 className="auth-brand__slogan">7×24 智能客服，随时为你解答</h2>

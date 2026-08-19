@@ -17,7 +17,7 @@ function renderHeader() {
 describe('AppHeader 通用组件', () => {
   it('渲染品牌标题', () => {
     renderHeader();
-    expect(screen.getByText('灵犀 · 星河智家 智能客服')).toBeInTheDocument();
+    expect(screen.getByText('灵犀 · 智能客服')).toBeInTheDocument();
   });
 
   it('不再渲染主题切换器（项目恒浅色）', () => {

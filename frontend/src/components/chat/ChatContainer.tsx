@@ -312,7 +312,7 @@ export function ChatContainer({
                   <circle cx="15.9" cy="11.3" r="1.2" fill="#539FD8" />
                 </svg>
               </div>
-              <div className="chat-welcome__title">您好，我是星河智家智能客服</div>
+              <div className="chat-welcome__title">您好，我是灵犀智能客服</div>
               <div className="chat-welcome__sub">可点击下方问题快速开始，或直接输入您的问题</div>
             </div>
             <div className="chat-container__hot">

@@ -45,7 +45,7 @@ export function HistoryPanel() {
     <aside className="wb-left">
       <div className="wb-brand">
         <Typography.Text strong className="wb-brand__name">
-          灵犀 · 星河智家
+          灵犀
         </Typography.Text>
         <Typography.Text type="secondary" className="wb-brand__online">
           <span className="wb-brand__dot" /> 客服在线 · 7×24

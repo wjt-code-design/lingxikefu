@@ -24,7 +24,7 @@ describe('路由可达与 RequireAuth 守卫', () => {
     logout();
     renderApp('/widget');
     // 挂件页首屏为对话欢迎语（Empty 描述），无独立 heading
-    expect(await screen.findByText('您好，我是星河智家智能客服')).toBeInTheDocument();
+    expect(await screen.findByText('您好，我是灵犀智能客服')).toBeInTheDocument();
   });
 
   it('普通用户访问 /admin/knowledge → 显示 403 无权限页（不再踢登录）', () => {
@@ -51,6 +51,6 @@ describe('路由可达与 RequireAuth 守卫', () => {
   it('已登录访问 /chat → 渲染对话页', async () => {
     loginAs('user');
     renderApp('/chat');
-    expect(await screen.findByText('您好，我是星河智家智能客服')).toBeInTheDocument();
+    expect(await screen.findByText('您好，我是灵犀智能客服')).toBeInTheDocument();
   });
 });

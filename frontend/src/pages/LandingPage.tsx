@@ -51,7 +51,7 @@ export function LandingPage() {
 
       <div className="landing__content">
         <section className="landing__hero">
-          <div className="landing__badge">星河智家 · 智能客服</div>
+          <div className="landing__badge">灵犀 · 智能客服</div>
           <Typography.Title className="landing__title">
             灵犀智能客服
             <br />
@@ -109,7 +109,7 @@ export function LandingPage() {
 
         {/* Footer */}
         <footer className="landing__footer">
-          <span>© 2026 灵犀 · 星河智家</span>
+          <span>© 2026 灵犀</span>
           <Link to="/faq">帮助中心</Link>
         </footer>
       </div>
