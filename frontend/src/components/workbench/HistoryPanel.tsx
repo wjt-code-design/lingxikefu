@@ -18,9 +18,8 @@ export function HistoryPanel() {
   const token = useAuthStore((s) => s.token);
   const role = useAuthStore((s) => s.role);
   const authed = Boolean(token);
-  // BUG-12：agent/admin 全租户视角需区分客户（显示 email/phone 标识）
-  const isStaff = role === 'agent' || role === 'admin';
-  const customerOf = (s: { user_email?: string; user_phone?: string }) =>
+  const isStaff = role === 'admin' || role === 'agent';
+  const customerOf = (s: { user_email?: string; user_phone?: string }) => 
     s.user_email || s.user_phone || '未绑定账号';
   const { data: sessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ['workbench-sessions'],
@@ -79,12 +78,10 @@ export function HistoryPanel() {
                 className="wb-session"
                 onClick={() => navigate(`/chat?session=${s.id}`)}
               >
-                {isStaff ? (
-                  <span className="wb-session__customer" title={s.user_email || s.user_phone || undefined}>
-                    {customerOf(s)}
-                  </span>
-                ) : null}
-                <span className="wb-session__title">{s.title || '新对话'}</span>
+                <span className="wb-session__avatar" aria-hidden="true">
+                  {(isStaff ? customerOf(s)?.[0] : s.title?.[0] || '客').toUpperCase()}
+                </span>
+                <span className="wb-session__title">{isStaff ? customerOf(s) : (s.title || '新对话')}</span>
                 <span className="wb-session__time">{fmtTime(s.updated_at)}</span>
               </button>
             ))
