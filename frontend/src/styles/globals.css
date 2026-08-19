@@ -6,6 +6,23 @@
   box-sizing: border-box;
 }
 
+/* Skip link - 键盘无障碍：Tab 聚焦时可见，跳过导航直达内容 */
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--color-brand);
+  color: white;
+  padding: 8px 16px;
+  text-decoration: none;
+  z-index: 9999;
+  border-radius: 0 0 4px 0;
+  transition: top 0.2s;
+}
+.skip-link:focus {
+  top: 0;
+}
+
 html,
 body,
 #root {

@@ -30,6 +30,10 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <ErrorBoundary>
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            {/* Skip to content — 键盘无障碍 */}
+            <a href="#main-content" className="skip-link">
+              跳转到主要内容
+            </a>
             <AppRoutes />
           </BrowserRouter>
         </ErrorBoundary>

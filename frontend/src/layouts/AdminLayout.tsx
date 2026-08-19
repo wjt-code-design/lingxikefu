@@ -18,7 +18,7 @@ export function AdminLayout() {
       </Layout.Sider>
       <Layout className="admin-layout__main">
         <AppHeader />
-        <Layout.Content className="admin-layout__content">
+        <Layout.Content className="admin-layout__content" id="main-content">
           <RouteChrome />
           <Outlet />
         </Layout.Content>

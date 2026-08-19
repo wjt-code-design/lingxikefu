@@ -51,7 +51,7 @@ export function WidgetShell() {
           <UserMenu />
         </Space>
       </div>
-      <div className="widget-shell__body">
+      <div className="widget-shell__body" id="main-content">
         <Outlet />
       </div>
     </div>
