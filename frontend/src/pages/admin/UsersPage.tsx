@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { AppTable } from '@/components/common/AppTable';
 import { listUsers, updateUserRole } from '@/api/admin';
 import type { ApiError, Role, UserItem } from '@/contracts/api';
+import './UsersPage.css';
 
 const ROLE_META: Record<Role, { color: string; text: string }> = {
   admin: { color: 'red', text: '管理员' },
@@ -74,8 +75,10 @@ export function UsersPage() {
   ];
 
   return (
-    <div className="page">
-      <Typography.Title level={3}>用户管理</Typography.Title>
+    <div className="page users-page">
+      <div className="users-page__header">
+        <Typography.Title level={3}>用户管理</Typography.Title>
+      </div>
       <AppTable<UserItem>
         rowKey="user_id"
         loading={isFetching}
