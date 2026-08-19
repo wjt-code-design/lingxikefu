@@ -7,6 +7,7 @@ import { deleteSession, listSessions } from '@/api/sessions';
 import type { ApiError, Session } from '@/contracts/api';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useAuthStore } from '@/store/authStore';
+import './SessionsPage.css';
 
 /**
  * Agent 工作台 · 会话列表（真实查询 GET /sessions + T8 React Query）。

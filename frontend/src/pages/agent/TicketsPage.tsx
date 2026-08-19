@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
 import { listTickets, updateTicket } from '@/api/tickets';
 import type { ApiError, TicketItem, TicketStatus } from '@/contracts/api';
+import './TicketsPage.css';
 
 const STATUS_OPTIONS = [
   { label: '全部', value: '' },

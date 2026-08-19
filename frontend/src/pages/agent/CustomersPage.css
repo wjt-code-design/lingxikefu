@@ -1,0 +1,23 @@
+/* 客户管理页氛围渐变 */
+.agent-customers {
+  position: relative;
+}
+.agent-customers::before {
+  content: "";
+  position: absolute;
+  inset: -16px -16px auto -16px;
+  height: 160px;
+  background: linear-gradient(
+    180deg,
+    rgba(83, 159, 216, 0.06) 0%,
+    rgba(83, 159, 216, 0.02) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+  border-radius: var(--radius-md);
+}
+.agent-customers > * {
+  position: relative;
+  z-index: 1;
+}

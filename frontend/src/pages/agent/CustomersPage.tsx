@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
 import { listCustomers } from '@/api/customers';
 import type { CustomerItem } from '@/contracts/api';
+import './CustomersPage.css';
 
 /**
  * 客户管理（T6 + T8 落地）：React Query 统一服务端状态。
