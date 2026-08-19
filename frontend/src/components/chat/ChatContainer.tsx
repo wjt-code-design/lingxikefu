@@ -121,6 +121,7 @@ export function ChatContainer({
             role: m.role as 'user' | 'assistant',
             content: m.content,
             status: 'done',
+            createdAt: new Date(m.created_at || Date.now()).getTime(),
             ...(m.role === 'assistant' ? { messageId: m.id } : {}),
           }))
         );
@@ -206,7 +207,7 @@ export function ChatContainer({
       streamingUserRef.current = { id: uid, text, sessionId: sid, clientMsgId: cmid };
       setMessages((prev) => [
         ...prev,
-        { id: uid, role: 'user', content: text, status: 'sending' },
+        { id: uid, role: 'user', content: text, status: 'sending', createdAt: Date.now() },
       ]);
       try {
         await stream({ session_id: sid!, content: text, client_msg_id: cmid });

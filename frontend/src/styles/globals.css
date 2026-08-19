@@ -362,6 +362,20 @@ body {
   max-width: 760px;
   margin: 0 auto;
 }
+
+/* 时间分隔线：间隔 > 5 分钟显示 */
+.chat-time-divider {
+  display: flex;
+  justify-content: center;
+  margin: 8px 0;
+}
+.chat-time-divider span {
+  font-size: 11px;
+  color: var(--text-3);
+  background: var(--color-surface);
+  padding: 2px 10px;
+  border-radius: 10px;
+}
 .chat-msg {
   display: flex;
   gap: 10px;

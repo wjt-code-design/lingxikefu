@@ -61,9 +61,24 @@ export function MessageList({
 
   return (
     <div ref={listRef} className="chat-list">
-      {messages.map((m) => (
-        <MessageBubble key={m.id} msg={m} layout={layout} onRate={(r) => onRate(m.id, r)} />
-      ))}
+      {(() => {
+        let lastTime = 0;
+        return messages.map((m) => {
+          const time = m.createdAt || 0;
+          const showDivider = time && time - lastTime > 5 * 60 * 1000;
+          if (time) lastTime = time;
+          return (
+            <div key={m.id}>
+              {showDivider && (
+                <div className="chat-time-divider">
+                  <span>{new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              )}
+              <MessageBubble key={m.id} msg={m} layout={layout} onRate={(r) => onRate(m.id, r)} />
+            </div>
+          );
+        });
+      })()}
       {isStreaming && stream && (
         <div className="chat-msg chat-msg--ai">
           {/* V8：流式占位与正式消息保持头像一致性 */}
