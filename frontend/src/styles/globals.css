@@ -494,6 +494,7 @@ body {
 .chat-msg {
   display: flex;
   gap: 12px;
+  width: 100%;
   max-width: 100%;
 }
 .chat-msg--user {
