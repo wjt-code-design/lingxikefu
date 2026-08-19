@@ -2,10 +2,42 @@ import { Button, Card, Col, Row, Typography } from 'antd';
 import { CommentOutlined, SafetyCertificateOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 
-/**
- * 服务首页：未登录访问 / 时展示品牌落地页。
- * 记忆点：网格背景 + 光点漂浮（科技感纵深）
- */
+/** 产品预览区：纯CSS模拟对话界面，展示"灵犀长什么样" */
+function ProductPreview() {
+  return (
+    <div className="landing-preview">
+      <div className="preview-topbar">
+        <span className="preview-logo">灵犀</span>
+        <div className="preview-topbar-right">
+          <span className="preview-dot" />
+          <span className="preview-dot" />
+          <span className="preview-dot" />
+        </div>
+      </div>
+      <div className="preview-body">
+        <div className="preview-sidebar">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="preview-sidebar-item" style={{ animationDelay: `${i * 80}ms` }} />
+          ))}
+        </div>
+        <div className="preview-chat">
+          <div className="preview-msg preview-msg--user" style={{ animationDelay: '200ms' }}>你好，查一下订单状态</div>
+          <div className="preview-msg preview-msg--ai" style={{ animationDelay: '400ms' }}>您好！正在为您查询...</div>
+          <div className="preview-msg preview-msg--user" style={{ animationDelay: '600ms' }}>订单号 20260819001</div>
+          <div className="preview-msg preview-msg--ai" style={{ animationDelay: '800ms' }}>已发货，预计明天到达 📦</div>
+        </div>
+        <div className="preview-source">
+          <div className="preview-source-label">知识溯源</div>
+          <div className="preview-source-line" />
+          <div className="preview-source-line preview-source-line--short" />
+          <div className="preview-source-line" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 品牌落地页：记忆点 = 网格背景 + 光点漂浮 + 产品预览 */
 export function LandingPage() {
   return (
     <div className="landing">
@@ -40,6 +72,11 @@ export function LandingPage() {
           </div>
         </section>
 
+        {/* 产品预览区 */}
+        <section className="landing__preview">
+          <ProductPreview />
+        </section>
+
         <section className="landing__features">
           <Row gutter={[16, 16]}>
             {[
@@ -69,6 +106,12 @@ export function LandingPage() {
             ))}
           </Row>
         </section>
+
+        {/* Footer */}
+        <footer className="landing__footer">
+          <span>© 2026 灵犀 · 星河智家</span>
+          <Link to="/faq">帮助中心</Link>
+        </footer>
       </div>
     </div>
   );

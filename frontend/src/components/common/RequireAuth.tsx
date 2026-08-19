@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import type { Role } from '@/contracts/api';
-import ForbiddenPage from '@/pages/ForbiddenPage';
+import ErrorPage from '@/pages/ErrorPage';
 
 interface RequireAuthProps {
   /** 允许访问的角色集合；缺省表示任意已登录用户 */
@@ -25,7 +25,7 @@ export function RequireAuth({ roles, children }: RequireAuthProps) {
   }
   if (roles && (!role || !roles.includes(role))) {
     // 已登录但角色不足 → 展示 403 页，而非踢回登录页
-    return <ForbiddenPage />;
+    return <ErrorPage type="403" />;
   }
   return <>{children}</>;
 }

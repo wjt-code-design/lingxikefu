@@ -96,7 +96,7 @@ export function SessionsPage() {
 
   return (
     <div className="agent-sessions">
-      <Typography.Title level={4}>会话列表</Typography.Title>
+      <Typography.Title level={3}>会话列表</Typography.Title>
       <AppTable<Session>
         rowKey="id"
         loading={isLoading}

@@ -114,7 +114,7 @@ export function TicketsPage() {
   return (
     <div className="agent-tickets">
       <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
-        <Typography.Title level={4} style={{ margin: 0 }}>
+        <Typography.Title level={3} style={{ margin: 0 }}>
           工单列表
         </Typography.Title>
         <Select<TicketStatus | undefined>

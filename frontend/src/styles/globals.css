@@ -25,6 +25,10 @@ body {
     background-color 0.2s ease,
     color 0.2s ease;
   -webkit-font-smoothing: antialiased;
+  /* 禁止双击缩放，提升触摸响应 */
+  touch-action: manipulation;
+  /* 安全区适配（iPhone 刘海屏等） */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
 /* ---------- 通用动效（轻量化，不花哨） ---------- */
@@ -281,6 +285,15 @@ body {
 .my-tickets__filter {
   margin-bottom: var(--space-3);
 }
+/* MyTicketsPage 移动端适配 */
+@media (max-width: 767px) {
+  .my-tickets__filter .ant-select {
+    width: 100% !important;
+  }
+  .my-tickets__empty {
+    padding: 32px 0;
+  }
+}
 
 /* 顶栏 */
 .app-header {
@@ -298,12 +311,16 @@ body {
 /* 通用页面容器 */
 .page {
   padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
 }
 .page--chat,
 .page--widget {
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  max-width: none;
+  margin: 0;
 }
 
 /* 空态 / 加载态 */
@@ -1087,6 +1104,10 @@ body {
     padding: 0;
   }
 
+  /* 气泡移动端：限制最大宽度，防止溢出 */
+  .chat-msg__bubble {
+    max-width: calc(100vw - 88px);
+  }
 
   .wb-mobile-bar {
     display: flex;
@@ -1427,6 +1448,77 @@ body {
   color: var(--color-brand) !important;
 }
 
+/* WidgetShell 移动端顶栏适配（≤767px） */
+@media (max-width: 767px) {
+  .widget-shell__bar {
+    padding: 6px 12px;
+    flex-wrap: nowrap;
+  }
+  .widget-shell__left {
+    gap: 6px;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .widget-shell__brand {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  .widget-shell__back {
+    min-height: 44px;
+    padding: 4px 8px !important;
+    font-size: 13px !important;
+  }
+  .widget-shell .ant-space {
+    gap: 4px;
+  }
+  .widget-shell .notification-bell {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ===================== 错误页面（403/404 统一样式） ===================== */
+.error-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-page);
+  padding: var(--space-8);
+}
+
+.error-page .ant-result-title {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--color-brand);
+}
+
+.error-page .ant-result-subtitle {
+  font-size: 16px;
+  color: var(--text-2);
+  margin-top: var(--space-3);
+}
+/* ErrorPage 移动端适配 */
+@media (max-width: 767px) {
+  .error-page {
+    padding: 24px 16px;
+    padding-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+  .error-page .ant-result {
+    padding: 24px;
+  }
+  .error-page .ant-result-title {
+    font-size: 36px;
+  }
+  .error-page .ant-result-subtitle {
+    font-size: 14px;
+  }
+  .error-page .ant-btn {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
 /* ===================== T4'：服务首页（Landing）+ 个人中心（Profile） ===================== */
 /* Landing：网格背景 + 光点漂浮（记忆点） */
 .landing {
@@ -1546,7 +1638,174 @@ body {
   margin-bottom: 12px;
 }
 
-/* Landing 移动端响应式 */
+/* Landing 产品预览区 */
+.landing__preview {
+  margin-top: 64px;
+  animation: fade-in-up 0.8s ease-out 0.3s both;
+}
+
+.landing-preview {
+  max-width: 900px;
+  margin: 0 auto;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  background: var(--color-surface);
+}
+
+.preview-topbar {
+  height: 44px;
+  background: linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-dark) 100%);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+}
+
+.preview-logo {
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.preview-topbar-right {
+  display: flex;
+  gap: 8px;
+}
+
+.preview-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.preview-body {
+  display: grid;
+  grid-template-columns: 180px 1fr 200px;
+  height: 320px;
+}
+
+.preview-sidebar {
+  background: var(--bg-page);
+  border-right: 1px solid var(--border);
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.preview-sidebar-item {
+  height: 36px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-tertiary);
+  animation: shimmer 1.5s infinite;
+}
+
+.preview-chat {
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.preview-msg {
+  max-width: 70%;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  line-height: 1.5;
+  animation: msg-slide-in 0.5s ease-out both;
+}
+
+.preview-msg--user {
+  align-self: flex-end;
+  background: var(--color-brand);
+  color: white;
+  border-bottom-right-radius: 4px;
+}
+
+.preview-msg--ai {
+  align-self: flex-start;
+  background: var(--color-surface-tertiary);
+  color: var(--text-primary);
+  border-bottom-left-radius: 4px;
+}
+
+.preview-source {
+  background: var(--bg-page);
+  border-left: 1px solid var(--border);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.preview-source-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.preview-source-line {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--color-surface-tertiary);
+  animation: shimmer 1.5s infinite;
+}
+
+.preview-source-line--short {
+  width: 60%;
+}
+
+@keyframes msg-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes shimmer {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+/* Landing Footer */
+.landing__footer {
+  margin-top: 64px;
+  padding: 24px 0;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+}
+
+.landing__footer a {
+  color: var(--color-brand);
+  text-decoration: none;
+  transition: color var(--dur-fast);
+}
+
+.landing__footer a:hover {
+  color: var(--color-brand-dark);
+}
+
+/* Landing 移动端响应式 - 更新 */
 @media (max-width: 768px) {
   .landing {
     padding: 32px 16px 40px;
@@ -1564,6 +1823,41 @@ body {
   .landing__cta .ant-btn {
     width: 100%;
   }
+  
+  /* 产品预览区移动端 */
+  .landing__preview {
+    margin-top: 40px;
+  }
+  
+  .preview-body {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+  
+  .preview-sidebar {
+    display: none;
+  }
+  
+  .preview-source {
+    display: none;
+  }
+  
+  .preview-chat {
+    height: 240px;
+    padding: 16px;
+  }
+  
+  .preview-msg {
+    max-width: 85%;
+    font-size: 12px;
+  }
+  
+  .landing__footer {
+    margin-top: 40px;
+    flex-direction: column;
+    gap: 12px;
+  }
+  
   .landing__features {
     margin-top: 32px;
   }
@@ -1573,6 +1867,7 @@ body {
 @media (max-width: 768px) {
   .profile {
     padding: 16px;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
   .profile__hero {
     flex-direction: column;
@@ -1582,6 +1877,14 @@ body {
   .profile__hero-meta {
     justify-content: center;
     flex-wrap: wrap;
+  }
+  .profile__quota-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .profile__timeline-item {
+    gap: 10px;
   }
 }
 

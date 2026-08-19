@@ -141,3 +141,33 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+@media (max-width: 767px) {
+  .audit-page {
+    padding: 12px;
+  }
+  .audit-page__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .audit-page__title {
+    font-size: 20px !important;
+  }
+  .audit-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .audit-filters__input {
+    width: 100%;
+  }
+  .audit-filters__count {
+    margin-left: 0;
+  }
+  .audit-table .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  .audit-table .ant-table {
+    min-width: 600px;
+  }
+}

@@ -49,6 +49,31 @@
   font-size: 13px;
   color: var(--text-3);
 }
+
+@media (max-width: 767px) {
+  .stats-page {
+    max-width: 100%;
+    padding: 0 12px;
+  }
+  .stats-page__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .stats-page__title {
+    font-size: 20px !important;
+  }
+  .kpi-card__value {
+    font-size: 22px;
+  }
+  .stats-chart-grid {
+    grid-template-columns: 1fr;
+  }
+  .stats-chart-card {
+    padding: 12px;
+  }
+}
+
 .stats-page__spin {
   display: block;
   text-align: center;

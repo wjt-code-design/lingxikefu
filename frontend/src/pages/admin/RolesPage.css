@@ -77,3 +77,16 @@
   font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
   font-size: 12px;
 }
+
+@media (max-width: 767px) {
+  .roles-page {
+    padding: 12px;
+  }
+  .roles-grid {
+    grid-template-columns: 1fr;
+  }
+  .role-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

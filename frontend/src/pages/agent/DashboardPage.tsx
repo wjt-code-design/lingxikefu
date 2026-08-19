@@ -148,7 +148,7 @@ export function DashboardPage() {
   return (
     <div className="dash-page">
       <div className="dash-page__header">
-        <Typography.Title level={4} className="dash-page__title">
+        <Typography.Title level={3} className="dash-page__title">
           客服工作台
         </Typography.Title>
         <Typography.Text className="dash-page__subtitle">

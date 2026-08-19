@@ -29,7 +29,6 @@ const AgentSessionsPage = lazy(() => import('@/pages/agent/SessionsPage'));
 const AgentCustomersPage = lazy(() => import('@/pages/agent/CustomersPage'));
 const AgentTicketsPage = lazy(() => import('@/pages/agent/TicketsPage')); // T1：工单流转
 const KnowledgePage = lazy(() => import('@/pages/admin/KnowledgePage'));
-const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 const MyTicketsPage = lazy(() => import('@/pages/MyTicketsPage'));
 const UsersPage = lazy(() => import('@/pages/admin/UsersPage'));
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'));
@@ -43,9 +42,8 @@ const RolesPage = lazy(() => import('@/pages/admin/RolesPage'));
 const AgentDashboardPage = lazy(() => import('@/pages/agent/DashboardPage'));
 const KbSearchPage = lazy(() => import('@/pages/agent/KbSearchPage'));
 const FaqPage = lazy(() => import('@/pages/FaqPage'));
-const HelpPage = lazy(() => import('@/pages/HelpPage'));
 // T4'：新路由（403/个人中心/服务首页）
-const ForbiddenPage = lazy(() => import('@/pages/ForbiddenPage'));
+const ErrorPage = lazy(() => import('@/pages/ErrorPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 
@@ -82,13 +80,11 @@ export function AppRoutes() {
           <Route index element={<WidgetPage />} />
         </Route>
 
-        {/* Phase3：/faq /help 匿名公开页（无需登录，WidgetShell 外壳） */}
+        {/* Phase3：/faq 匿名公开页（/help 重定向到 /faq，内容已合并） */}
         <Route path="/faq" element={<WidgetShell />}>
           <Route index element={<FaqPage />} />
         </Route>
-        <Route path="/help" element={<WidgetShell />}>
-          <Route index element={<HelpPage />} />
-        </Route>
+        <Route path="/help" element={<Navigate to="/faq" replace />} />
 
         <Route
           path="/chat"
@@ -164,11 +160,11 @@ export function AppRoutes() {
         </Route>
 
         {/* T4'：/403 无权限 */}
-        <Route path="/403" element={<ForbiddenPage />} />
+        <Route path="/403" element={<ErrorPage type="403" />} />
 
         {/* T4'：/ 服务首页——已登录按角色分流，未登录展示品牌落地页 */}
         <Route path="/" element={role ? <Navigate to={home} replace /> : <LandingPage />} />
-        <Route path="*" element={<NotFoundPage />} />
+        <Route path="*" element={<ErrorPage type="404" />} />
       </Routes>
     </Suspense>
   );

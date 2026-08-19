@@ -21,3 +21,19 @@
   position: relative;
   z-index: 1;
 }
+
+/* 移动端适配 */
+@media (max-width: 767px) {
+  .agent-customers {
+    padding: 12px;
+  }
+  .agent-customers .ant-card {
+    border-radius: var(--radius-sm);
+  }
+  .agent-customers .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  .agent-customers .ant-table {
+    min-width: 600px;
+  }
+}

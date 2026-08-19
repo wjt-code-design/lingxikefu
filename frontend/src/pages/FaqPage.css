@@ -1,4 +1,95 @@
-/* ============================================================
+.faq__quick-start {
+  margin-bottom: var(--space-8);
+  padding: var(--space-6);
+  background: linear-gradient(135deg, rgba(83, 159, 216, 0.05) 0%, rgba(83, 159, 216, 0.02) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.faq__quick-start-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.faq__quick-start-icon {
+  font-size: 20px;
+  color: var(--color-brand);
+}
+
+.faq__quick-start-title {
+  margin: 0 !important;
+  font-size: 18px !important;
+  font-weight: 600 !important;
+}
+
+.faq__quick-start-steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-5);
+  margin-bottom: var(--space-5);
+}
+
+.faq__quick-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-2);
+}
+
+.faq__quick-step strong {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.faq__quick-step span {
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.faq__quick-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* FaqPage 中等移动端（≤768px） */
+@media (max-width: 768px) {
+  .faq {
+    padding: 20px 16px 48px;
+  }
+  .faq__title {
+    font-size: 24px !important;
+  }
+  .faq__quick-start {
+    padding: var(--space-4);
+  }
+  .faq__quick-start-title {
+    font-size: 16px !important;
+  }
+}
+
+@media (max-width: 640px) {
+  .faq__quick-start-steps {
+    grid-template-columns: 1fr;
+    gap: var(--space-4);
+  }
+  
+  .faq__quick-step {
+    flex-direction: row;
+    text-align: left;
+  }
+}
    FAQ 公开浏览页（Phase 3 · 冷灰统一调性）
    冷灰底 + 海盐蓝点缀 + 标准圆角。
    仅消费 tokens.css 变量，禁止硬编码 hex。
@@ -292,6 +383,21 @@
   .faq-item__cat,
   .faq-item__meta {
     display: none; /* 窄屏隐藏分类/状态标签，保持行紧凑 */
+  }
+  /* 分类 Tab 移动端横向滚动 */
+  .faq__cats {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    padding-bottom: 4px;
+  }
+  .faq__cats::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
+  .faq__cat {
+    flex-shrink: 0;
+    white-space: nowrap;
   }
 }
 

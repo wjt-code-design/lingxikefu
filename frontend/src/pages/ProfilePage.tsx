@@ -24,9 +24,9 @@ export function ProfilePage() {
   if (isError || !me) return <QueryErrorState title="个人信息加载失败" onRetry={() => refetch()} />;
 
   const account = me.email || me.phone || '—';
-  const quotaLeft = me.quota_left ?? 0;
-  const quotaTotal = 100; // 假设总额度 100
-  const quotaPercent = Math.min(100, Math.round((quotaLeft / quotaTotal) * 100));
+  const quotaLeft = me.quota_left;
+  const quotaTotal = me.quota_total; // 从后端获取，可能为 undefined
+  const quotaPercent = quotaTotal ? Math.min(100, Math.round((quotaLeft! / quotaTotal) * 100)) : 0;
 
   // 首字母（邮箱取第一个字，手机取后四位）
   const initial = me.email
@@ -66,16 +66,22 @@ export function ProfilePage() {
         <div className="profile__quota-head">
           <Typography.Text strong>对话额度</Typography.Text>
           <Typography.Text type="secondary">
-            已使用 {quotaTotal - quotaLeft} / {quotaTotal}
+            {quotaTotal ? `已使用 ${quotaTotal - quotaLeft!} / ${quotaTotal}` : '额度信息以管理员设置为准'}
           </Typography.Text>
         </div>
-        <Progress
-          percent={quotaPercent}
-          strokeColor={quotaPercent > 50 ? '#4DA07F' : quotaPercent > 20 ? '#E0A86A' : '#D97A7A'}
-          trailColor="var(--border)"
-          showInfo={false}
-          size={['100%', 8]}
-        />
+        {quotaTotal ? (
+          <Progress
+            percent={quotaPercent}
+            strokeColor={quotaPercent > 50 ? '#4DA07F' : quotaPercent > 20 ? '#E0A86A' : '#D97A7A'}
+            trailColor="var(--border)"
+            showInfo={false}
+            size={['100%', 8]}
+          />
+        ) : (
+          <Typography.Text type="secondary" style={{ fontSize: 13 }}>
+            请联系管理员了解您的额度详情
+          </Typography.Text>
+        )}
       </Card>
 
       {/* 最近会话时间线 */}

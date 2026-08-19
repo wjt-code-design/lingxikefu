@@ -44,6 +44,19 @@
   padding: 12px;
 }
 
+@media (max-width: 767px) {
+  .kb-layout {
+    flex-direction: column;
+  }
+  .kb-sidebar {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+  .kb-main {
+    width: 100%;
+  }
+}
+
 .kb-sidebar__header {
   display: flex;
   align-items: center;

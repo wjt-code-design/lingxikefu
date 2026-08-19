@@ -32,7 +32,7 @@ export function WidgetShell() {
             className="widget-shell__brand"
             onClick={() => navigate(role ? home : '/')}
           >
-            <Typography.Text strong>灵犀 · 星河智家</Typography.Text>
+            <Typography.Text strong>灵犀</Typography.Text>
           </button>
           {showBack && (
             <Button

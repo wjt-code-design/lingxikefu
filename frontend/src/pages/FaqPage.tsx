@@ -1,16 +1,18 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Input, Typography } from 'antd';
+import { Button, Input, Typography } from 'antd';
 import {
   CarryOutOutlined,
   DownOutlined,
   InfoCircleOutlined,
   QuestionCircleOutlined,
+  RocketOutlined,
   SearchOutlined,
   SwapOutlined,
   ToolOutlined,
   UserOutlined,
 } from '@ant-design/icons';
+import { Link } from 'react-router-dom';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { getPublicFaq } from '@/api/faq';
 import type { DocStatus, FaqKBItem } from '@/contracts/api';
@@ -282,6 +284,34 @@ export function FaqPage() {
   return (
     <div className="faq">
       <div className="faq__inner">
+        {/* 快速开始引导（原 HelpPage 内容合并） */}
+        <section className="faq__quick-start">
+          <div className="faq__quick-start-head">
+            <RocketOutlined className="faq__quick-start-icon" />
+            <Typography.Title level={4} className="faq__quick-start-title">快速开始</Typography.Title>
+          </div>
+          <div className="faq__quick-start-steps">
+            <div className="faq__quick-step">
+              <span className="faq__quick-num">1</span>
+              <strong>登录账号</strong>
+              <span>邮箱或手机号注册后即可使用</span>
+            </div>
+            <div className="faq__quick-step">
+              <span className="faq__quick-num">2</span>
+              <strong>发起对话</strong>
+              <span>直接输入问题或点击快捷卡片</span>
+            </div>
+            <div className="faq__quick-step">
+              <span className="faq__quick-num">3</span>
+              <strong>转人工</strong>
+              <span>问题未解决可一键创建工单</span>
+            </div>
+          </div>
+          <Link to="/login">
+            <Button type="primary" size="small">立即体验</Button>
+          </Link>
+        </section>
+
         {/* 顶部说明条 */}
         <div className="faq__notice" role="note">
           <InfoCircleOutlined aria-hidden="true" />

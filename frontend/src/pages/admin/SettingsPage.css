@@ -159,3 +159,23 @@
   color: var(--text-4);
   background: color-mix(in srgb, var(--text-4) 12%, transparent);
 }
+
+@media (max-width: 767px) {
+  .settings-page {
+    padding: 12px;
+  }
+  .settings-page__head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .settings-page__title {
+    font-size: 20px !important;
+  }
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+  .settings-card .ant-card-body {
+    padding: 12px;
+  }
+}

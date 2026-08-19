@@ -48,6 +48,7 @@ export interface MeResp {
   phone?: string;
   role: Role;
   quota_left: number;
+  quota_total?: number;
 }
 
 // ---------- Sessions ----------

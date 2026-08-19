@@ -76,3 +76,15 @@
     transition: none;
   }
 }
+
+@media (max-width: 767px) {
+  .feedback-page {
+    padding: 12px;
+  }
+  .feedback-page__header {
+    margin-bottom: 12px;
+  }
+  .feedback-card .ant-card-body {
+    padding: 8px;
+  }
+}

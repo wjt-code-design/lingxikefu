@@ -31,3 +31,18 @@
 .users-page__header {
   margin-bottom: 16px;
 }
+
+@media (max-width: 767px) {
+  .users-page {
+    padding: 12px;
+  }
+  .users-page__header {
+    margin-bottom: 12px;
+  }
+  .users-page .ant-table-wrapper {
+    overflow-x: auto;
+  }
+  .users-page .ant-table {
+    min-width: 600px;
+  }
+}
