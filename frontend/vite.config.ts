@@ -32,15 +32,16 @@ export default defineConfig({
     globals: false,
   },
   build: {
-    // antd 库固有体积（gzip ~304KB）不告警；业务入口已从 1.06MB 降至 ~403KB
-    chunkSizeWarningLimit: 1000,
+    // antd 库固有体积（gzip ~362KB）不告警；业务入口已从 1.06MB 降至 ~403KB
+    chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        // T3 chunk 优化：把 react / antd / 其余 vendor 独立分块
-        // （入口 1.06MB → 分块后缓存友好 + 消除 >500kB 警告；组件均按需 import 已生效）
+        // T3 chunk 优化：把 react / antd / icons / 其余 vendor 独立分块
+        // （入口 1.06MB → 分块后缓存友好；组件均按需 import 已生效，tree-shaking 正常工作）
         manualChunks: {
           'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          'antd-vendor': ['antd', '@ant-design/icons'],
+          'antd-vendor': ['antd'],
+          'antd-icons': ['@ant-design/icons'],
           'vendor': ['axios'],
         },
       },

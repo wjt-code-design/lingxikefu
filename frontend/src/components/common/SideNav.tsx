@@ -63,11 +63,20 @@ export function SideNav() {
       : []),
   ];
 
+  // 计算默认展开的分组：当前路由所在分组
+  const getDefaultOpenKeys = () => {
+    const path = location.pathname;
+    if (path.startsWith('/admin')) return ['admin-group'];
+    if (path.startsWith('/agent')) return ['agent-group'];
+    return [];
+  };
+
   return (
     <Menu
       className="side-nav"
       mode="inline"
       selectedKeys={[location.pathname]}
+      defaultOpenKeys={getDefaultOpenKeys()}
       items={items}
       onClick={({ key }) => navigate(key)}
     />

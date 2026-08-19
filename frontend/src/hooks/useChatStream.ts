@@ -66,6 +66,11 @@ export function useChatStream() {
     setState(INITIAL);
   }, []);
 
+  // P0-4：停止生成（中止进行中的流式响应，保留已接收的 tokens）
+  const stop = useCallback(() => {
+    abortRef.current?.abort();
+  }, []);
+
   /** 发起流式请求并逐事件更新本地状态。可被 AbortController 中断（新请求/卸载）。 */
   const stream = useCallback(async (req: Omit<ChatStreamReq, 'stream'>): Promise<void> => {
     abortRef.current?.abort();
@@ -146,5 +151,5 @@ export function useChatStream() {
     }
   }, []);
 
-  return { ...state, reset, stream };
+  return { ...state, reset, stop, stream };
 }

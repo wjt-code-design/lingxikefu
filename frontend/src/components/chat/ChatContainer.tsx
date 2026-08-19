@@ -63,7 +63,7 @@ export function ChatContainer({
   /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel） */
   onRegisterFill?: (fill: (text: string) => void) => void;
 }) {
-  const { stage, tokens, sources, messageId, userMessageId, ticketId, error, reset, stream } = useChatStream();
+  const { stage, tokens, sources, messageId, userMessageId, ticketId, error, reset, stop, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -403,6 +403,7 @@ export function ChatContainer({
             retry={retryText ? { text: retryText.text, onRetry } : null}
             onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
             onRegisterFill={onRegisterFill}
+            onStop={stop}
           />
         )}
       </div>

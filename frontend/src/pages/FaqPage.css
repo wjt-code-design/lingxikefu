@@ -79,7 +79,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .faq__quick-start-steps {
     grid-template-columns: 1fr;
     gap: var(--space-4);
@@ -90,6 +90,8 @@
     text-align: left;
   }
 }
+
+/* ============================================================
    FAQ 公开浏览页（Phase 3 · 冷灰统一调性）
    冷灰底 + 海盐蓝点缀 + 标准圆角。
    仅消费 tokens.css 变量，禁止硬编码 hex。
@@ -366,7 +368,7 @@
 }
 
 /* ---------- 响应式 ---------- */
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   .faq {
     padding: 20px 16px 48px;
   }

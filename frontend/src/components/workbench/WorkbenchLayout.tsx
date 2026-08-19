@@ -47,20 +47,26 @@ export function WorkbenchLayout() {
         </div>
       </div>
 
-      {/* 移动端抽屉：历史/溯源面板 */}
+      {/* 移动端抽屉：历史左滑（符合返回直觉）、溯源右滑（符合右侧详情心智模型） */}
       <Drawer
-        open={mobilePanel !== null}
+        open={mobilePanel === 'history'}
         onClose={() => setMobilePanel(null)}
         placement="left"
         width={300}
         styles={{ body: { padding: 0 } }}
         destroyOnClose
       >
-        {mobilePanel === 'history' ? (
-          <HistoryPanel />
-        ) : (
-          <SourcePanel sources={sources} onUseReply={fillReply ?? undefined} />
-        )}
+        <HistoryPanel />
+      </Drawer>
+      <Drawer
+        open={mobilePanel === 'source'}
+        onClose={() => setMobilePanel(null)}
+        placement="right"
+        width={300}
+        styles={{ body: { padding: 0 } }}
+        destroyOnClose
+      >
+        <SourcePanel sources={sources} onUseReply={fillReply ?? undefined} />
       </Drawer>
     </div>
   );

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Input, Space } from 'antd';
-import { CustomerServiceOutlined, RedoOutlined, SendOutlined } from '@ant-design/icons';
+import { CustomerServiceOutlined, PauseCircleOutlined, RedoOutlined, SendOutlined } from '@ant-design/icons';
 
 interface ComposerProps {
   disabled: boolean;
@@ -12,10 +12,12 @@ interface ComposerProps {
   onEscalate?: () => void;
   /** P1-3：快捷话术点击 → 填入输入框（callback 而非 ref，WorkbenchLayout 透传给 SourcePanel） */
   onRegisterFill?: (fill: (text: string) => void) => void;
+  /** P0-4：停止生成（流式响应中可用） */
+  onStop?: () => void;
 }
 
 /** 输入区：多行文本框 + 发送（流式中禁用；Enter 发送 / Shift+Enter 换行）。 */
-export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill }: ComposerProps) {
+export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, onStop }: ComposerProps) {
   const [text, setText] = useState('');
 
   // P1-3：把"填入输入框"能力注册给父组件（快捷话术调用）；卸载时注销
@@ -60,7 +62,17 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill }
             重试
           </Button>
         )}
-        {onEscalate && (
+        {disabled && onStop && (
+          <Button
+            danger
+            icon={<PauseCircleOutlined />}
+            onClick={onStop}
+            aria-label="停止生成"
+          >
+            停止
+          </Button>
+        )}
+        {onEscalate && !disabled && (
           <Button
             icon={<CustomerServiceOutlined />}
             onClick={onEscalate}
@@ -70,16 +82,18 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill }
             转人工
           </Button>
         )}
-        <Button
-          type="primary"
-          icon={<SendOutlined />}
-          onClick={submit}
-          loading={disabled}
-          disabled={disabled}
-          aria-label="发送"
-        >
-          发送
-        </Button>
+        {!disabled && (
+          <Button
+            type="primary"
+            icon={<SendOutlined />}
+            onClick={submit}
+            loading={disabled}
+            disabled={disabled}
+            aria-label="发送"
+          >
+            发送
+          </Button>
+        )}
       </Space.Compact>
     </div>
   );
