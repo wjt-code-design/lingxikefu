@@ -21,7 +21,7 @@ export function WidgetShell() {
   const role = useAuthStore((s) => s.role);
 
   const home = role === 'admin' ? '/admin/dashboard' : role === 'agent' ? '/agent/dashboard' : '/chat';
-  const showBack = role === 'user' && location.pathname !== '/chat';
+  const showBack = !!role && location.pathname !== home;
 
   return (
     <div className="widget-shell">
@@ -39,10 +39,10 @@ export function WidgetShell() {
               type="text"
               size="small"
               icon={<ArrowLeftOutlined />}
-              onClick={() => navigate('/chat')}
+              onClick={() => navigate(home)}
               className="widget-shell__back"
             >
-              返回对话
+              返回工作台
             </Button>
           )}
         </div>
