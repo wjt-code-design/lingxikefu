@@ -1,71 +1,116 @@
 /* ============================================================
-   灵犀 / Lingxi 设计 Token（海盐蓝治愈系 · 2026-08-17 重构定稿）
-   两层语义：
-   - :root = semantic-user（User 端：暖米底 + 海盐蓝 + 大圆角，对外）
-   - .app-workbench = semantic-workbench（内部台：冷灰底 + 发丝线 +
-     深一档强调 + 小圆角；Agent/Admin 共用，仅菜单权限不同）
-   唯一中深色 = 内部台侧栏 #2E5D85（白字 6.95:1，AA 达标）
-   调性：治愈通透 / 轻量 ins 简约 / 低饱和海盐蓝 / 浅色护眼（拒绝深色、赛博、厚重商务）
-   注意：AntD 主题由 theme.ts 的 JS token 驱动（与下方 CSS 变量同值，改色时两处同步）。
+   灵犀 / Lingxi 设计 Token（海盐蓝 · 冷灰统一 · 2026-08-19 v3）
+   
+   单一调色板家族：冷灰画布 + 海盐蓝点缀 + 品牌色光晕纵深。
+   全系统共用 :root（User / Agent / Admin），不再区分 warm/cool 两套。
+   唯一中深色 = 工作台侧栏 #2E5D85（白字 6.95:1，AA 达标）。
+
+   层级：
+   :root          → 全局基础（冷灰 #F2F5F8 + 海盐蓝 #539FD8）
+   .app-workbench → 工作台外壳覆盖（更深冷灰 #ECF0F4 + 发丝线 + 侧栏深色）
+
+   设计铁律：
+   - 背景禁止纯白/纯灰平涂，必须有纵深（渐变光晕 / 毛玻璃 / 双层阴影）
+   - 4px 间距基线，字体层级定死
+   - AntD 主题由 theme.ts JS token 驱动（改色时两处同步）
    ============================================================ */
+
 :root {
   /* ---- 品牌：海盐蓝系 ---- */
-  --color-brand: #539fd8; /* 交互主色（升档，保证对比） */
-  --color-brand-dark: #3e7cb1; /* hover/按压（更深一档） */
-  --color-brand-soft: rgba(83, 159, 216, 0.12); /* 主色浅底 */
-  --color-brand-pale: #96c8e8; /* 大面积浅蓝（气泡渐变/柔和底，治愈感保留） */
+  --color-brand: #539fd8;
+  --color-brand-dark: #3e7cb1;
+  --color-brand-deep: #2e5d85; /* 侧栏 / 深强调 */
+  --color-brand-soft: rgba(83, 159, 216, 0.10);
+  --color-brand-pale: #96c8e8;
+  --color-brand-whisper: rgba(83, 159, 216, 0.04); /* 极淡品牌色（氛围光晕） */
 
-  /* ---- 语义色（低饱和柔和系） ---- */
-  --color-accent: #73c9a8; /* 成功/在线 */
-  --color-amber: #f6c38e; /* 警告/处理中 */
-  --color-orange: #f6c38e; /* 转人工强调 */
-  --color-danger: #e58e8e; /* 错误/删除（柔和化，保调性） */
+  /* ---- 语义色 ---- */
+  --color-accent: #4da07f; /* 成功/在线 */
+  --color-amber: #e0a86a; /* 警告/处理中 */
+  --color-orange: #e0a86a; /* 转人工强调 */
+  --color-danger: #d97a7a; /* 错误/删除 */
 
-  /* ---- 文字层级（正文 #2F3E4E，禁止纯黑；次要 #74889C） ---- */
-  --text-1: #2f3e4e; /* 标题/正文 */
+  /* ---- 文字层级 ---- */
+  --text-1: #1e2d3d; /* 主标题（最深） */
   --text-2: #2f3e4e; /* 正文 */
-  --text-3: #6f8397; /* 辅助说明/时间戳（微加深提对比） */
-  --text-4: #8a9db0; /* 禁用/占位（提亮至 3.2:1，V2 修复） */
+  --text-3: #6b7f93; /* 辅助说明 */
+  --text-4: #8a9db0; /* 禁用/占位 */
 
-  /* ---- 背景/边框 ---- */
-  --color-surface: #ffffff; /* 卡片/输入框底 */
-  --bg-page: #faf8f4; /* 页面底（暖米白） */
-  --border: #e6f0f8; /* 分割线/描边 */
+  /* ---- 背景/边框（冷灰基调） ---- */
+  --color-surface: #ffffff;
+  --bg-page: #f2f5f8; /* 冷灰画布 */
+  --bg-page-deep: #ecf0f4; /* 更深冷灰（内容区底） */
+  --border: #e3e9ef; /* 发丝线 */
+  --border-strong: #d0d8e0; /* 强描边（hover/focus） */
 
-  /* ---- 几何（圆角统一：气泡/输入/卡片 16px，小标签 10px） ---- */
-  --radius-md: 16px;
-  --radius-sm: 10px; /* 小型标签 */
-  --shadow-card: 0 4px 14px rgba(148, 198, 232, 0.12); /* 只用柔和蓝影，禁用浓重黑阴影 */
+  /* ---- 几何（圆角） ---- */
+  --radius-md: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 16px; /* 大卡片/Landing */
+
+  /* ---- 阴影系统（双层：近影定形 + 远影纵深） ---- */
+  --shadow-sm: 0 1px 2px rgba(30, 45, 61, 0.04), 0 1px 3px rgba(30, 45, 61, 0.06);
+  --shadow-card: 0 2px 8px rgba(30, 45, 61, 0.06), 0 4px 16px rgba(30, 45, 61, 0.04);
+  --shadow-elevated: 0 4px 12px rgba(30, 45, 61, 0.08), 0 8px 24px rgba(30, 45, 61, 0.06);
+
+  /* ---- 4px 间距基线 ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 40px;
+  --space-9: 48px;
+  --space-10: 64px;
+
+  /* ---- 字体层级 ---- */
+  --font-display: 'Sora', 'Noto Sans SC', -apple-system, BlinkMacSystemFont,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Noto Sans SC', 'Sora', -apple-system, BlinkMacSystemFont,
+    'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 14px;
+  --text-md: 15px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px; /* h4 */
+  --text-3xl: 24px; /* h3 */
+  --text-4xl: 32px; /* h2 */
+  --text-5xl: 40px; /* h1 */
+
+  /* ---- 纵深氛围 ---- */
+  --atmo-gradient: linear-gradient(
+    180deg,
+    rgba(83, 159, 216, 0.06) 0%,
+    rgba(83, 159, 216, 0.02) 50%,
+    transparent 100%
+  );
+  --atmo-glow: radial-gradient(
+    60% 40% at 50% 0%,
+    rgba(83, 159, 216, 0.08) 0%,
+    transparent 70%
+  );
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(227, 233, 239, 0.6);
+  --glass-blur: blur(12px);
 
   /* ---- 动效节奏 ---- */
   --dur-fast: 150ms;
   --dur-base: 220ms;
   --dur-page: 280ms;
+  --dur-slow: 400ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* ===== semantic-workbench（内部工作台：Agent+Admin 共用外壳，仅菜单权限不同） =====
-   冷灰底 + 发丝线 + 深一档强调（#539FD8）+ 小圆角；侧栏 #2E5D85 白字（唯一中深色）。
-   挂在 AdminLayout 根节点 .app-workbench 上，User 端不受影响。 */
+/* ===== semantic-workbench（工作台外壳：AdminLayout） =====
+   更深冷灰底 + 发丝线 + 侧栏深色；侧栏 #2E5D85 白字（唯一中深色）。 */
 .app-workbench {
-  --color-brand: #539fd8; /* 强调深一档（控制台感） */
-  --color-brand-dark: #3e7cb1;
-  --color-brand-soft: rgba(83, 159, 216, 0.12);
-  --color-accent: #4da07f; /* 成功/在线（加深保对比） */
-  --color-amber: #e0a86a;
-  --color-orange: #e0a86a;
-  --color-danger: #d97a7a;
-
-  --text-1: #2f3e4e;
-  --text-2: #2f3e4e;
-  --text-3: #6b7f93;
-  --text-4: #8296a9;
-
-  --color-surface: #ffffff;
-  --bg-page: #f2f5f8; /* 浅冷灰内容区 */
-  --border: #e3e9ef; /* 发丝线 */
-
-  --radius-md: 10px; /* 小圆角（控制台感） */
-  --radius-sm: 8px;
-  --shadow-card: 0 2px 10px rgba(46, 93, 133, 0.08); /* 冷调轻影 */
+  --bg-page: #ecf0f4;
+  --border: #dce3ea;
+  --shadow-card: 0 1px 6px rgba(30, 45, 61, 0.05), 0 3px 12px rgba(30, 45, 61, 0.04);
 }

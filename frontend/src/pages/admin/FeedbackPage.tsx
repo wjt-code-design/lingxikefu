@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { Card, Empty, List, Space, Tag, Typography } from 'antd';
+import { Card, List, Space, Tag, Typography } from 'antd';
 import { listFeedback } from '@/api/admin';
+import { BrandEmpty } from '@/components/common/BrandEmpty';
 import './FeedbackPage.css';
 
 /**
@@ -26,7 +27,7 @@ export function FeedbackPage() {
         <Card className="feedback-card" loading />
       ) : items.length === 0 ? (
         <Card className="feedback-card">
-          <Empty description="暂无踩反馈" />
+          <BrandEmpty title="暂无踩反馈" />
         </Card>
       ) : (
         <Card

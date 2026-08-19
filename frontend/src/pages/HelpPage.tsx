@@ -14,7 +14,7 @@ import './HelpPage.css';
  * 帮助中心公开页（Phase 3 · 匿名可访问，挂 User 端 WidgetShell 下）
  * - 纯静态内容：三段式帮助（快速开始 / 功能说明 / 常见操作），直接用 JSX 结构呈现。
  * - 不引用任何需登录态的 API。
- * - 视觉：User 端暖米底 + 海盐蓝点缀 + 大圆角低密度；仅消费 tokens.css 变量，克制动效。
+ * - 视觉：冷灰统一调性 + 海盐蓝点缀；仅消费 tokens.css 变量，克制动效。
  */
 
 interface HelpStep {
@@ -79,15 +79,15 @@ const HELP_SECTIONS: HelpSection[] = [
     key: 'common',
     icon: <ControlOutlined />,
     title: '常见操作',
-    desc: '常用设置的快速指引',
+    desc: '常用功能的快速指引',
     steps: [
-      {
-        title: '主题切换',
-        desc: '在浅色 / 柔和两种浅色风格间切换，也可跟随系统设置。',
-      },
       {
         title: '查看我的工单',
         desc: '在「我的工单」中随时查看处理进度与客服回复。',
+      },
+      {
+        title: '个人中心',
+        desc: '查看账号信息、剩余额度和最近会话记录。',
       },
       {
         title: '管理后台入口',

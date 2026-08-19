@@ -117,7 +117,7 @@
   align-items: center;
   justify-content: center;
   padding: 40px 32px;
-  background: var(--color-surface);
+  background: var(--bg-page);
 }
 .auth-form__inner {
   width: 100%;

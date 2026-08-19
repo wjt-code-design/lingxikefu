@@ -1,20 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
-import { Button, Card, Col, Row, Spin, Tag, Typography } from 'antd';
-import { ArrowLeftOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { Card, Progress, Spin, Tag, Typography } from 'antd';
+import { UserOutlined } from '@ant-design/icons';
 import { me as fetchMe } from '@/api/auth';
 import { listSessions } from '@/api/sessions';
-import { useAuthStore } from '@/store/authStore';
 import { QueryErrorState } from '@/components/common/QueryErrorState';
 
 const ROLE_LABEL: Record<string, string> = { user: '普通用户', agent: '客服', admin: '管理员' };
+const ROLE_COLOR: Record<string, string> = { admin: 'gold', agent: 'cyan', user: 'blue' };
 
-/** 个人中心（T4'）：账号信息 + 额度 + 最近会话（GET /auth/me 已有）。 */
+/** 个人中心：大头像 + 进度条 + 时间线视觉增强 */
 export function ProfilePage() {
-  const navigate = useNavigate();
-  const role = useAuthStore((s) => s.role);
-  // 返回目标：user→对话，agent/admin→工作台（与 WidgetShell 品牌跳转一致）
-  const backPath = role === 'admin' ? '/admin/dashboard' : role === 'agent' ? '/agent/dashboard' : '/chat';
   const { data: me, isLoading, isError, refetch } = useQuery({
     queryKey: ['profile-me'],
     queryFn: fetchMe,
@@ -28,45 +23,82 @@ export function ProfilePage() {
   if (isLoading) return <Spin className="profile-loading" />;
   if (isError || !me) return <QueryErrorState title="个人信息加载失败" onRetry={() => refetch()} />;
 
+  const account = me.email || me.phone || '—';
+  const quotaLeft = me.quota_left ?? 0;
+  const quotaTotal = 100; // 假设总额度 100
+  const quotaPercent = Math.min(100, Math.round((quotaLeft / quotaTotal) * 100));
+
+  // 首字母（邮箱取第一个字，手机取后四位）
+  const initial = me.email
+    ? me.email.charAt(0).toUpperCase()
+    : me.phone
+      ? me.phone.slice(-4)
+      : '?';
+
   return (
     <div className="profile">
-      <Button type="text" icon={<ArrowLeftOutlined />} onClick={() => navigate(backPath)} className="profile__back">
-        返回{role === 'admin' || role === 'agent' ? '工作台' : '对话'}
-      </Button>
-      <Card className="profile__card">
-        <Typography.Title level={4}>个人中心</Typography.Title>
-        <Row gutter={[16, 12]}>
-          <Col xs={24} sm={12}>
-            <Typography.Text type="secondary">账号</Typography.Text>
-            <div className="profile__value">{me?.email || me?.phone || '—'}</div>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Typography.Text type="secondary">角色</Typography.Text>
-            <div className="profile__value">
-              <Tag color={me?.role === 'admin' ? 'gold' : me?.role === 'agent' ? 'cyan' : 'blue'}>
-                {ROLE_LABEL[me?.role ?? 'user']}
+      {/* 顶部大头像卡 */}
+      <Card className="profile__hero-card">
+        <div className="profile__hero">
+          <div className="profile__avatar">
+            <UserOutlined />
+            <span className="profile__avatar-initial">{initial}</span>
+          </div>
+          <div className="profile__hero-info">
+            <Typography.Title level={3} className="profile__name">
+              {account}
+            </Typography.Title>
+            <div className="profile__hero-meta">
+              <Tag color={ROLE_COLOR[me.role ?? 'user']}>
+                {ROLE_LABEL[me.role ?? 'user']}
               </Tag>
+              <span className="profile__hero-sep">·</span>
+              <span className="profile__hero-quota-label">剩余额度</span>
+              <span className="profile__hero-quota">{quotaLeft}</span>
+              <span className="profile__hero-quota-total">/ {quotaTotal}</span>
             </div>
-          </Col>
-          <Col xs={24} sm={12}>
-            <Typography.Text type="secondary">剩余对话额度</Typography.Text>
-            <div className="profile__value">{me?.quota_left ?? 0} 次</div>
-          </Col>
-        </Row>
+          </div>
+        </div>
       </Card>
 
-      <Card className="profile__card" title="最近会话">
+      {/* 额度进度条卡 */}
+      <Card className="profile__quota-card">
+        <div className="profile__quota-head">
+          <Typography.Text strong>对话额度</Typography.Text>
+          <Typography.Text type="secondary">
+            已使用 {quotaTotal - quotaLeft} / {quotaTotal}
+          </Typography.Text>
+        </div>
+        <Progress
+          percent={quotaPercent}
+          strokeColor={quotaPercent > 50 ? '#4DA07F' : quotaPercent > 20 ? '#E0A86A' : '#D97A7A'}
+          trailColor="var(--border)"
+          showInfo={false}
+          size={['100%', 8]}
+        />
+      </Card>
+
+      {/* 最近会话时间线 */}
+      <Card className="profile__timeline-card" title="最近会话">
         {sessions?.items.length ? (
-          sessions.items.map((s) => (
-            <div key={s.id} className="profile__session">
-              <span>{s.title || '新对话'}</span>
-              <span className="profile__session-time">
-                {new Date(s.updated_at).toLocaleString()}
-              </span>
-            </div>
-          ))
+          <div className="profile__timeline">
+            {sessions.items.map((s, i) => (
+              <div key={s.id} className="profile__timeline-item">
+                <div className="profile__timeline-rail">
+                  <div className="profile__timeline-dot" />
+                  {i < sessions.items.length - 1 && <div className="profile__timeline-line" />}
+                </div>
+                <div className="profile__timeline-content">
+                  <div className="profile__timeline-title">{s.title || '新对话'}</div>
+                  <div className="profile__timeline-time">
+                    {new Date(s.updated_at).toLocaleString()}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
-          <Typography.Text type="secondary">暂无会话</Typography.Text>
+          <Typography.Text type="secondary">暂无会话记录</Typography.Text>
         )}
       </Card>
     </div>

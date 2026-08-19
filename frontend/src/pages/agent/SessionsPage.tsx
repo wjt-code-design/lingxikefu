@@ -5,7 +5,7 @@ import { AppTable } from '@/components/common/AppTable';
 import { useNavigate } from 'react-router-dom';
 import { deleteSession, listSessions } from '@/api/sessions';
 import type { ApiError, Session } from '@/contracts/api';
-import { EmptyState } from '@/components/common/EmptyState';
+import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { useAuthStore } from '@/store/authStore';
 import './SessionsPage.css';
 
@@ -40,7 +40,7 @@ export function SessionsPage() {
   };
 
   if (!isLoading && items.length === 0) {
-    return <EmptyState title="暂无会话" description="用户发起对话后会出现在这里" />;
+    return <BrandEmpty title="暂无会话" hint="用户发起对话后会出现在这里" />;
   }
 
   const satisfactionLabel: Record<string, string> = {

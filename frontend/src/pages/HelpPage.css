@@ -1,6 +1,6 @@
 /* ============================================================
-   帮助中心公开页（Phase 3 · User 端）
-   暖米底（透出 body 渐变）+ 海盐蓝点缀 + 大圆角低密度，克制动效。
+   帮助中心公开页（Phase 3 · 冷灰统一调性）
+   冷灰底 + 海盐蓝点缀 + 标准圆角，克制动效。
    仅消费 tokens.css 变量，禁止硬编码 hex。
    挂在 WidgetShell 下（.widget-shell__body overflow:hidden），
    本页根节点自身负责滚动（flex:1 + overflow-y:auto）。

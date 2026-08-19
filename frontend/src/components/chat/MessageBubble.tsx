@@ -51,7 +51,6 @@ export function MessageBubble({
   layout?: 'self' | 'observe';
 }) {
   const variant = getVariant(msg.role, layout);
-  const isCustomer = msg.role === 'user'; // 顾客侧（不论 self/observe 都在 self-side 或 observe-other）
   const isUser = msg.role === 'user';
   const isAgent = msg.role === 'agent';
   const isAi = msg.role === 'assistant';
@@ -131,7 +130,7 @@ export function MessageBubble({
         </div>
       );
     }
-    if (isCustomer && layout === 'observe') {
+    if (isUser && layout === 'observe') {
       return <div className="chat-msg__identity">顾客</div>;
     }
     return null;
