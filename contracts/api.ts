@@ -75,13 +75,24 @@ export interface SessionDetail {
 }
 
 // ---------- Messages ----------
+// role 含义（P2：人工客服消息融合 · 2026-08-19）：
+//   - 'user'      : 顾客（C 端）发的消息
+//   - 'assistant' : AI 智能客服回复（含 RAG 引用）
+//   - 'agent'     : 人工客服回复（由人工介入会话后产生，契约 P2 起支持）
+// 前端 layout 规则（B 视野感知）：
+//   - user 视角：user → 右（"我"）；assistant / agent → 左（对面的人）
+//   - observe 视角（agent/admin 打开既有会话）：user / assistant → 左（顾客+AI）；
+//     agent → 右（"我"，当前登录的客服）
 export interface Message {
   id: string;
   session_id: string;
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'agent';
   content: string;
   created_at: string;
   intent?: string;
+  /** 仅 agent 角色携带：客服标识（工号 / 昵称），用于气泡身份标签 */
+  agent_id?: string;
+  agent_name?: string;
 }
 export interface MessageSource {
   chunk_id: string;

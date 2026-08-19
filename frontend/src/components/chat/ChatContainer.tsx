@@ -118,11 +118,13 @@ export function ChatContainer({
         setMessages(
           d.messages.map((m) => ({
             id: m.id,
-            role: m.role as 'user' | 'assistant',
+            // P2：契约扩展 agent role 后透传所有角色（含人工客服消息）
+            role: m.role as 'user' | 'assistant' | 'agent',
             content: m.content,
             status: 'done',
             createdAt: new Date(m.created_at || Date.now()).getTime(),
             ...(m.role === 'assistant' ? { messageId: m.id } : {}),
+            ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
           }))
         );
       })
