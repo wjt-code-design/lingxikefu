@@ -459,7 +459,7 @@ body {
 .chat-list {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
   width: 100%;
   max-width: 820px;
   margin: 0 auto;
@@ -667,15 +667,15 @@ body {
 
 /* 来源折叠（海盐蓝胶囊） */
 .chat-source {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 .chat-source__toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 1px 10px;
-  font-size: 12px;
-  line-height: 20px;
+  gap: 5px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 18px;
   color: var(--color-brand-dark);
   background: rgba(150, 200, 232, 0.1);
   border: 1px solid var(--color-brand);
@@ -687,35 +687,32 @@ body {
   background: rgba(150, 200, 232, 0.2);
 }
 .chat-source__panel {
-  margin-top: 6px;
+  margin-top: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 4px 8px;
+  padding: 3px 6px;
   background: rgba(150, 200, 232, 0.05);
 }
 .chat-source__group {
-  padding: 4px 0;
+  padding: 3px 0;
 }
 .chat-source__group + .chat-source__group {
   border-top: 1px dashed var(--border);
 }
 .chat-source__group-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-2);
-  margin-bottom: 2px;
+  margin-bottom: 1px;
 }
 .chat-source__refs {
   font-weight: 400;
   color: var(--color-brand-dark);
-  margin-left: 4px;
+  margin-left: 3px;
 }
 .chat-source__snippet {
-  font-size: 12px;
-  color: var(--text-3);
-  max-height: 96px;
-  overflow-y: auto;
-  white-space: pre-wrap;
+  font-size: 11px;
+  max-height: 80px;
 }
 .chat-source__chunk {
   padding: 2px 6px;
