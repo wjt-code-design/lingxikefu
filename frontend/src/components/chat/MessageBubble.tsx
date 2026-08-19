@@ -168,8 +168,8 @@ export function MessageBubble({
         ) : (
           <Typography.Paragraph className="chat-msg__text">{msg.content}</Typography.Paragraph>
         )}
-        {!isUser && msg.sources && msg.sources.length > 0 && <SourceAccordion sources={msg.sources} />}
-        {!isUser && msg.ticketId && (
+        {!isUser && !isAgent && msg.sources && msg.sources.length > 0 && <SourceAccordion sources={msg.sources} />}
+        {!isUser && !isAgent && msg.ticketId && (
           <div className="chat-msg__ticket">
             已为您创建工单 <b>#{msg.ticketId.slice(0, 8)}</b>，客服将尽快跟进
           </div>

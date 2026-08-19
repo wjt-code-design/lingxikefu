@@ -44,6 +44,70 @@ body {
   }
 }
 
+/* 卡片入场：淡入 + 向上位移（Landing/Profile/Help 等页面卡片） */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* 页面入场：柔和淡入 */
+.page,
+.widget-shell__body {
+  animation: page-in var(--dur-page) var(--ease-out);
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* 卡片交错入场（Landing features） */
+.landing__feature {
+  animation: card-in var(--dur-page) var(--ease-out) both;
+}
+.landing__feature:nth-child(1) { animation-delay: 0ms; }
+.landing__feature:nth-child(2) { animation-delay: 80ms; }
+.landing__feature:nth-child(3) { animation-delay: 160ms; }
+
+/* Profile 卡片入场 */
+.profile > .ant-card {
+  animation: card-in var(--dur-page) var(--ease-out) both;
+}
+.profile > .ant-card:nth-child(1) { animation-delay: 0ms; }
+.profile > .ant-card:nth-child(2) { animation-delay: 60ms; }
+.profile > .ant-card:nth-child(3) { animation-delay: 120ms; }
+
+/* FAQ 条目 hover 微交互增强 */
+.faq-item {
+  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.faq-item:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+.faq-item.is-open {
+  transform: none;
+  box-shadow: var(--shadow-card);
+}
+
+/* Help 卡片 hover 增强 */
+.help__card {
+  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.help__card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-elevated);
+}
+
 /* 按钮 hover：缓慢提亮 + 轻微放大 1.02 倍（轻量化）。
    I3 修复：scale 仅主操作按钮（primary / 热问胶囊），
    排除 Space.Compact 内小按钮（重试/转人工/发送）与纯图标按钮（赞踩/复制）——避免组内跳动 */
@@ -422,14 +486,14 @@ body {
   background: var(--color-brand);
   color: #ffffff;
   border: 1px solid var(--color-brand);
-  border-top-right-radius: 4px;
+  border-top-left-radius: 4px; /* 折角朝左（靠右的气泡） */
 }
 /* AI 消息：纯白卡片 + 浅蓝细边框 + 柔和蓝影 */
 .chat-msg--ai .chat-msg__bubble {
   background: #ffffff;
   border: 1px solid var(--border);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  border-top-left-radius: 4px;
+  border-top-right-radius: 4px; /* 折角朝右（靠左的气泡） */
 }
 
 /* ---------- 人工客服消息气泡（P2：role='agent'） ---------- */
@@ -1480,6 +1544,45 @@ body {
   font-size: 32px;
   color: var(--color-brand);
   margin-bottom: 12px;
+}
+
+/* Landing 移动端响应式 */
+@media (max-width: 768px) {
+  .landing {
+    padding: 32px 16px 40px;
+  }
+  .landing__title {
+    font-size: 32px !important;
+  }
+  .landing__sub {
+    font-size: 15px;
+  }
+  .landing__cta {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .landing__cta .ant-btn {
+    width: 100%;
+  }
+  .landing__features {
+    margin-top: 32px;
+  }
+}
+
+/* Profile 个人中心移动端响应式 */
+@media (max-width: 768px) {
+  .profile {
+    padding: 16px;
+  }
+  .profile__hero {
+    flex-direction: column;
+    text-align: center;
+    gap: 16px;
+  }
+  .profile__hero-meta {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
 }
 
 /* ========== Profile 个人中心 ========== */
