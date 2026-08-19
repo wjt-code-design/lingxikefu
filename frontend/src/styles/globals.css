@@ -1344,6 +1344,23 @@ body {
   background: var(--glass-bg);
   border-bottom: 1px solid var(--glass-border);
   backdrop-filter: var(--glass-blur);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 16px;
+}
+.widget-shell__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.widget-shell__back {
+  font-size: 13px !important;
+  color: var(--text-2);
+  padding: 2px 8px !important;
+}
+.widget-shell__back:hover {
+  color: var(--color-brand) !important;
 }
 
 /* ===================== T4'：服务首页（Landing）+ 个人中心（Profile） ===================== */
