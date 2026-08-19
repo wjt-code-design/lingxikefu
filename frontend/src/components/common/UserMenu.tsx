@@ -1,6 +1,5 @@
 import { Avatar, Dropdown, Tag, Typography } from 'antd';
 import {
-  DashboardOutlined,
   FileTextOutlined,
   LogoutOutlined,
   ProfileOutlined,
@@ -18,10 +17,11 @@ const ROLE_TAG: Record<Role, { label: string; color: string }> = {
 };
 
 /**
- * 用户菜单（三端复用，角色化收敛 2026-08-18）：
+ * 用户菜单（精简版 2026-08-19）：
  * - 通用项：个人中心 / 退出登录；
- * - user：我的工单（/tickets，只读追踪自己的工单进度）；
- * - agent/admin：客服工作台 / 后台管理（/agent 或 /admin，回到工作台）+ 工单管理（/agent/tickets 处理页）。
+ * - user：额外保留"我的工单"——侧边栏无入口，只能从下拉菜单进；
+ * - agent/admin：去掉"后台管理/工单管理"——这两项在侧边栏已经存在，
+ *   重复入口会让用户困惑（哪个是真正的入口？）。
  * 由 AppHeader 与 WidgetShell 接入；无登录态时渲染 null。
  */
 export function UserMenu() {
@@ -33,7 +33,6 @@ export function UserMenu() {
   const initial = (user.email || user.phone || '客').slice(0, 1).toUpperCase();
   const tag = ROLE_TAG[role];
   const isStaff = role === 'agent' || role === 'admin';
-  const workbenchPath = role === 'admin' ? '/admin/dashboard' : '/agent/dashboard';
 
   const handleLogout = async () => {
     try {
@@ -51,24 +50,15 @@ export function UserMenu() {
       menu={{
         items: [
           { key: 'profile', icon: <ProfileOutlined />, label: '个人中心' },
-          ...(isStaff
-            ? [
-                {
-                  key: 'workbench',
-                  icon: <DashboardOutlined />,
-                  label: role === 'admin' ? '后台管理' : '客服工作台',
-                },
-                { key: 'tickets', icon: <FileTextOutlined />, label: '工单管理' },
-              ]
-            : [{ key: 'tickets', icon: <FileTextOutlined />, label: '我的工单' }]),
+          // 仅 user 角色显示"我的工单"——侧边栏无入口，菜单是唯一通路
+          ...(isStaff ? [] : [{ key: 'tickets', icon: <FileTextOutlined />, label: '我的工单' }]),
           { type: 'divider' },
           { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
         ],
         onClick: ({ key }) => {
           if (key === 'logout') void handleLogout();
           else if (key === 'profile') navigate('/profile');
-          else if (key === 'workbench') navigate(workbenchPath);
-          else if (key === 'tickets') navigate(isStaff ? '/agent/tickets' : '/tickets');
+          else if (key === 'tickets') navigate('/tickets');
         },
       }}
     >

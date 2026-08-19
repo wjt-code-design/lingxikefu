@@ -98,7 +98,12 @@ export function SessionsAuditPage() {
     {
       title: '标题',
       dataIndex: 'title',
-      render: (v: string | undefined) => v || '（未命名会话）',
+      width: 240,
+      render: (v: string | undefined) => (
+        <Typography.Text className="audit-cell" ellipsis={{ tooltip: v || '（未命名会话）' }}>
+          {v || '（未命名会话）'}
+        </Typography.Text>
+      ),
     },
     {
       title: '满意度',

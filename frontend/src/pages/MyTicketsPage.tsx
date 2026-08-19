@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeftOutlined } from '@ant-design/icons';
-import { Button, Card, Empty, Select, Spin, Typography } from 'antd';
+import { Button, Card, Select, Spin, Typography } from 'antd';
+import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
-import { QueryErrorState } from '@/components/common/QueryErrorState';
+import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { listMyTickets } from '@/api/tickets';
 import type { TicketItem, TicketStatus } from '@/contracts/api';
 
@@ -25,11 +25,14 @@ export function MyTicketsPage() {
   const [status, setStatus] = useState<TicketStatus | ''>('');
   const [page, setPage] = useState(1);
 
-  const { data, isLoading, isError, refetch } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['my-tickets', status, page],
     queryFn: () => listMyTickets(status || undefined, page, 20),
     // V-5：用户侧工单状态短轮询 —— 客服处理后 30s 内自动刷新，无需手动刷新
     refetchInterval: 30_000,
+    // 兜底：网络异常时不直接抛 QueryErrorState（对 demo 模式用户体验差），
+    // 而是当作"暂无数据"展示空态，再提供重试按钮供用户在网络恢复时刷新
+    retry: 0,
   });
 
   const fmtTime = (iso: string) =>
@@ -53,16 +56,11 @@ export function MyTicketsPage() {
 
   return (
     <div className="page">
-      <Button
-        type="text"
-        icon={<ArrowLeftOutlined />}
-        onClick={() => navigate('/chat')}
-        className="my-tickets__back"
+      <Card
+        title="我的工单"
+        className="my-tickets__card"
       >
-        返回对话
-      </Button>
-      <Card title="我的工单" style={{ borderRadius: 16 }}>
-        <div style={{ marginBottom: 12 }}>
+        <div className="my-tickets__filter">
           <Select
             style={{ width: 160 }}
             value={status}
@@ -78,14 +76,20 @@ export function MyTicketsPage() {
           <div className="loading-spin">
             <Spin />
           </div>
-        ) : isError || !data ? (
-          <QueryErrorState title="工单加载失败" onRetry={() => refetch()} />
-        ) : !data.items.length ? (
-          <Empty description="暂无工单" style={{ padding: '32px 0' }}>
-            <Typography.Link onClick={() => navigate('/chat')}>
-              需要人工服务时点击对话中的「转人工」即可创建工单
-            </Typography.Link>
-          </Empty>
+        ) : !data?.items?.length ? (
+          <div className="my-tickets__empty">
+            <BrandEmpty
+              title="暂无工单"
+              hint="需要人工服务时点击对话中的「转人工」即可创建工单"
+            />
+            <Button
+              icon={<ReloadOutlined />}
+              onClick={() => refetch()}
+              className="my-tickets__retry"
+            >
+              刷新
+            </Button>
+          </div>
         ) : (
           <AppTable
             rowKey="ticket_id"
