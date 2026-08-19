@@ -583,6 +583,27 @@ body {
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+/* 顶部氛围渐变：极淡品牌色 → 透明，营造纵深；不占布局、不遮挡点击。 */
+.wb::before {
+  content: "";
+  position: absolute;
+  inset: -10px -10px auto -10px; /* 略微溢出抵消父 padding */
+  height: 160px;
+  background: linear-gradient(
+    180deg,
+    rgba(83, 159, 216, 0.06) 0%,
+    rgba(83, 159, 216, 0.02) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+  border-radius: var(--radius-md);
+}
+.wb > * {
+  position: relative;
+  z-index: 1;
 }
 .wb-mobile-bar {
   display: none; /* 仅 <768px 显示 */
@@ -1235,6 +1256,58 @@ body {
   box-shadow: var(--shadow-card);
 }
 
+/* ===== Agent 客服视角（observe）：顾客+AI 在左，人工介入在右（demo 招牌布局） ===== */
+.chat-msg--observe-customer,
+.chat-msg--observe-ai {
+  justify-content: flex-start;
+  align-items: flex-start;
+  gap: 6px;
+}
+/* 顾客气泡：暖橙浅底（与 AI 冷蓝区分；语义上"人"=暖色，复用 --color-orange 调性） */
+.chat-msg--observe-customer .chat-msg__bubble {
+  background: linear-gradient(135deg, rgba(246, 195, 142, 0.30), rgba(246, 195, 142, 0.16));
+  color: var(--text-1);
+  border-bottom-left-radius: 6px;
+}
+/* AI 气泡：白卡 + 浅蓝边（与 self 模式一致，仅统一居左） */
+.chat-msg--observe-ai .chat-msg__bubble {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  border-bottom-left-radius: 6px;
+}
+/* 顾客头像：暖橙圆形（与 AI 品牌头像区分） */
+.chat-msg__avatar--customer {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f6c38e, #e0a86a);
+  color: #fff;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+}
+/* 客服视角提示条 + 介入操作区 */
+.chat-observe-banner {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-3);
+  padding: 4px 2px 8px;
+}
+.chat-intervene__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.chat-intervene__actions .ant-btn {
+  min-height: 44px; /* 触控目标 ≥44px */
+}
+.chat-intervene__actions .ant-btn[disabled] {
+  cursor: not-allowed;
+}
+
 /* task 11：来源折叠区左侧品牌色竖线 + 浅底色视觉边界 */
 .chat-source__panel {
   border-left: 2px solid var(--color-brand);
@@ -1492,4 +1565,13 @@ body {
 .notification-item__time {
   font-size: 11px;
   color: var(--text-4);
+}
+
+/* ===== RouteChrome：路由面包屑（从 ROUTE_META 派生，非写死） ===== */
+.route-chrome {
+  padding: 2px 0 12px;
+}
+.route-chrome .ant-breadcrumb {
+  font-size: 12.5px;
+  color: var(--text-3);
 }

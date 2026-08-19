@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
+import { Button } from 'antd';
 import { SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
 import { createSession, getSessionDetail, rateSatisfaction } from '@/api/sessions';
 import { escalateSession } from '@/api/tickets';
+import { useAuthStore } from '@/store/authStore';
 import { useChatStream } from '@/hooks/useChatStream';
 import type { MessageSource } from '@/contracts/api';
 import { Composer } from './Composer';
@@ -69,6 +71,10 @@ export function ChatContainer({
   const [retryText, setRetryText] = useState<{ text: string; clientMsgId: string } | null>(null); // U1：最近失败消息 → 一键重试（含幂等键，重试复用不重复扣费）
   const [searchParams] = useSearchParams();
   const sessionParam = searchParams.get('session');
+  const role = useAuthStore((s) => s.role);
+  // 客服视角：agent/admin 打开既有会话（?session=）时进入 observe 模式——
+  // 顾客与 AI 的对话统一在左，人工介入区在右（demo 招牌布局）；用户侧（自己聊天）保持原样。
+  const observeMode = (role === 'agent' || role === 'admin') && !!sessionParam;
   // 当前流式对应的用户消息（P0-1：done/error 时按 id 定位并更新；text 用于失败重试兜底）
   // C1/C2：记录发起流时的 user 消息 + 会话；finalize 时比对 sessionId 防串台、防 ref 覆盖丢回答
   // R2：clientMsgId 为客户端提问幂等键（重试复用，配额幂等扣费）
@@ -309,6 +315,7 @@ export function ChatContainer({
         <MessageList
           messages={messages}
           stream={{ stage, tokens, error }}
+          layout={observeMode ? 'observe' : 'self'}
           onRate={onRate}
         />
         {manualTicket && (
@@ -330,7 +337,7 @@ export function ChatContainer({
           </div>
         )}
         {/* P2-2：会话满意度（≥2 轮完成且未评分时内联出现） */}
-        {turnCount >= 2 && !satisfactionRated && sessionId && !manualTicket?.loading && (
+        {turnCount >= 2 && !satisfactionRated && sessionId && !manualTicket?.loading && !observeMode && (
           <SatisfactionBar onRate={onSatisfaction} />
         )}
       </div>
@@ -340,13 +347,35 @@ export function ChatContainer({
             {createError}
           </div>
         )}
-        <Composer
-          disabled={streaming || creating}
-          onSend={onSend}
-          retry={retryText ? { text: retryText.text, onRetry } : null}
-          onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
-          onRegisterFill={onRegisterFill}
-        />
+        {observeMode ? (
+          <div className="chat-intervene">
+            <div className="chat-observe-banner" role="status">
+              客服视角 · 左侧为顾客与 AI 的对话，您可在此介入
+            </div>
+            <div className="chat-intervene__actions">
+              <Button
+                type="primary"
+                loading={manualTicket?.loading}
+                disabled={!!manualTicket?.id}
+                onClick={onEscalate}
+              >
+                转人工 / 建单
+              </Button>
+              {/* 契约无 agent 回复端点（Message.role 仅 user/assistant），代客回复待后端接入，先禁用并标注，绝不假接线 */}
+              <Button disabled title="后端 agent 回复端点待接入（规划中）">
+                代客回复
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Composer
+            disabled={streaming || creating}
+            onSend={onSend}
+            retry={retryText ? { text: retryText.text, onRetry } : null}
+            onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
+            onRegisterFill={onRegisterFill}
+          />
+        )}
       </div>
     </div>
   );

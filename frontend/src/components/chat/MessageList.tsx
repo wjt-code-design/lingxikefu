@@ -17,10 +17,13 @@ export function MessageList({
   messages,
   stream,
   onRate,
+  layout = 'self',
 }: {
   messages: ChatMessage[];
   stream?: StreamView;
   onRate: (id: string, rating: 'up' | 'down') => void;
+  /** 'self' = 用户侧；'observe' = 客服视角（顾客+AI 均在左） */
+  layout?: 'self' | 'observe';
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -59,7 +62,7 @@ export function MessageList({
   return (
     <div ref={listRef} className="chat-list">
       {messages.map((m) => (
-        <MessageBubble key={m.id} msg={m} onRate={(r) => onRate(m.id, r)} />
+        <MessageBubble key={m.id} msg={m} layout={layout} onRate={(r) => onRate(m.id, r)} />
       ))}
       {isStreaming && stream && (
         <div className="chat-msg chat-msg--ai">

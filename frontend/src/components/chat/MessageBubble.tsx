@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { Button, Typography, message } from 'antd';
-import { CopyOutlined } from '@ant-design/icons';
+import { CopyOutlined, UserOutlined } from '@ant-design/icons';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -15,11 +15,16 @@ import { ThumbsBar } from './ThumbsBar';
 export function MessageBubble({
   msg,
   onRate,
+  layout = 'self',
 }: {
   msg: ChatMessage;
   onRate: (rating: 'up' | 'down') => void;
+  /** 'self' = 用户侧（用户右/AI 左）；'observe' = 客服视角（顾客+AI 均在左） */
+  layout?: 'self' | 'observe';
 }) {
   const isUser = msg.role === 'user';
+  // observe 模式：顾客(user) 与 AI 都居左，但用不同气泡/头像区分；self 模式保持原样。
+  const variant = layout === 'observe' ? (isUser ? 'observe-customer' : 'observe-ai') : isUser ? 'user' : 'ai';
   const authUser = useAuthStore((s) => s.user);
   const userInitial = (authUser?.email?.charAt(0) ?? '我').toUpperCase();
   const [copied, setCopied] = useState(false);
@@ -39,13 +44,15 @@ export function MessageBubble({
   };
 
   return (
-    <div className={`chat-msg chat-msg--${isUser ? 'user' : 'ai'}`}>
-      {isUser && (
-      <div className="chat-msg__avatar chat-msg__avatar--user" aria-hidden="true">
-        {userInitial}
-      </div>
-    )}
-    {!isUser && (
+    <div className={`chat-msg chat-msg--${variant}`}>
+      {isUser ? (
+        <div
+          className={`chat-msg__avatar ${layout === 'observe' ? 'chat-msg__avatar--customer' : 'chat-msg__avatar--user'}`}
+          aria-hidden="true"
+        >
+          {layout === 'observe' ? <UserOutlined /> : userInitial}
+        </div>
+      ) : (
         <div className="chat-msg__avatar" aria-hidden="true">
           <svg viewBox="0 0 24 24" width="28" height="28" fill="none">
             <path

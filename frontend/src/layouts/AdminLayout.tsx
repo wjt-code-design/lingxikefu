@@ -2,6 +2,7 @@ import { Layout } from 'antd';
 import { Outlet } from 'react-router-dom';
 import AppHeader from '@/components/common/AppHeader';
 import SideNav from '@/components/common/SideNav';
+import { RouteChrome } from '@/components/common/RouteChrome';
 
 /**
  * 内部工作台外壳（semantic-workbench）：#2E5D85 深侧栏白字菜单（唯一中深色）+ 发丝线 + 浅冷灰内容区。
@@ -18,6 +19,7 @@ export function AdminLayout() {
       <Layout className="admin-layout__main">
         <AppHeader />
         <Layout.Content className="admin-layout__content">
+          <RouteChrome />
           <Outlet />
         </Layout.Content>
       </Layout>
