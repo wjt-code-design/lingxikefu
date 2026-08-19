@@ -25,26 +25,40 @@ export function SideNav() {
   const location = useLocation();
 
   const items = [
-    ...(role === 'admin'
-      ? [
-          { key: '/admin/dashboard', icon: <BarChartOutlined />, label: '运营总览' },
-          { key: '/admin/knowledge', icon: <BookOutlined />, label: '知识库' },
-          { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
-          { key: '/admin/roles', icon: <SafetyOutlined />, label: '权限管理' },
-          { key: '/admin/stats', icon: <BarChartOutlined />, label: '运营统计' },
-          { key: '/admin/feedback', icon: <DislikeOutlined />, label: '踩反馈' },
-          { key: '/admin/sessions', icon: <MessageOutlined />, label: '会话审计' },
-          { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
-          { key: '/admin/logs', icon: <FileTextOutlined />, label: '审计日志' },
-        ]
-      : []),
+    // 客服工作台（agent 或 admin 可见）
     ...(role === 'admin' || role === 'agent'
       ? [
-          { key: '/agent/dashboard', icon: <CustomerServiceOutlined />, label: '客服工作台' },
-          { key: '/agent/sessions', icon: <MessageOutlined />, label: '会话列表' },
-          { key: '/agent/tickets', icon: <FileTextOutlined />, label: '工单' },
-          { key: '/agent/customers', icon: <TeamOutlined />, label: '客户管理' },
-          { key: '/agent/kb-search', icon: <FileSearchOutlined />, label: '知识库快搜' },
+          {
+            type: 'group' as const,
+            label: '客服工作台',
+            children: [
+              { key: '/agent/dashboard', icon: <CustomerServiceOutlined />, label: '工作台首页' },
+              { key: '/agent/sessions', icon: <MessageOutlined />, label: '会话列表' },
+              { key: '/agent/tickets', icon: <FileTextOutlined />, label: '工单处理' },
+              { key: '/agent/customers', icon: <TeamOutlined />, label: '客户管理' },
+              { key: '/agent/kb-search', icon: <FileSearchOutlined />, label: '知识快搜' },
+            ],
+          },
+        ]
+      : []),
+    // 运营后台（仅 admin 可见）
+    ...(role === 'admin'
+      ? [
+          {
+            type: 'group' as const,
+            label: '运营后台',
+            children: [
+              { key: '/admin/dashboard', icon: <BarChartOutlined />, label: '运营总览' },
+              { key: '/admin/knowledge', icon: <BookOutlined />, label: '知识库' },
+              { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
+              { key: '/admin/roles', icon: <SafetyOutlined />, label: '角色权限' },
+              { key: '/admin/stats', icon: <BarChartOutlined />, label: '数据统计' },
+              { key: '/admin/feedback', icon: <DislikeOutlined />, label: '评价反馈' },
+              { key: '/admin/sessions', icon: <MessageOutlined />, label: '会话审计' },
+              { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
+              { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },
+            ],
+          },
         ]
       : []),
   ];

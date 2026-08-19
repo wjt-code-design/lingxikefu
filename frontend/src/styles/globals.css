@@ -16,8 +16,8 @@ body,
 
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
-    'Microsoft YaHei', sans-serif;
+    'Sora', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   /* User 端暖米背景渐变（重构：160deg #FAF8F4 → #F2EFE8；内部台由 .app-workbench 覆盖为冷灰） */
   background: linear-gradient(160deg, #faf8f4 0%, #f2efe8 100%);
   color: var(--text-2);
@@ -264,6 +264,7 @@ body {
   min-height: 0;
   overflow-y: auto;
   padding: 12px 14px;
+  background: #fafcfe;
 }
 .chat-container__empty {
   margin-top: 64px;
@@ -318,10 +319,10 @@ body {
   background: var(--color-surface);
   position: relative;
 }
-/* 用户消息：海盐蓝渐变气泡（居右） */
+/* 用户消息：海盐蓝纯色（居右） */
 .chat-msg--user .chat-msg__bubble {
-  background: linear-gradient(135deg, #b4d8f5, #96c8e8);
-  color: var(--text-1);
+  background: var(--color-brand);
+  color: #ffffff;
 }
 /* AI 消息：纯白卡片 + 浅蓝细边框 + 柔和蓝影 */
 .chat-msg--ai .chat-msg__bubble {
@@ -1071,6 +1072,29 @@ body {
 .app-workbench .side-nav .ant-menu-item-selected {
   color: #ffffff !important;
   background: rgba(255, 255, 255, 0.18) !important;
+  position: relative;
+}
+/* 激活指示条（demo 风格：左侧白色竖线） */
+.app-workbench .side-nav .ant-menu-item-selected::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  background: #ffffff;
+  border-radius: 0 3px 3px 0;
+}
+/* 分组标签（demo 风格：小字号、大写、字母间距、半透明白色） */
+.app-workbench .side-nav .ant-menu-item-group-title {
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 1px !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  padding: 14px 12px 6px !important;
+  margin: 0 !important;
+  font-weight: 500 !important;
 }
 .app-workbench .admin-layout__main {
   background: var(--bg-page); /* 浅冷灰 #F2F5F8（tokens.css 覆盖） */
