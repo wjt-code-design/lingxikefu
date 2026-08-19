@@ -523,11 +523,11 @@ body {
   border: 1px solid var(--color-brand);
   border-top-left-radius: 4px; /* 折角朝左（靠右的气泡） */
 }
-/* AI 消息：纯白卡片 + 浅蓝细边框 + 柔和蓝影 */
+/* AI 消息：纯白卡片（无阴影，更紧凑） */
 .chat-msg--ai .chat-msg__bubble {
   background: #ffffff;
   border: 1px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  box-shadow: none;
   border-top-right-radius: 4px; /* 折角朝右（靠左的气泡） */
 }
 
