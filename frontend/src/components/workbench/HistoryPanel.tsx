@@ -1,10 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { Spin, Typography } from 'antd';
+import { Spin, Typography, Input } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { useNavigate } from 'react-router-dom';
 import { listKnowledgeBases } from '@/api/knowledge';
 import { listSessions } from '@/api/sessions';
 import { useAuthStore } from '@/store/authStore';
+import { useState, useMemo } from 'react';
 
 /**
  * 三栏工作台 · 左栏：历史对话 + 知识库分类（海盐蓝）。
@@ -15,6 +17,7 @@ import { useAuthStore } from '@/store/authStore';
  */
 export function HistoryPanel() {
   const navigate = useNavigate();
+  const [searchQuery, setSearchQuery] = useState('');
   const token = useAuthStore((s) => s.token);
   const role = useAuthStore((s) => s.role);
   const authed = Boolean(token);
@@ -41,6 +44,16 @@ export function HistoryPanel() {
     return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
   };
 
+  const filteredSessions = useMemo(() => {
+    if (!sessions?.items) return [];
+    if (!searchQuery.trim()) return sessions.items;
+    const q = searchQuery.toLowerCase();
+    return sessions.items.filter((s) => {
+      const title = (isStaff ? customerOf(s) : s.title) || '';
+      return title.toLowerCase().includes(q);
+    });
+  }, [sessions, searchQuery, isStaff]);
+
   return (
     <aside className="wb-left">
       <div className="wb-brand">
@@ -65,13 +78,22 @@ export function HistoryPanel() {
             + 新建
           </button>
         </div>
+        <Input
+          prefix={<SearchOutlined />}
+          placeholder="搜索对话..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          allowClear
+          size="small"
+          style={{ marginBottom: 12 }}
+        />
         <div className="wb-sessions">
           {sessionsLoading ? (
             <Spin size="small" className="wb-spin" />
-          ) : !sessions?.items.length ? (
-            <BrandEmpty title="暂无历史对话" hint="开始对话后，这里会显示历史记录" />
+          ) : !filteredSessions.length ? (
+            <BrandEmpty title={searchQuery ? '未找到匹配对话' : '暂无历史对话'} hint={searchQuery ? '换个关键词试试' : '开始对话后，这里会显示历史记录'} />
           ) : (
-            sessions.items.map((s) => (
+            filteredSessions.map((s) => (
               <button
                 key={s.id}
                 type="button"

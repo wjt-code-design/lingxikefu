@@ -46,6 +46,7 @@ const FaqPage = lazy(() => import('@/pages/FaqPage'));
 const ErrorPage = lazy(() => import('@/pages/ErrorPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
+const UserFeedbackPage = lazy(() => import('@/pages/FeedbackPage'));
 
 function RouteFallback() {
   // U1：路由懒加载 fallback 用骨架屏（感知性能，替代"加载中…"文字）
@@ -119,6 +120,18 @@ export function AppRoutes() {
           }
         >
           <Route index element={<ProfilePage />} />
+        </Route>
+
+        {/* 用户反馈页面 */}
+        <Route
+          path="/feedback"
+          element={
+            <RequireAuth>
+              <WidgetShell />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<UserFeedbackPage />} />
         </Route>
 
         {/* Agent 工作台（参考 dianshangkefu /workbench 模块化；Phase3：新增 dashboard/kb-search） */}

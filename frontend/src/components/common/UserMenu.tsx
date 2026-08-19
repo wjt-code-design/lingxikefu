@@ -2,6 +2,7 @@ import { Avatar, Dropdown, Tag, Typography } from 'antd';
 import {
   FileTextOutlined,
   LogoutOutlined,
+  MessageOutlined,
   ProfileOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -50,8 +51,9 @@ export function UserMenu() {
       menu={{
         items: [
           { key: 'profile', icon: <ProfileOutlined />, label: '个人中心' },
-          // 仅 user 角色显示"我的工单"——侧边栏无入口，菜单是唯一通路
+          // 仅 user 角色显示"我的工单"——侧边栏无入口,菜单是唯一通路
           ...(isStaff ? [] : [{ key: 'tickets', icon: <FileTextOutlined />, label: '我的工单' }]),
+          { key: 'feedback', icon: <MessageOutlined />, label: '意见反馈' },
           { type: 'divider' },
           { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
         ],
@@ -59,6 +61,7 @@ export function UserMenu() {
           if (key === 'logout') void handleLogout();
           else if (key === 'profile') navigate('/profile');
           else if (key === 'tickets') navigate('/tickets');
+          else if (key === 'feedback') navigate('/feedback');
         },
       }}
     >
