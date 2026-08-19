@@ -507,12 +507,12 @@ body {
 /* 气泡基类：内边距、字号、行高、圆角 */
 .chat-msg__bubble {
   max-width: 680px;
-  padding: 10px 14px;
-  border-radius: 14px;
+  padding: 8px 12px;
+  border-radius: 12px;
   background: var(--color-surface);
   position: relative;
-  font-size: 14.5px;
-  line-height: 1.6;
+  font-size: 14px;
+  line-height: 1.5;
   word-break: break-word;
   white-space: pre-wrap;
 }
