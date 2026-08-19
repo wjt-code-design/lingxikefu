@@ -67,6 +67,11 @@ export function MessageBubble({
         </div>
       )}
       <div className={`chat-msg__bubble${statusCls}`}>
+        {layout === 'observe' && (
+          <div className="chat-msg__identity">
+            {isUser ? '顾客' : <><span className="chat-msg__ai-badge">🤖</span> AI 小智</>}
+          </div>
+        )}
         {isUser ? (
           <>
             <Typography.Paragraph className="chat-msg__text">{msg.content}</Typography.Paragraph>
