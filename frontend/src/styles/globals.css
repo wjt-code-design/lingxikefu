@@ -96,6 +96,11 @@ body {
   transition: background-color var(--dur-fast) var(--ease-out);
 }
 
+/* 表格表头：极浅蓝灰背景，与消息区视觉一致 */
+.ant-table-thead > tr > th {
+  background: #fafcfe !important;
+}
+
 /* 工单提示条（amber 微光，柔和化） */
 .chat-msg__ticket {
   display: flex;
