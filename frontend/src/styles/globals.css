@@ -550,9 +550,13 @@ body {
 }
 
 /* 输入区（海盐蓝胶囊 + 激活光晕） */
+.chat-container__footer {
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+}
 .chat-composer {
   display: flex;
-  gap: 6px;
+  gap: 10px;
   align-items: flex-end;
 }
 .chat-composer .ant-input-textarea {
@@ -561,8 +565,14 @@ body {
 .chat-composer textarea {
   background: var(--color-surface) !important;
   border-color: var(--border) !important;
-  border-radius: var(--radius-md) !important;
-  transition: box-shadow var(--dur-base) var(--ease-out);
+  border-radius: var(--radius-sm) !important;
+  padding: 11px 14px !important;
+  font-size: 15px !important;
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.chat-composer textarea:focus {
+  border-color: var(--color-brand) !important;
+  box-shadow: 0 0 0 3px var(--color-brand-soft) !important;
 }
 .chat-composer textarea::placeholder {
   font-size: 13px;
@@ -571,14 +581,15 @@ body {
 .chat-composer .ant-btn-primary {
   background: var(--color-brand) !important;
   border-color: var(--color-brand) !important;
-  color: var(--text-1) !important;
-  border-radius: var(--radius-md) !important;
+  color: #fff !important;
+  border-radius: var(--radius-sm) !important;
+  height: 44px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
 }
 .chat-composer .ant-btn-primary:hover {
-  /* V3：hover 加深到 --color-brand-dark（#539FD8）而非变浅 #B4D8F5——保持对比度 */
   background: var(--color-brand-dark) !important;
   border-color: var(--color-brand-dark) !important;
-  color: #fff !important;
 }
 
 /* ===================== 三栏工作台（Workbench，海盐蓝） ===================== */
