@@ -101,6 +101,13 @@ body {
   background: #fafcfe !important;
 }
 
+/* 工作台内页面标题：22px / 700，比 antd 默认 20px 更醒目（仅工作台范围，不动 auth） */
+.app-workbench .ant-typography h3,
+.app-workbench h3.ant-typography {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+}
+
 /* 工单提示条（amber 微光，柔和化） */
 .chat-msg__ticket {
   display: flex;
