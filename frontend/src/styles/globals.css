@@ -1019,15 +1019,15 @@ body {
 }
 .chat-msg__avatar {
   flex-shrink: 0;
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   margin-top: 1px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
-  background: linear-gradient(135deg, rgba(180, 216, 245, 0.5), rgba(150, 200, 232, 0.25));
-  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--color-brand), #7ab8e0);
+  border: none;
 }
 .chat-msg__avatar svg {
   width: 100%;
@@ -1269,12 +1269,12 @@ body {
   gap: 6px;
 }
 .chat-msg__avatar--user {
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: linear-gradient(135deg, #539fd8, #3e7cb1);
   color: #fff;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
   border: none;
   box-shadow: var(--shadow-card);
@@ -1302,12 +1302,12 @@ body {
 }
 /* 顾客头像：暖橙圆形（与 AI 品牌头像区分） */
 .chat-msg__avatar--customer {
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: linear-gradient(135deg, #f6c38e, #e0a86a);
   color: #fff;
-  font-size: 13px;
+  font-size: 15px;
   display: flex;
   align-items: center;
   justify-content: center;
