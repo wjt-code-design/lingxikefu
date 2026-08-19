@@ -8,6 +8,27 @@
 .settings-page {
   max-width: 1320px;
   margin: 0 auto;
+  position: relative;
+}
+/* 顶部氛围渐变：极淡品牌色 → 透明，营造纵深；不占布局、不遮挡点击。 */
+.settings-page::before {
+  content: "";
+  position: absolute;
+  inset: -16px -16px auto -16px;
+  height: 160px;
+  background: linear-gradient(
+    180deg,
+    rgba(83, 159, 216, 0.06) 0%,
+    rgba(83, 159, 216, 0.02) 60%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 0;
+  border-radius: var(--radius-md);
+}
+.settings-page > * {
+  position: relative;
+  z-index: 1;
 }
 
 .settings-page__header {
