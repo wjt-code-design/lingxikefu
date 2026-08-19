@@ -609,15 +609,15 @@ body {
   }
 }
 .chat-msg__text {
-  margin: 0 0 2px;
+  margin: 0;
   font-size: 14px;
-  line-height: 1.55;
+  line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-word;
 }
 /* Markdown 渲染 */
 .chat-msg__text p {
-  margin: 0 0 2px;
+  margin: 0 0 1px;
   white-space: normal;
 }
 .chat-msg__text p:last-child {
@@ -625,25 +625,25 @@ body {
 }
 .chat-msg__text ul,
 .chat-msg__text ol {
-  margin: 0 0 2px;
-  padding-left: 16px;
+  margin: 0 0 1px;
+  padding-left: 14px;
 }
 .chat-msg__text li {
   margin: 0;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 .chat-msg__text code {
   background: var(--color-brand-soft);
-  padding: 1px 4px;
-  border-radius: 4px;
+  padding: 0 3px;
+  border-radius: 3px;
   font-size: 0.9em;
 }
 .chat-msg__text pre {
   background: var(--color-brand-soft);
-  padding: 8px;
+  padding: 6px 8px;
   border-radius: var(--radius-sm);
   overflow-x: auto;
-  margin: 4px 0;
+  margin: 2px 0;
 }
 .chat-msg__text pre code {
   background: none;
@@ -655,10 +655,10 @@ body {
 .chat-msg__text h1,
 .chat-msg__text h2,
 .chat-msg__text h3 {
-  margin: 4px 0 2px;
-  padding: 2px 6px 2px 8px;
+  margin: 2px 0 1px;
+  padding: 1px 5px 1px 7px;
   font-size: 13px;
-  line-height: 1.4;
+  line-height: 1.35;
   background: var(--color-brand-soft, rgba(83,159,216,0.15));
   border-left: 3px solid var(--color-brand, #539FD8);
   border-radius: 0 6px 6px 0;
