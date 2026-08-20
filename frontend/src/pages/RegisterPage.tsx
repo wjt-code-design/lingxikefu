@@ -3,7 +3,7 @@ import type { MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button, Checkbox, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
-import { login, me, register } from '@/api/auth';
+import { me, register } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
 
 /**
@@ -22,9 +22,8 @@ export function RegisterPage() {
   const onFinish = async (values: { email: string; phone?: string; password: string }) => {
     setLoading(true);
     try {
-      await register({ email: values.email, phone: values.phone, password: values.password });
-      // 注册成功自动登录（email 即 account）
-      const resp = await login({ account: values.email, password: values.password });
+      // 后端 register 直接返回 AuthResp（含 token），无需二次登录请求
+      const resp = await register({ email: values.email, phone: values.phone, password: values.password });
       useAuthStore.setState({
         token: resp.access_token,
         refreshToken: resp.refresh_token,

@@ -53,12 +53,6 @@ class ChatStreamReq(BaseModel):
     client_msg_id: str | None = Field(default=None, max_length=64)
 
 
-class AgentReplyReq(BaseModel):
-    """T5：agent/admin 直复（不经 AI），写入用户会话 assistant 消息。"""
-    session_id: str = Field(min_length=1)
-    content: str = Field(min_length=1, max_length=4000)
-
-
 #: SSE 事件名白名单（C2：与前端 contracts/api.ts SSEEvent union 对齐，防事件名漂移）
 _SSE_EVENTS = frozenset({"stage", "intent", "token", "sources", "done", "error"})
 
@@ -199,42 +193,6 @@ async def _persist_answer(
         return str(msg.id)
 
     return await run_in_threadpool(_work)
-
-
-@router.post("/reply")
-def agent_reply(
-    req: AgentReplyReq,
-    payload: dict = Depends(get_current_user),
-    db: OrmSession = Depends(get_db),
-) -> dict:
-    """T5：agent/admin 直复文本（不经 AI），写入用户会话 assistant 消息并记录 agent 身份。
-
-    用于人工接管后的直接回复；用户仍用 /chat/stream（AI 问答）。
-    """
-    role = payload.get("role")
-    if role not in ("admin", "agent"):
-        raise HTTPException(status_code=403, detail="agent/admin role required")
-    try:
-        session_id = uuid.UUID(req.session_id)
-    except ValueError:
-        raise HTTPException(status_code=422, detail="invalid session_id")
-    s = db.scalar(select(Session).where(Session.id == session_id))
-    if not s:
-        raise HTTPException(status_code=404, detail="session not found")
-    msg = Message(
-        session_id=session_id,
-        role=MessageRole.assistant,
-        content=req.content,
-        intent="agent_reply",
-        meta={"agent_id": str(uuid.UUID(payload["sub"]))},
-    )
-    db.add(msg)
-    db.commit()
-    db.refresh(msg)
-    # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
-    s.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    return {"message_id": str(msg.id)}
 
 
 @router.post("/stream")

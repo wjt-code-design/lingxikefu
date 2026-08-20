@@ -280,13 +280,17 @@ def test_chat_stream_handoff_creates_ticket(client, monkeypatch):
 
 
 def test_agent_can_reply_on_user_session(client, monkeypatch):
-    """T5：agent 代答——可对用户会话 chat/stream（记录 agent_id）；直复端点写 assistant。"""
+    """T5：agent 代答——可对用户会话 chat/stream（记录 agent_id）。
+
+    人工直复已迁移至 POST /sessions/{id}/messages（Branch 3，见 test_sessions_messages.py）；
+    原 /chat/reply 端点已删除（前端零调用，且与新端点 role=agent 语义冲突）。
+    """
     tc, Local, _ = client
     agent_h = {
         "Authorization": f"Bearer {create_access_token('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'agent')}"
     }
 
-    # 1) 代答流式：agent 向用户 session 发问 → 200 + user 消息带 agent_id
+    # 代答流式：agent 向用户 session 发问 → 200 + user 消息带 agent_id
     async def _fake(*_a, **_k):
         yield ("intent", {"intent": "qa"})
         yield ("token", {"delta": "好的"})
@@ -302,27 +306,6 @@ def test_agent_can_reply_on_user_session(client, monkeypatch):
     with Local() as db:
         agent_msg = db.scalars(select(Message).where(Message.role == MessageRole.user)).all()[-1]
         assert agent_msg.meta.get("agent_id") == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-
-    # 2) 直复端点：agent 写 assistant 消息
-    r2 = tc.post(
-        f"{API}/chat/reply",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "您好，关于您的问题我们已经为您处理"},
-        headers=agent_h,
-    )
-    assert r2.status_code == 200 and r2.json()["message_id"]
-    with Local() as db:
-        reply = db.scalars(
-            select(Message).where(Message.role == MessageRole.assistant, Message.intent == "agent_reply")
-        ).all()[-1]
-        assert reply.meta.get("agent_id") == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-
-    # 3) 普通 user 无权直复
-    r3 = tc.post(
-        f"{API}/chat/reply",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "尝试"},
-        headers=_headers(),
-    )
-    assert r3.status_code == 403
 
 
 def test_sse_event_whitelist():
@@ -343,9 +326,11 @@ def test_sse_events_match_frontend_contract():
     from app.api.chat import _SSE_EVENTS
 
     backend_events = set(_SSE_EVENTS)
-    contract_path = Path(__file__).resolve().parent.parent.parent / "frontend" / "src" / "contracts" / "api.ts"
+    # 契约单一真源：frontend/src/contracts/api.ts 已是 re-export 桥（无类型字面量），
+    # 直接读根 contracts/api.ts（SSEEvent union 所在处）
+    contract_path = Path(__file__).resolve().parent.parent.parent / "contracts" / "api.ts"
     if not contract_path.exists():
-        pytest.skip("frontend contracts/api.ts 不存在（仅前端仓库 CI 场景）")
+        pytest.skip("contracts/api.ts 不存在（仅后端子目录 CI 场景）")
     text = contract_path.read_text(encoding="utf-8")
     frontend_events = set(_re.findall(r"event: '(\w+)'", text))
     assert backend_events == frontend_events, (
