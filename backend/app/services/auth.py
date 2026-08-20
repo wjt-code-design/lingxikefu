@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from jose import JWTError
+from app.core.security import JWTError
 from sqlalchemy.exc import IntegrityError
 
 from app.core.security import (

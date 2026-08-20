@@ -77,6 +77,8 @@ async def _warmup_embedding() -> None:
     放线程池执行（model.encode 是 CPU 阻塞）；失败仅告警不阻塞启动——
     首个请求仍会触发懒加载，预热是尽力而为的体验优化。
     """
+    if not settings.RATE_LIMIT_ENABLED:
+        return  # 测试/内部环境跳过（避免每用例起模型加载线程拖慢 TestClient）
     try:
         from app.llm_clients.embedding import get_embedding_client
 
@@ -88,9 +90,43 @@ async def _warmup_embedding() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """应用生命周期：启动预热 embedding（避免首个用户等冷加载）。"""
+    """应用生命周期：启动恢复滞留导入 → 预热 embedding（避免首个用户等冷加载）。"""
+    _recover_stale_imports()
     asyncio.create_task(_warmup_embedding())
     yield
+
+
+def _recover_stale_imports() -> None:
+    """进程启动：把滞留在 parsing/embedding 的文档标 failed（见 knowledge_import_service）。
+
+    daemon 导入线程随进程被强杀后文档会永久卡中间态 —— 重启用本钩子清理，幂等、不阻塞启动。
+
+    - 测试/内部环境（RATE_LIMIT_ENABLED=false）直接跳过：不连 DB（TestClient 每用例起 app，
+      若逐个连真实 PG 会让测试累计极慢）；生产默认 true 执行恢复。
+    - 生产用**独立短超时 engine**（connect_timeout=2s）而非 SessionLocal：DB 不可达时快速失败，
+      不阻塞 lifespan（防 pitfall G：启动钩子同步连 DB 无超时导致整体挂起）。
+    """
+    if not settings.RATE_LIMIT_ENABLED:
+        return
+    try:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+
+        from app.services.knowledge_import_service import recover_stale_imports
+
+        eng = create_engine(settings.database_url, connect_args={"connect_timeout": 2})
+        try:
+            db = Session(eng)
+            try:
+                n = recover_stale_imports(db)
+                if n:
+                    logger.info("启动恢复：将 %d 个滞留导入文档标记为 failed", n)
+            finally:
+                db.close()
+        finally:
+            eng.dispose()
+    except Exception:  # noqa: BLE001 - 恢复失败不阻塞启动（懒加载兜底：下一请求仍会失败化）
+        logger.warning("启动导入恢复失败（不影响启动）", exc_info=True)
 
 
 app = FastAPI(**_app_kwargs, lifespan=lifespan)

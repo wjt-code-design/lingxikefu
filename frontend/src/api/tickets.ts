@@ -1,5 +1,7 @@
 import { http } from './client';
-import type { StatusUpdateReq, TicketItem, TicketListResp, TicketStatus } from '@/contracts/api';
+import { API_PREFIX, type MyTicketSSEEvent, type StatusUpdateReq, type TicketItem, type TicketListResp, type TicketStatus } from '@/contracts/api';
+import { parseSSEFrame } from '@/api/sse';
+import { useAuthStore } from '@/store/authStore';
 
 /** 工单列表（agent/admin；status 可选过滤） */
 export function listTickets(status?: TicketStatus, page = 1, size = 20): Promise<TicketListResp> {
@@ -35,4 +37,47 @@ export function listMyTickets(status?: TicketStatus, page = 1, size = 20): Promi
       params: { status: status ?? undefined, page, size },
     })
     .then((r) => r.data);
+}
+
+/**
+ * 订阅用户侧工单状态实时推送（第6组项4）。返回取消函数（组件卸载/登出调用）。
+ * 尽力而为（单 worker 进程内分发）；断线/漏事件由调用方保留的轮询兜底——推送失效不会静默丢更新。
+ */
+export function subscribeMyTicketStream(
+  onUpdate: (e: { ticket_id: string; status: TicketStatus }) => void
+): () => void {
+  const controller = new AbortController();
+  const token = useAuthStore.getState().token;
+  const base = import.meta.env.VITE_API_BASE || API_PREFIX;
+
+  void (async () => {
+    try {
+      const resp = await fetch(`${base}/tickets/my/stream`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        signal: controller.signal,
+      });
+      if (!resp.ok || !resp.body) return;
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx: number;
+        while ((idx = buf.indexOf('\n\n')) >= 0) {
+          const frame = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const ev = parseSSEFrame<MyTicketSSEEvent>(frame);
+          if (ev?.event === 'ticket_update') {
+            onUpdate({ ticket_id: ev.data.ticket_id, status: ev.data.status });
+          }
+        }
+      }
+    } catch {
+      /* AbortError（卸载）或网络异常：静默，由轮询兜底 */
+    }
+  })();
+
+  return () => controller.abort();
 }

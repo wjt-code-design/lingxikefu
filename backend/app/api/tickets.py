@@ -23,6 +23,8 @@ from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
+from app.services.ticket_events import _sse_gen, publish_ticket_event
+from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +37,13 @@ _ALLOWED_TRANSITIONS: dict[TicketStatus, set[TicketStatus]] = {
     TicketStatus.resolved: {TicketStatus.closed},
     TicketStatus.closed: set(),
 }
+
+
+def _publish_ticket_for_user(db: OrmSession, ticket: Ticket) -> None:
+    """工单状态变更 → 推送给工单所属客户（尽力而为；前端轮询兜底）。"""
+    sess = db.get(Session, ticket.session_id)
+    if sess is not None:
+        publish_ticket_event(str(sess.user_id), str(ticket.id), ticket.status.value)
 
 
 class CreateTicketReq(BaseModel):
@@ -248,6 +257,19 @@ def list_my_tickets(
     return TicketListResp(items=[_item(t) for t in rows], total=total)
 
 
+@router.get("/my/stream")
+async def my_ticket_stream(
+    payload: dict = Depends(get_current_user),
+):
+    """用户侧工单状态 SSE（第6组项4）：实时推送本人工单状态变更 + 心跳。
+
+    事件协议：connected（握手，data.user_id）/ ticket_update（data: user_id/ticket_id/status/ts）/ ping（心跳）。
+    尽力而为（单 worker 进程内分发）；前端保留 30s 轮询兜底，保证断线/多 worker 下最终一致。
+    """
+    user_id = str(payload["sub"])
+    return StreamingResponse(_sse_gen(user_id), media_type="text/event-stream")
+
+
 @router.patch("/{ticket_id}", response_model=TicketItem)
 def update_ticket(
     ticket_id: uuid.UUID,
@@ -304,6 +326,7 @@ def update_ticket(
         resource_id=str(ticket_id),
         detail=str(t.status.value),
     )
+    _publish_ticket_for_user(db, t)  # 状态流转 → 实时推送给客户
     return _item(t)
 
 
@@ -352,4 +375,5 @@ def escalate_ticket(
         resource_type="ticket",
         resource_id=str(t.id),
     )
+    _publish_ticket_for_user(db, t)  # 转人工建单 → 实时推送给客户
     return _item(t)

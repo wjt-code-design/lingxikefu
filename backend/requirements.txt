@@ -17,7 +17,8 @@ pydantic>=2.7,<3.0
 pydantic-settings>=2.3,<3.0
 
 # --- 安全 ---
-python-jose[cryptography]>=3.3,<4.0
+# PyJWT 替代 python-jose（后者维护停滞且有已知 CVE；接口兼容，行为等价）
+PyJWT>=2.8,<3.0
 passlib[bcrypt]>=1.7,<2.0
 bcrypt>=4.1,<5.0
 

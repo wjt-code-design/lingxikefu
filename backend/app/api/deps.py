@@ -3,9 +3,7 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError
-
-from app.core.security import decode_token
+from app.core.security import JWTError, decode_token
 from app.core.token_revocation import is_revoked
 
 _bearer = HTTPBearer()

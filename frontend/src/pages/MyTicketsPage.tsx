@@ -1,11 +1,11 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button, Card, Select, Spin, Typography } from 'antd';
 import { ReloadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
-import { listMyTickets } from '@/api/tickets';
+import { listMyTickets, subscribeMyTicketStream } from '@/api/tickets';
 import type { TicketItem, TicketStatus } from '@/contracts/api';
 
 const STATUS_OPTIONS = [
@@ -22,18 +22,26 @@ const STATUS_OPTIONS = [
  */
 export function MyTicketsPage() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<TicketStatus | ''>('');
   const [page, setPage] = useState(1);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['my-tickets', status, page],
     queryFn: () => listMyTickets(status || undefined, page, 20),
-    // V-5：用户侧工单状态短轮询 —— 客服处理后 30s 内自动刷新，无需手动刷新
+    // 实时推送为主；30s 轮询作为兜底（第6组项4：推送断线/单 worker 漏事件时保底，不静默丢更新）
     refetchInterval: 30_000,
     // 兜底：网络异常时不直接抛 QueryErrorState（对 demo 模式用户体验差），
     // 而是当作"暂无数据"展示空态，再提供重试按钮供用户在网络恢复时刷新
     retry: 0,
   });
+
+  // 订阅工单状态实时推送 → 命中即刷新列表（推送尽力而为；卸载时 cancel 释放连接）
+  useEffect(() => {
+    return subscribeMyTicketStream(() => {
+      queryClient.invalidateQueries({ queryKey: ['my-tickets'] });
+    });
+  }, [queryClient]);
 
   const fmtTime = (iso: string) =>
     new Date(iso).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });

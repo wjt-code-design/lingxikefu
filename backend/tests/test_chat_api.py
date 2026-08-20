@@ -319,7 +319,12 @@ def test_sse_event_whitelist():
 
 
 def test_sse_events_match_frontend_contract():
-    """C2 闭环：后端 SSE 事件名集合 == 前端 contracts/api.ts SSEEvent union 的 event 字面量。"""
+    """C2 闭环：后端 chat SSE 事件名须被前端契约声明（SSEEvent 子集）。
+
+    契约现含多个 SSE 类型（chat SSEEvent / 通知 NotifySSEEvent / 工单 MyTicketSSEEvent），
+    故改为**子集**断言：后端每个 chat 事件都须在前端契约中存在（防新增事件前端未声明），
+    同时允许前端存在其他 SSE 类型的事件字面量。
+    """
     from pathlib import Path
     import re as _re
 
@@ -333,8 +338,9 @@ def test_sse_events_match_frontend_contract():
         pytest.skip("contracts/api.ts 不存在（仅后端子目录 CI 场景）")
     text = contract_path.read_text(encoding="utf-8")
     frontend_events = set(_re.findall(r"event: '(\w+)'", text))
-    assert backend_events == frontend_events, (
-        f"SSE 契约漂移：后端 {sorted(backend_events)} vs 前端 {sorted(frontend_events)}"
+    missing = backend_events - frontend_events
+    assert not missing, (
+        f"SSE 契约漂移：后端 chat 事件 {sorted(missing)} 前端契约未声明"
     )
 
 

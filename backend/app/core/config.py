@@ -128,6 +128,13 @@ class Settings(BaseSettings):
         default_factory=lambda: ["http://localhost:5173"],
         description="JSON 数组格式，如 [\"http://localhost:5173\"]",
     )
+    #: 可信反向代理直连 IP 白名单（安全）：只有在 request.client.host（TCP 对端）属于此列表时，
+    #: 才信任 X-Forwarded-For 首段作为客户端 IP（登录/注册限流 key）。默认空 → 恒用 TCP 对端、
+    #: 忽略 XFF（fail-closed，防未受保护时客户端伪造 IP 绕过限流）。
+    TRUSTED_PROXIES: list[str] = Field(
+        default_factory=list,
+        description="JSON 数组格式，如 [\"10.0.0.1\"]；空则忽略 X-Forwarded-For",
+    )
 
     @property
     def database_url(self) -> str:

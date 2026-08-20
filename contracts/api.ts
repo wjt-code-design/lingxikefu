@@ -132,6 +132,14 @@ export interface StatusUpdateReq {
   assignee_id?: string; // 可选：分配客服
   version: number; // S2 乐观锁：客户端回传当前版本，与服务端不匹配返回 409
 }
+// 用户侧工单状态 SSE（第6组项4）：/tickets/my/stream 事件协议
+export type MyTicketSSEEvent =
+  | { event: 'connected'; data: { user_id: string } }
+  | {
+      event: 'ticket_update';
+      data: { user_id: string; ticket_id: string; status: TicketStatus; ts: string };
+    }
+  | { event: 'ping'; data: { ts: string } };
 
 // ---------- Customers（T6 客户画像） ----------
 export interface CustomerItem {

@@ -25,7 +25,9 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.llm_clients.embedding import get_embedding_client
-from app.models.knowledge import DocumentStatus
+from sqlalchemy import update
+
+from app.models.knowledge import Document, DocumentStatus
 from app.repositories.document_repo import (
     ChunkRepository,
     DocumentRepository,
@@ -35,6 +37,31 @@ from app.services.vector_service import VectorStoreError
 from app.utils.text_splitter import split_text
 
 logger = logging.getLogger(__name__)
+
+
+_STALE_ERROR = "导入中断（进程异常退出），请重新上传"
+
+
+def recover_stale_imports(db: Session) -> int:
+    """启动恢复（第6组项2）：把滞留在 parsing/embedding 的文档标记为 failed。
+
+    导入由 daemon 线程执行，进程被强杀时线程随进程终止，文档会永久卡在中间态。
+    进程重新启动时调用本函数（此时必无进行中的导入），把这些文档置为 failed，
+    消除"文档永久卡"窗口；幂等，且不误伤 indexed/failed。
+
+    返回被恢复（置 failed）的文档数。
+    """
+    res = db.execute(
+        update(Document)
+        .where(
+            Document.status.in_(
+                [DocumentStatus.parsing.value, DocumentStatus.embedding.value]
+            )
+        )
+        .values(status=DocumentStatus.failed, error=_STALE_ERROR)
+    )
+    db.commit()
+    return res.rowcount or 0
 
 
 class ImportError_(Exception):

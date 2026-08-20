@@ -1927,6 +1927,31 @@
         }
       }
     },
+    "/api/v1/tickets/my/stream": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "My Ticket Stream",
+        "description": "用户侧工单状态 SSE（第6组项4）：实时推送本人工单状态变更 + 心跳。\n\n事件协议：connected（握手，data.user_id）/ ticket_update（data: user_id/ticket_id/status/ts）/ ping（心跳）。\n尽力而为（单 worker 进程内分发）；前端保留 30s 轮询兜底，保证断线/多 worker 下最终一致。",
+        "operationId": "my_ticket_stream_api_v1_tickets_my_stream_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/tickets/{ticket_id}": {
       "patch": {
         "tags": [

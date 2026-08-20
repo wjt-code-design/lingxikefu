@@ -5,6 +5,9 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   fullyParallel: false,
+  // 串行 workers：多 project（桌面+移动）并发冷启动 vite + Chromium 会争资源导致 load 超时
+  workers: 1,
+  timeout: 60_000,
   retries: 0,
   reporter: [
     ['list'],

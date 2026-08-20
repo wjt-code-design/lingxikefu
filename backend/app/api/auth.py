@@ -4,10 +4,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from jose import JWTError
+from app.core.security import JWTError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.core.security import decode_token
@@ -32,10 +33,19 @@ LOGIN_WINDOW = 60
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("X-Forwarded-For")
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """限流维度 IP（第6组项3·XFF 信任边界）。
+
+    仅当直连对端（TCP 对端，request.client.host）属于可信任反代白名单时，
+    才采用 ``X-Forwarded-For`` 首段作为客户端 IP；否则用 TCP 对端本身。
+    默认 ``TRUSTED_PROXIES`` 为空 → 忽略 XFF（fail-closed）：防客户端在直连场景
+    伪造 X-Forwarded-For 绕过登录/注册 IP 限流。
+    """
+    peer = request.client.host if request.client else "unknown"
+    if peer in settings.TRUSTED_PROXIES:
+        fwd = request.headers.get("X-Forwarded-For")
+        if fwd:
+            return fwd.split(",")[0].strip()
+    return peer
 
 
 @router.post("/register", response_model=AuthResp, status_code=status.HTTP_201_CREATED)

@@ -1,6 +1,6 @@
 """JWT 安全工具（BU-02 Auth 模块完整实现）。
 
-密码哈希（pbkdf2）/ JWT 签发与校验（python-jose）均已接入 auth 端点。
+密码哈希（pbkdf2）/ JWT 签发与校验（PyJWT，替代 python-jose：维护停滞 + CVE）。
 禁止在本文件硬编码任何密钥（密钥由 settings 注入）。
 """
 from __future__ import annotations
@@ -8,12 +8,16 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from jose import jwt
 from passlib.context import CryptContext
+
+import jwt as pyjwt
 
 from app.core.config import settings
 
 ALGORITHM = "HS256"
+#: 统一 JWT 异常基类（InvalidTokenError 涵盖 验签失败/格式坏/过期 等子类），
+#: 供下游 auth/deps 捕获，与旧 python-jose 的 jose.JWTError 语义等价。
+JWTError = pyjwt.InvalidTokenError
 _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -38,7 +42,7 @@ def create_access_token(subject: str, role: str) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     }
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
+    return pyjwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
 def create_refresh_token(subject: str) -> str:
@@ -51,9 +55,9 @@ def create_refresh_token(subject: str) -> str:
         "iat": now,
         "exp": now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     }
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
+    return pyjwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> dict:
-    """解析并校验 token，失败抛 jose.JWTError。"""
-    return jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+    """解析并校验 token（验签 + exp），失败抛 JWTError（PyJWT InvalidTokenError）。"""
+    return pyjwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
