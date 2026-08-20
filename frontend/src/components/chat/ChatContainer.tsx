@@ -189,8 +189,12 @@ export function ChatContainer({
   // Branch 3：顾客端实时接收人工客服消息——3s 轮询 getSessionDetail，
   // 仅追加 role==='agent' 的新消息（按 id 去重；顾客自己的消息由发送/SSE 维护，不参与合并，
   // 因此流式期间轮询也不会产生重复）。观察视角（客服自己打开会话）不轮询：客服是发送方。
+  // 审计 #5：轮询按需启动——仅在人工介入后（主动转人工 / AI handoff 建单 / 已有人工消息），
+  // 纯 AI 对话不再全量轮询（省无谓请求）。客服在别处建单而顾客端未感知的场景不在此列（下次消息/刷新可见）。
+  const intervention =
+    !!manualTicket?.id || !!ticketId || messages.some((m) => m.role === 'agent');
   useEffect(() => {
-    if (!sessionId || observeMode) return;
+    if (!sessionId || observeMode || !intervention) return;
     const timer = setInterval(() => {
       getSessionDetail(sessionId)
         .then((d) => {
@@ -214,7 +218,7 @@ export function ChatContainer({
         });
     }, 3000);
     return () => clearInterval(timer);
-  }, [sessionId, observeMode]);
+  }, [sessionId, observeMode, intervention]);
 
   // P0-1：流式结束（done/error）→ 按 user 消息 id 更新状态 + 追加 assistant（不重复追加 user）
   // 防重：streamingUserRef 在首次 finalize 时被置空；uid 为空 → 已 finalize，直接 return（防止
@@ -429,12 +433,12 @@ export function ChatContainer({
                 <svg viewBox="0 0 24 24" width="34" height="34" fill="none">
                   <path
                     d="M12 3C7 3 3 6.8 3 11.5c0 2.6 1.3 4.9 3.4 6.4V21l3.2-1.9c.7.2 1.5.3 2.4.3 5 0 9-3.8 9-8.5S17 3 12 3z"
-                    fill="#96C8E8"
+                    fill="var(--chat-avatar-fill)"
                     opacity="0.55"
                   />
-                  <circle cx="8.7" cy="11.3" r="1.2" fill="#539FD8" />
-                  <circle cx="12.3" cy="11.3" r="1.2" fill="#539FD8" />
-                  <circle cx="15.9" cy="11.3" r="1.2" fill="#539FD8" />
+                  <circle cx="8.7" cy="11.3" r="1.2" fill="var(--chat-avatar-dot)" />
+                  <circle cx="12.3" cy="11.3" r="1.2" fill="var(--chat-avatar-dot)" />
+                  <circle cx="15.9" cy="11.3" r="1.2" fill="var(--chat-avatar-dot)" />
                 </svg>
               </div>
               <div className="chat-welcome__title">您好，我是灵犀智能客服</div>

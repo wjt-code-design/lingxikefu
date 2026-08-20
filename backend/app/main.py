@@ -34,6 +34,7 @@ from app.api import (
     quota,
     roles,
     sessions,
+    suggestions,
     telemetry,
     tickets,
 )
@@ -177,6 +178,7 @@ for _router in (
     roles.router,
     tickets.router,
     customers.router,
+    suggestions.router,
     telemetry.router,
 ):
     app.include_router(_router, prefix=API_PREFIX)

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_PREFIX, type ChatStreamReq, type MessageSource, type SSEEvent } from '@/contracts/api';
+import { parseSSEFrame } from '@/api/sse';
 import { useAuthStore } from '@/store/authStore';
 
 /** 流式对话的本地状态（与契约 SSEStage 对齐 + idle 初始态） */
@@ -118,14 +119,9 @@ export function useChatStream() {
         while ((idx = buf.indexOf('\n\n')) >= 0) {
           const frame = buf.slice(0, idx);
           buf = buf.slice(idx + 2);
-          const line = frame.split('\n').find((l) => l.startsWith('data: '));
-          if (!line) continue;
-          let ev: SSEEvent;
-          try {
-            ev = JSON.parse(line.slice(6)) as SSEEvent;
-          } catch {
-            continue; // 非 JSON 帧（心跳/空行）忽略
-          }
+          // #9 加固：拼接全部 data 行再 parse；失败 warn（见 api/sse.ts）
+          const ev = parseSSEFrame<SSEEvent>(frame);
+          if (!ev) continue; // 非 data 帧（心跳/空行）忽略
           setState((s) => applyEvent(s, ev));
         }
       }

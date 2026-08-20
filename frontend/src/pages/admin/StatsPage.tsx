@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Col, Empty, List, Row, Spin, Typography, message } from 'antd';
 import { CopyOutlined, EditOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { getAdminStats, getStatsTrend } from '@/api/admin';
 import { TrendChart } from '@/components/common/TrendChart';
+import { KpiCard } from '@/components/common/KpiCard';
 import './StatsPage.css';
 
 /** 迷你趋势线（近 14 天 sparkline）：KPI 卡装饰 + 数据语义，纯 SVG 自绘 */
@@ -43,31 +44,7 @@ function Sparkline({ data }: { data: number[] }) {
   );
 }
 
-/** KPI 卡（自绘，白卡 + 发丝线 + tabular-nums 数字） */
-function KpiCard({
-  label,
-  value,
-  suffix,
-  foot,
-}: {
-  label: string;
-  value: number | string;
-  suffix?: string;
-  foot?: ReactNode;
-}) {
-  return (
-    <Col xs={12} lg={6}>
-      <div className="kpi-card">
-        <div className="kpi-card__label">{label}</div>
-        <div className="kpi-card__value">
-          {value}
-          {suffix ? <span className="kpi-card__suffix">{suffix}</span> : null}
-        </div>
-        {foot ? <div className="kpi-card__foot">{foot}</div> : null}
-      </div>
-    </Col>
-  );
-}
+/** KPI 卡已收敛为公共组件（components/common/KpiCard，样式在 globals.css .kpi-card）。 */
 
 /**
  * 运营统计仪表盘（FE-04 + T8 + F1 落地）：React Query 统一服务端状态。
@@ -116,7 +93,7 @@ export function StatsPage() {
   const gaps = stats?.hot_gaps ?? [];
 
   return (
-    <div className="page stats-page">
+    <div className="page stats-page page-atmo">
       <div className="stats-page__header">
         <div className="stats-page__head">
           <Typography.Title level={3} className="stats-page__title">运营统计</Typography.Title>
@@ -132,50 +109,58 @@ export function StatsPage() {
         <>
           {/* ① 顶部 KPI 卡片行（4 张） */}
           <Row gutter={[16, 16]}>
-            <KpiCard
-              label="总会话数"
-              value={sessions}
-              foot={
-                <>
-                  <span className="kpi-card__caption">近 14 天 {sumSessions14} 会话</span>
-                  <Sparkline data={days.map((d) => d.sessions)} />
-                </>
-              }
-            />
-            <KpiCard
-              label="总消息数"
-              value={messages}
-              foot={
-                <>
-                  <span className="kpi-card__caption">近 14 天 {sumMessages14} 消息</span>
-                  <Sparkline data={days.map((d) => d.messages)} />
-                </>
-              }
-            />
-            <KpiCard
-              label="文档数"
-              value={documents}
-              suffix="篇"
-              foot={<span className="kpi-card__caption">知识库文档总量</span>}
-            />
-            <KpiCard
-              label="赞踩比"
-              value={upRatio.toFixed(1)}
-              suffix="%"
-              foot={
-                up + down > 0 ? (
-                  <div className="kpi-card__ratio">
-                    <div className="ratio-bar">
-                      <span className="ratio-bar__up" style={{ width: `${upRatio}%` }} />
-                      <span className="ratio-bar__down" style={{ width: `${100 - upRatio}%` }} />
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="总会话数"
+                value={sessions}
+                foot={
+                  <>
+                    <span className="kpi-card__caption">近 14 天 {sumSessions14} 会话</span>
+                    <Sparkline data={days.map((d) => d.sessions)} />
+                  </>
+                }
+              />
+            </Col>
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="总消息数"
+                value={messages}
+                foot={
+                  <>
+                    <span className="kpi-card__caption">近 14 天 {sumMessages14} 消息</span>
+                    <Sparkline data={days.map((d) => d.messages)} />
+                  </>
+                }
+              />
+            </Col>
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="文档数"
+                value={documents}
+                suffix="篇"
+                foot={<span className="kpi-card__caption">知识库文档总量</span>}
+              />
+            </Col>
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="赞踩比"
+                value={upRatio.toFixed(1)}
+                suffix="%"
+                foot={
+                  up + down > 0 ? (
+                    <div className="kpi-card__ratio">
+                      <div className="ratio-bar">
+                        <span className="ratio-bar__up" style={{ width: `${upRatio}%` }} />
+                        <span className="ratio-bar__down" style={{ width: `${100 - upRatio}%` }} />
+                      </div>
+                      <span className="kpi-card__caption">赞 {up} · 踩 {down}</span>
                     </div>
-                    <span className="kpi-card__caption">赞 {up} · 踩 {down}</span>
-                  </div>
-                ) : (
-                  <span className="kpi-card__caption">暂无反馈数据</span>
-                )
-              }
-            />
+                  ) : (
+                    <span className="kpi-card__caption">暂无反馈数据</span>
+                  )
+                }
+              />
+            </Col>
           </Row>
 
           {/* ② 中部两栏：左 2/3 消息量趋势 + 右 1/3 待补录问题 Top */}

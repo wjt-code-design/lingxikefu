@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { Button, Card, Form, Input, Radio, Typography, message } from 'antd';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
+import type { ApiError } from '@/contracts/api';
+import { submitSuggestion } from '@/api/suggestions';
 import { useAuthStore } from '@/store/authStore';
 
 const { Title, Text } = Typography;
@@ -15,13 +17,19 @@ export default function FeedbackPage() {
 
   const home = role === 'admin' ? '/admin/dashboard' : role === 'agent' ? '/agent/dashboard' : '/chat';
 
-  const onFinish = async (_values: { type: string; content: string; contact?: string }) => {
+  const onFinish = async (values: { type: 'bug' | 'suggestion' | 'other'; content: string; contact?: string }) => {
     setSubmitting(true);
-    // 演示阶段：仅本地提示，不真正提交
-    await new Promise((r) => setTimeout(r, 800));
-    message.success('感谢反馈！我们会认真查看每一条建议');
-    form.resetFields();
-    setSubmitting(false);
+    try {
+      // P2-修复#2：真实落库（此前假提交，用户反馈全部丢弃）
+      await submitSuggestion({ type: values.type, content: values.content, contact: values.contact });
+      message.success('感谢反馈！我们会认真查看每一条建议');
+      form.resetFields();
+    } catch (e) {
+      // 失败保留表单内容供用户重试（不清空）
+      message.error((e as ApiError).message || '提交失败，请稍后重试');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

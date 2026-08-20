@@ -5,29 +5,7 @@
    --shadow-card / --radius-*），禁止散落硬编码 hex。
    ============================================================ */
 
-.feedback-page {
-  position: relative;
-}
-/* 顶部氛围渐变：极淡品牌色 → 透明，营造纵深；不占布局、不遮挡点击。 */
-.feedback-page::before {
-  content: "";
-  position: absolute;
-  inset: -16px -16px auto -16px;
-  height: 160px;
-  background: linear-gradient(
-    180deg,
-    rgba(83, 159, 216, 0.06) 0%,
-    rgba(83, 159, 216, 0.02) 60%,
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 0;
-  border-radius: var(--radius-md);
-}
-.feedback-page > * {
-  position: relative;
-  z-index: 1;
-}
+/* 氛围渐变与移动端基础适配已收敛至 globals.css 的 .page-atmo 公共类 */
 
 .feedback-page__header {
   margin-bottom: 16px;
@@ -39,6 +17,10 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
+}
+/* 双卡布局（意见反馈 + 踩反馈）纵向间距 */
+.feedback-card.ant-card + .feedback-card.ant-card {
+  margin-top: 16px;
 }
 .feedback-card .ant-card-head {
   min-height: 48px;
@@ -78,9 +60,6 @@
 }
 
 @media (max-width: 767px) {
-  .feedback-page {
-    padding: 12px;
-  }
   .feedback-page__header {
     margin-bottom: 12px;
   }

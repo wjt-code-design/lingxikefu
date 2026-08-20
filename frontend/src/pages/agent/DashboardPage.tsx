@@ -5,6 +5,7 @@ import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
+import { KpiCard } from '@/components/common/KpiCard';
 import { listTickets } from '@/api/tickets';
 import { listSessions } from '@/api/sessions';
 import type { Session, TicketItem, TicketStatus } from '@/contracts/api';
@@ -16,25 +17,6 @@ const STATUS_TEXT: Record<TicketStatus, string> = {
   resolved: '已解决',
   closed: '已关闭',
 };
-
-/** KPI 卡（自绘，白卡 + 发丝线 + tabular-nums 数字） */
-function KpiCard({
-  label,
-  value,
-  caption,
-}: {
-  label: string;
-  value: number;
-  caption?: string;
-}) {
-  return (
-    <div className="dash-kpi">
-      <div className="dash-kpi__label">{label}</div>
-      <div className="dash-kpi__value">{value}</div>
-      {caption ? <div className="dash-kpi__caption">{caption}</div> : null}
-    </div>
-  );
-}
 
 /**
  * 客服工作台首页（Phase3）：今日待办工单 + 实时会话 + 个人接待统计。

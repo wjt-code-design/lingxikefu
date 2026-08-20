@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Button, Card, Col, List, Row, Spin, Typography, message } from 'antd';
 import {
@@ -13,6 +13,7 @@ import { getAdminStats, getStatsTrend } from '@/api/admin';
 import { listTickets } from '@/api/tickets';
 import { StatusTag } from '@/components/common/AppTable';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
+import { KpiCard } from '@/components/common/KpiCard';
 import type { TicketItem, TicketStatus } from '@/contracts/api';
 import './DashboardPage.css';
 
@@ -71,7 +72,7 @@ function Sparkline({ data }: { data: number[] }) {
     .join(' ');
   return (
     <svg
-      className="dash-sparkline"
+      className="sparkline"
       viewBox={`0 0 ${W} ${H}`}
       width={W}
       height={H}
@@ -90,31 +91,7 @@ function Sparkline({ data }: { data: number[] }) {
   );
 }
 
-/** KPI 卡（自绘，白卡 + 发丝线 + tabular-nums 数字）。 */
-function KpiCard({
-  label,
-  value,
-  suffix,
-  foot,
-}: {
-  label: string;
-  value: number | string;
-  suffix?: string;
-  foot?: ReactNode;
-}) {
-  return (
-    <Col xs={12} lg={6}>
-      <div className="dash-kpi-card">
-        <div className="dash-kpi-card__label">{label}</div>
-        <div className="dash-kpi-card__value">
-          {value}
-          {suffix ? <span className="dash-kpi-card__suffix">{suffix}</span> : null}
-        </div>
-        {foot ? <div className="dash-kpi-card__foot">{foot}</div> : null}
-      </div>
-    </Col>
-  );
-}
+/** KPI 卡已收敛为公共组件（components/common/KpiCard，样式在 globals.css .kpi-card）。 */
 
 /**
  * 运营总览仪表盘（替代原 /admin/dashboard 重定向，Phase3）。
@@ -237,38 +214,46 @@ export function DashboardPage() {
         <>
           {/* ① 今日概览 KPI 卡片行（会话 / 消息 / 待办工单 / 反馈） */}
           <Row gutter={[16, 16]}>
-            <KpiCard
-              label="总会话数"
-              value={sessions}
-              foot={
-                <>
-                  <span className="dash-kpi-card__caption">近 14 天 {sumSessions14} 会话</span>
-                  <Sparkline data={days.map((d) => d.sessions)} />
-                </>
-              }
-            />
-            <KpiCard
-              label="总消息数"
-              value={messages}
-              foot={
-                <>
-                  <span className="dash-kpi-card__caption">近 14 天 {sumMessages14} 消息</span>
-                  <Sparkline data={days.map((d) => d.messages)} />
-                </>
-              }
-            />
-            <KpiCard
-              label="待办工单"
-              value={pendingTotal}
-              suffix="单"
-              foot={<span className="dash-kpi-card__caption">近 14 天 {sumTickets14} 工单</span>}
-            />
-            <KpiCard
-              label="反馈总数"
-              value={up + down}
-              suffix="条"
-              foot={<span className="dash-kpi-card__caption">赞 {up} · 踩 {down}</span>}
-            />
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="总会话数"
+                value={sessions}
+                foot={
+                  <>
+                    <span className="kpi-card__caption">近 14 天 {sumSessions14} 会话</span>
+                    <Sparkline data={days.map((d) => d.sessions)} />
+                  </>
+                }
+              />
+            </Col>
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="总消息数"
+                value={messages}
+                foot={
+                  <>
+                    <span className="kpi-card__caption">近 14 天 {sumMessages14} 消息</span>
+                    <Sparkline data={days.map((d) => d.messages)} />
+                  </>
+                }
+              />
+            </Col>
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="待办工单"
+                value={pendingTotal}
+                suffix="单"
+                foot={<span className="kpi-card__caption">近 14 天 {sumTickets14} 工单</span>}
+              />
+            </Col>
+            <Col xs={12} lg={6}>
+              <KpiCard
+                label="反馈总数"
+                value={up + down}
+                suffix="条"
+                foot={<span className="kpi-card__caption">赞 {up} · 踩 {down}</span>}
+              />
+            </Col>
           </Row>
 
           {/* ② 中部两栏：左 待办工单 + 右 告警 */}

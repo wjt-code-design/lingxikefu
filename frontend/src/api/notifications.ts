@@ -1,5 +1,6 @@
 import { http } from '@/api/client';
 import { API_PREFIX, type NotificationItem, type NotificationListResp, type OkResp, type UnreadCountResp } from '@/contracts/api';
+import { parseSSEFrame } from '@/api/sse';
 import { useAuthStore } from '@/store/authStore';
 
 /**
@@ -67,13 +68,10 @@ export function subscribeNotifications(onEvent: NotifyStreamHandler): () => void
         while ((idx = buf.indexOf('\n\n')) >= 0) {
           const frame = buf.slice(0, idx);
           buf = buf.slice(idx + 2);
-          const line = frame.split('\n').find((l) => l.startsWith('data: '));
-          if (!line) continue;
-          try {
-            onEvent(JSON.parse(line.slice(6)) as NotifySSEEvent);
-          } catch {
-            /* 非 JSON 帧（心跳残留）忽略 */
-          }
+          // #9 加固：拼接全部 data 行再 parse；失败 warn（见 api/sse.ts）
+          const ev = parseSSEFrame<NotifySSEEvent>(frame);
+          if (!ev) continue; // 非 data 帧（心跳残留）忽略
+          onEvent(ev);
         }
       }
     } catch {
