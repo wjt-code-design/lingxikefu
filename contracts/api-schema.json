@@ -275,7 +275,7 @@
           "sessions"
         ],
         "summary": "List Sessions",
-        "description": "会话列表（BUG-01 / BUG-05）。\n\n- user：只看自己的会话（Session.user_id == 当前用户）；\n- agent/admin：看全租户客户会话（客服工作台「会话列表」核心能力）；\n- 支持 page/size 分页（offset/limit），total 为过滤后的真实总数；\n- 排序仍按 updated_at desc（配合 BUG-03 的 session touch 后排序才正确）。\n- BUG-12：agent/admin 视角返回每个会话所属客户标识（email/phone），\n  供工作台历史面板区分客户；user 视角仅返回自己会话（标识为自己，不泄露他人）。",
+        "description": "会话列表（BUG-01 / BUG-05 + 第三批 #7 服务端过滤）。\n\n- user：只看自己的会话（Session.user_id == 当前用户）；\n- agent/admin：看全租户客户会话（客服工作台「会话列表」核心能力）；\n- 支持 page/size 分页（offset/limit），total 为过滤后的真实总数；\n- keyword / satisfaction 服务端过滤（此前审计页 size=100 客户端过滤，\n  第 101 条会话静默不可见）；keyword 命中 标题/客户邮箱/电话（outerjoin User）；\n- 排序默认 updated_at desc（配合 BUG-03 的 session touch）；\n  order=created 供审计页按创建时间倒序（保持原前端语义）。\n- BUG-12：agent/admin 视角返回每个会话所属客户标识（email/phone），\n  供工作台历史面板区分客户；user 视角仅返回自己会话（标识为自己，不泄露他人）。",
         "operationId": "list_sessions_api_v1_sessions_get",
         "security": [
           {
@@ -305,6 +305,55 @@
               "default": 20,
               "title": "Size"
             }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "标题/客户邮箱/电话模糊搜索",
+              "title": "Keyword"
+            },
+            "description": "标题/客户邮箱/电话模糊搜索"
+          },
+          {
+            "name": "satisfaction",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "pattern": "^(satisfied|neutral|unsatisfied)$"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Satisfaction"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "pattern": "^(updated|created)$",
+              "description": "排序键：updated（默认）| created（审计页）",
+              "default": "updated",
+              "title": "Order"
+            },
+            "description": "排序键：updated（默认）| created（审计页）"
           }
         ],
         "responses": {
@@ -353,6 +402,20 @@
               "format": "uuid",
               "title": "Session Id"
             }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 1000,
+              "minimum": 1,
+              "description": "返回最新 N 条消息（升序）；审计页可传大值",
+              "default": 200,
+              "title": "Limit"
+            },
+            "description": "返回最新 N 条消息（升序）；审计页可传大值"
           }
         ],
         "responses": {
@@ -542,55 +605,6 @@
             }
           }
         }
-      }
-    },
-    "/api/v1/chat/reply": {
-      "post": {
-        "tags": [
-          "chat"
-        ],
-        "summary": "Agent Reply",
-        "description": "T5：agent/admin 直复文本（不经 AI），写入用户会话 assistant 消息并记录 agent 身份。\n\n用于人工接管后的直接回复；用户仍用 /chat/stream（AI 问答）。",
-        "operationId": "agent_reply_api_v1_chat_reply_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AgentReplyReq"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "additionalProperties": true,
-                  "type": "object",
-                  "title": "Response Agent Reply Api V1 Chat Reply Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
       }
     },
     "/api/v1/chat/stream": {
@@ -1121,7 +1135,7 @@
           "admin"
         ],
         "summary": "Get Stats",
-        "description": "运营统计（会话/消息/文档/赞踩计数；首字时延尚未埋点）。",
+        "description": "运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。",
         "operationId": "get_stats_api_v1_admin_stats_get",
         "responses": {
           "200": {
@@ -2130,6 +2144,113 @@
         }
       }
     },
+    "/api/v1/suggestions": {
+      "post": {
+        "tags": [
+          "suggestions"
+        ],
+        "summary": "Submit Suggestion",
+        "description": "提交意见反馈（登录用户）。限流按用户维度计数，防单用户刷库。",
+        "operationId": "submit_suggestion_api_v1_suggestions_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestionReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "suggestions"
+        ],
+        "summary": "List Suggestions",
+        "description": "意见反馈列表（admin）：时间倒序分页，附提交人账号（email/phone）。",
+        "operationId": "list_suggestions_api_v1_suggestions_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestionListResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/telemetry/frontend-error": {
       "post": {
         "tags": [
@@ -2257,28 +2378,6 @@
           "content"
         ],
         "title": "AgentMessageReq"
-      },
-      "AgentReplyReq": {
-        "properties": {
-          "session_id": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Session Id"
-          },
-          "content": {
-            "type": "string",
-            "maxLength": 4000,
-            "minLength": 1,
-            "title": "Content"
-          }
-        },
-        "type": "object",
-        "required": [
-          "session_id",
-          "content"
-        ],
-        "title": "AgentReplyReq",
-        "description": "T5：agent/admin 直复（不经 AI），写入用户会话 assistant 消息。"
       },
       "AuditLogItem": {
         "properties": {
@@ -3755,6 +3854,119 @@
           "version"
         ],
         "title": "StatusUpdateReq"
+      },
+      "SuggestionItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "user_account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Account"
+          },
+          "type": {
+            "$ref": "#/components/schemas/SuggestionType"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_account",
+          "type",
+          "content",
+          "contact",
+          "created_at"
+        ],
+        "title": "SuggestionItem"
+      },
+      "SuggestionListResp": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/SuggestionItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "SuggestionListResp"
+      },
+      "SuggestionReq": {
+        "properties": {
+          "type": {
+            "$ref": "#/components/schemas/SuggestionType",
+            "default": "suggestion"
+          },
+          "content": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Content"
+          },
+          "contact": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "SuggestionReq"
+      },
+      "SuggestionType": {
+        "type": "string",
+        "enum": [
+          "bug",
+          "suggestion",
+          "other"
+        ],
+        "title": "SuggestionType",
+        "description": "用户意见反馈类型（意见反馈页：问题反馈 / 功能建议 / 其他）。"
       },
       "TicketItem": {
         "properties": {

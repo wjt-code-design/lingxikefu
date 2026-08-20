@@ -64,6 +64,9 @@ export interface Session {
 export interface SessionListReq {
   page: number;
   size: number;
+  keyword?: string; // 第三批 #7：服务端模糊搜索（标题/客户邮箱/电话），admin 审计页用
+  satisfaction?: 'satisfied' | 'neutral' | 'unsatisfied';
+  order?: 'updated' | 'created'; // 排序键：updated（默认，工作台）| created（审计页）
 }
 export interface SessionListResp {
   items: Session[];
@@ -150,7 +153,7 @@ export type SSEEvent =
   | { event: 'intent'; data: { intent: string; refuse?: boolean } } // R-2：真实意图（qa/handoff/chitchat）
   | { event: 'token'; data: { delta: string } }
   | { event: 'sources'; data: { sources: MessageSource[] } }
-  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐
+  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存
   | { event: 'error'; data: { code: string; message: string } };
 
 // ---------- Chat · Stream Request ----------
@@ -231,6 +234,25 @@ export interface PublicFaqResp {
 export interface FeedbackReq {
   rating: 'up' | 'down';
   comment?: string;
+}
+
+// ---------- Suggestions（意见反馈页 · P2 修复） ----------
+export interface SuggestionReq {
+  type: 'bug' | 'suggestion' | 'other';
+  content: string;
+  contact?: string;
+}
+export interface SuggestionItem {
+  id: string;
+  user_account?: string | null; // 提交人 email/phone（运营联系用）
+  type: 'bug' | 'suggestion' | 'other';
+  content: string;
+  contact?: string | null;
+  created_at: string;
+}
+export interface SuggestionListResp {
+  items: SuggestionItem[];
+  total: number;
 }
 
 // ---------- 通用响应 ----------

@@ -34,9 +34,9 @@ AUTO_MODELS = {'HTTPValidationError', 'ValidationError'}
 # - R3：StatusUpdateReq 已回填契约（S2 乐观锁），移出本列表按 A 类正常比对
 IGNORE_EXTRA = {
     'ModelSettings', 'QuotaSettings', 'RagSettings', 'RateLimitSettings',
-    'UserRole', 'FeedbackRating', 'Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post',
+    'UserRole', 'FeedbackRating', 'SuggestionType', 'Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post',
     'AdminSettingsResp', 'KnowledgeSearchHit', 'FaqDocItem', 'FaqKbItem', 'FaqListResp',
-    'CreateSessionReq', 'CreateTicketReq', 'SatisfactionReq', 'AgentReplyReq',
+    'CreateSessionReq', 'CreateTicketReq', 'SatisfactionReq',
     'FrontendErrorReq', 'SessionItem', 'SessionMessage', 'FeedbackItem', 'FeedbackListResp', 'FeedbackResp',
 }
 
