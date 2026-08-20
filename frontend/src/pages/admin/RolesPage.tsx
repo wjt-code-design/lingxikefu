@@ -35,7 +35,7 @@ export function RolesPage() {
   const roles = data?.roles ?? [];
 
   return (
-    <div className="roles-page">
+    <div className="roles-page page-atmo">
       <Typography>
         <Title level={3}>权限管理</Title>
         <Paragraph type="secondary">

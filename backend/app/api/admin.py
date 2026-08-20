@@ -118,7 +118,7 @@ def get_stats(
     _: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> AdminStats:
-    """运营统计（会话/消息/文档/赞踩计数；首字时延尚未埋点）。"""
+    """运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。"""
     tenant = settings.TENANT_DEFAULT
     sessions = db.scalar(select(func.count(Session.id)).where(Session.tenant_id == tenant)) or 0
     messages = db.scalar(select(func.count(Message.id)).where(Message.tenant_id == tenant)) or 0
@@ -139,25 +139,26 @@ def get_stats(
         )
         or 0
     )
-    # R-3：首字时延真实均值（assistant 消息 meta.first_token_ms 埋点，见 chat.py）。
-    # 数据量小（统计面板），Python 侧聚合避免跨方言 JSON 查询差异。
-    metas = db.scalars(
-        select(Message.meta).where(
+    # R-3：首字时延均值 SQL 聚合（PG: meta->>'first_token_ms'，SQLite: json_extract）。
+    # 此前全量拉 assistant meta 到 Python 内存聚合 O(N)，消息量增长后统计面板变慢。
+    latency_col = Message.meta["first_token_ms"].as_float()
+    avg_row = db.execute(
+        select(func.avg(latency_col), func.count(latency_col)).where(
             Message.tenant_id == tenant, Message.role == MessageRole.assistant
         )
-    ).all()
-    latencies = [
-        float(m["first_token_ms"]) for m in metas if isinstance(m, dict) and m.get("first_token_ms") is not None
-    ]
-    avg_first_token_ms = round(sum(latencies) / len(latencies), 1) if latencies else 0.0
+    ).one()
+    avg_first_token_ms = round(float(avg_row[0]), 1) if avg_row[0] is not None else 0.0
     # F1：待补录问题 Top10——聚合 handoff/refuse 意图的用户消息（KB 未覆盖 → 运营补录信号）。
-    # 问句归一化（去空白/全半角/标点）后分组，防"同一问题不同问法"重复计数；展示出现最多的原始问句。
-    raw_rows = db.scalars(
-        select(Message.content).where(
+    # SQL 先按原文 GROUP BY 压缩行数（同问句一行，count 由数据库算），Python 仅做跨变体
+    # 归一化归并（NFKC/去标点）——传输量从"消息数"降到"不同问句数"。
+    raw_rows = db.execute(
+        select(Message.content, func.count(Message.id))
+        .where(
             Message.tenant_id == tenant,
             Message.role == MessageRole.user,
             Message.intent.in_(["handoff", "refuse"]),
         )
+        .group_by(Message.content)
     ).all()
 
     def _norm(s: str) -> str:
@@ -166,10 +167,10 @@ def get_stats(
         return re.sub(f"[{re.escape(' \t\n\r，。？！、；：\"\'（）【】,.?!;:()[]')}]", "", s)
 
     groups: dict[str, dict] = {}
-    for content in raw_rows:
+    for content, cnt in raw_rows:
         key = _norm(content)
         g = groups.setdefault(key, {"variants": {}})
-        g["variants"][content] = g["variants"].get(content, 0) + 1
+        g["variants"][content] = cnt
     hot_gaps = []
     for g in sorted(groups.values(), key=lambda x: -sum(x["variants"].values()))[:10]:
         # 展示组内出现最多的原始问句；次数平局取较短（更简洁、利于一眼看懂）

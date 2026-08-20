@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_ as sa_or, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user
@@ -97,30 +97,49 @@ def list_sessions(
     db: OrmSession = Depends(get_db),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    keyword: str | None = Query(None, max_length=100, description="标题/客户邮箱/电话模糊搜索"),
+    satisfaction: str | None = Query(None, pattern="^(satisfied|neutral|unsatisfied)$"),
+    order: str = Query("updated", pattern="^(updated|created)$", description="排序键：updated（默认）| created（审计页）"),
 ) -> SessionListResp:
-    """会话列表（BUG-01 / BUG-05）。
+    """会话列表（BUG-01 / BUG-05 + 第三批 #7 服务端过滤）。
 
     - user：只看自己的会话（Session.user_id == 当前用户）；
     - agent/admin：看全租户客户会话（客服工作台「会话列表」核心能力）；
     - 支持 page/size 分页（offset/limit），total 为过滤后的真实总数；
-    - 排序仍按 updated_at desc（配合 BUG-03 的 session touch 后排序才正确）。
+    - keyword / satisfaction 服务端过滤（此前审计页 size=100 客户端过滤，
+      第 101 条会话静默不可见）；keyword 命中 标题/客户邮箱/电话（outerjoin User）；
+    - 排序默认 updated_at desc（配合 BUG-03 的 session touch）；
+      order=created 供审计页按创建时间倒序（保持原前端语义）。
     - BUG-12：agent/admin 视角返回每个会话所属客户标识（email/phone），
       供工作台历史面板区分客户；user 视角仅返回自己会话（标识为自己，不泄露他人）。
     """
     user_id = uuid.UUID(payload["sub"])
     role = payload.get("role")
-    cond = (
+    conds = [
         Session.tenant_id == settings.TENANT_DEFAULT
         if role in ("admin", "agent")
         else Session.user_id == user_id
-    )
-    total = db.scalar(select(func.count(Session.id)).where(cond)) or 0
-    rows = db.scalars(
+    ]
+    if satisfaction:
+        conds.append(Session.satisfaction == satisfaction)
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        conds.append(
+            sa_or(
+                Session.title.ilike(kw),
+                User.email.ilike(kw),
+                User.phone.ilike(kw),
+            )
+        )
+    stmt = (
         select(Session)
-        .where(cond)
-        .order_by(Session.updated_at.desc())
-        .offset((page - 1) * size)
-        .limit(size)
+        .outerjoin(User, Session.user_id == User.id)
+        .where(*conds)
+    )
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    order_col = Session.created_at if order == "created" else Session.updated_at
+    rows = db.scalars(
+        stmt.order_by(order_col.desc()).offset((page - 1) * size).limit(size)
     ).all()
     # BUG-12：批量取会话归属用户的 email/phone（避免 N+1 查询）
     user_ids = {s.user_id for s in rows}
@@ -150,6 +169,7 @@ def get_session(
     session_id: uuid.UUID,
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
+    limit: int = Query(200, ge=1, le=1000, description="返回最新 N 条消息（升序）；审计页可传大值"),
 ) -> SessionDetail:
     user_id = uuid.UUID(payload["sub"])
     s = db.scalar(select(Session).where(Session.id == session_id))
@@ -160,11 +180,18 @@ def get_session(
     role = payload.get("role")
     if s.user_id != user_id and role not in ("admin", "agent"):
         raise HTTPException(status_code=403, detail="forbidden")
-    msgs = db.scalars(
-        select(Message)
-        .where(Message.session_id == session_id)
-        .order_by(Message.created_at.asc())
-    ).all()
+    # 第三批 #8：超长会话防全量加载——取最新 limit 条（desc + limit）再反转为升序时间线。
+    # 聊天历史/轮询均依赖"最新优先"语义（最新 agent 消息必含在内）；超限的旧消息不返回。
+    msgs = list(
+        reversed(
+            db.scalars(
+                select(Message)
+                .where(Message.session_id == session_id)
+                .order_by(Message.created_at.desc())
+                .limit(limit)
+            ).all()
+        )
+    )
     return SessionDetail(
         id=str(s.id),
         title=s.title,

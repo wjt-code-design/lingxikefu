@@ -1,12 +1,12 @@
-import { useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { Button, Drawer, Input, Select, Spin, Tag, Typography } from 'antd';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { AppTable } from '@/components/common/AppTable';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { getSessionDetail, listSessions } from '@/api/sessions';
-import type { Session, SessionDetail } from '@/contracts/api';
+import type { Session, SessionDetail, SessionListReq } from '@/contracts/api';
 import './SessionsAuditPage.css';
 
 const SATISFACTION_META: Record<string, { color: string; text: string }> = {
@@ -22,7 +22,16 @@ const SATISFACTION_OPTIONS = [
   { label: '不满意', value: 'unsatisfied' },
 ];
 
-/** 会话完整对话（气泡左右区分 user / assistant）。 */
+const PAGE_SIZE = 20;
+
+/** 消息角色标签（P2：区分用户 / AI / 人工客服，agent 附带客服标识）。 */
+const ROLE_TEXT: Record<string, string> = {
+  user: '用户',
+  assistant: 'AI',
+  agent: '人工客服',
+};
+
+/** 会话完整对话（气泡左右区分 user / assistant / agent）。 */
 function MessageThread({ messages }: { messages: SessionDetail['messages'] }) {
   return (
     <div className="audit-thread">
@@ -30,7 +39,10 @@ function MessageThread({ messages }: { messages: SessionDetail['messages'] }) {
         <div key={m.id} className={`audit-msg audit-msg--${m.role}`}>
           <div className="audit-msg__bubble">
             <div className="audit-msg__meta">
-              <span className="audit-msg__role">{m.role === 'user' ? '用户' : '客服'}</span>
+              <span className="audit-msg__role">
+                {ROLE_TEXT[m.role] ?? m.role}
+                {m.role === 'agent' && m.agent_name ? ` · ${m.agent_name}` : ''}
+              </span>
               <span className="audit-msg__time">
                 {new Date(m.created_at).toLocaleString('zh-CN')}
               </span>
@@ -44,40 +56,45 @@ function MessageThread({ messages }: { messages: SessionDetail['messages'] }) {
 }
 
 /**
- * 全租户会话审计（Phase3）。
- * 后端 list_sessions 仅 page/size（admin 视角返回全租户），
- * 故一次拉 size=100 后在客户端按 客户邮箱/电话/标题关键词/满意度 过滤。
- * 点击行打开 Drawer 展示完整对话（getSessionDetail）。
+ * 全租户会话审计（Phase3 + 第三批 #7 服务端化）。
+ * keyword / 满意度筛选与分页全部由后端完成（此前 size=100 客户端过滤，
+ * 第 101 条会话静默不可见）；排序按创建时间倒序（order=created，保持原语义）。
+ * 点击行打开 Drawer 展示完整对话（getSessionDetail，limit=1000 拉全量上下文）。
  */
 export function SessionsAuditPage() {
   const [keyword, setKeyword] = useState('');
-  const [satisfaction, setSatisfaction] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState(''); // 300ms 防抖，避免逐键请求
+  const [satisfaction, setSatisfaction] = useState<SessionListReq['satisfaction']>(undefined);
+  const [page, setPage] = useState(1);
   const [openId, setOpenId] = useState<string | null>(null);
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedKeyword(keyword.trim());
+      setPage(1); // 新搜索回第 1 页
+    }, 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
   const { data, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['admin-sessions-audit'],
-    queryFn: () => listSessions({ page: 1, size: 100 }),
+    queryKey: ['admin-sessions-audit', debouncedKeyword, satisfaction, page],
+    queryFn: () =>
+      listSessions({
+        page,
+        size: PAGE_SIZE,
+        keyword: debouncedKeyword || undefined,
+        satisfaction,
+        order: 'created',
+      }),
+    placeholderData: keepPreviousData, // 翻页/筛选时保留旧数据，避免表格闪空
   });
 
-  // 客户端过滤：客户邮箱 / 电话 / 标题关键词 + 满意度，按创建时间倒序
-  const filtered = useMemo(() => {
-    const kw = keyword.trim().toLowerCase();
-    return (data?.items ?? [])
-      .filter((s) => {
-        if (satisfaction && s.satisfaction !== satisfaction) return false;
-        if (!kw) return true;
-        return (
-          (s.user_email ?? '').toLowerCase().includes(kw) ||
-          (s.user_phone ?? '').toLowerCase().includes(kw) ||
-          (s.title ?? '').toLowerCase().includes(kw)
-        );
-      })
-      .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
-  }, [data, keyword, satisfaction]);
+  const items = data?.items ?? [];
+  const total = data?.total ?? 0;
 
   const { data: detail, isLoading: detailLoading } = useQuery({
     queryKey: ['admin-session-detail', openId],
-    queryFn: () => getSessionDetail(openId as string),
+    queryFn: () => getSessionDetail(openId as string, 1000),
     enabled: !!openId,
   });
 
@@ -134,7 +151,7 @@ export function SessionsAuditPage() {
   ];
 
   return (
-    <div className="page audit-page">
+    <div className="page audit-page page-atmo">
       <div className="audit-page__head">
         <Typography.Title level={3} className="audit-page__title">会话审计</Typography.Title>
         <Typography.Text className="audit-page__subtitle">
@@ -154,18 +171,21 @@ export function SessionsAuditPage() {
         <Select
           style={{ width: 150 }}
           value={satisfaction}
-          onChange={(v) => setSatisfaction(v)}
+          onChange={(v) => {
+            setSatisfaction((v || undefined) as SessionListReq['satisfaction']);
+            setPage(1);
+          }}
           options={SATISFACTION_OPTIONS}
         />
         <Button icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()}>
           刷新
         </Button>
-        <span className="audit-filters__count">共 {filtered.length} 条</span>
+        <span className="audit-filters__count">共 {total} 条</span>
       </div>
 
       {isLoading && !data ? (
         <Spin className="audit-spin" />
-      ) : filtered.length === 0 ? (
+      ) : items.length === 0 ? (
         <BrandEmpty title="暂无匹配会话" hint="调整筛选条件或点击刷新重试" />
       ) : (
         <div className="audit-table">
@@ -173,8 +193,14 @@ export function SessionsAuditPage() {
             rowKey="id"
             loading={isFetching}
             columns={columns}
-            dataSource={filtered}
-            pagination={{ pageSize: 20, showSizeChanger: false }}
+            dataSource={items}
+            pagination={{
+              current: page,
+              pageSize: PAGE_SIZE,
+              total,
+              showSizeChanger: false,
+              onChange: setPage,
+            }}
             onRow={(record) => ({
               onClick: () => setOpenId(record.id),
               style: { cursor: 'pointer' },

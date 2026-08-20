@@ -75,7 +75,7 @@ export function UsersPage() {
   ];
 
   return (
-    <div className="page users-page">
+    <div className="page users-page page-atmo">
       <div className="users-page__header">
         <Typography.Title level={3}>用户管理</Typography.Title>
       </div>

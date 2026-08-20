@@ -2,26 +2,30 @@ import { useEffect, useState } from 'react';
 import { resolveSystem, useThemeStore, type ResolvedTheme, type ThemeMode } from '@/store/themeStore';
 
 /**
- * 主题 hook（拒绝深色）：
- * - 兼容历史持久化的 'dark'（原「柔和」假深色档）→ 归一为 light；
- * - 派生 resolved：恒 light（'system' 也解析为浅色，系统深色不回退深色 UI）；
- * - 同步 <html data-theme>（恒 light，首帧由 index.html 内联脚本兜底）。
+ * 主题 hook（三态：light / dark / system）：
+ * - resolved 为最终生效主题（system → matchMedia 实时解析，OS 切换深浅即时跟随）；
+ * - 同步 <html data-theme>（CSS token 层）；AntD 层由 App.tsx 按 resolved 切 algorithm/token；
+ * - 首帧由 index.html 内联脚本兜底（读 localStorage + matchMedia，防 FOUC）。
  */
 export function useTheme() {
   const storedTheme = useThemeStore((s) => s.theme);
   const setTheme = useThemeStore((s) => s.setTheme);
-  // 历史 localStorage 可能残留 'dark'（旧假深色档）→ 归一为 light。
-  // 注意：store 的 ThemeMode 类型已不含 'dark'，但持久化的原始字符串仍可能是 'dark'，
-  // 因此这里用 String() 转成原始值再比较，避免 TS2367 类型无重叠报错。
-  const theme: ThemeMode = String(storedTheme) === 'dark' ? 'light' : storedTheme;
+  // zustand persist 恢复前（首帧）值可能是默认 'light'，与内联脚本的兜底结果一致方向，可接受
+  const theme: ThemeMode = storedTheme;
 
   const [resolved, setResolved] = useState<ResolvedTheme>(() =>
-    theme === 'system' ? resolveSystem() : theme
+    theme === 'system' ? resolveSystem() : (theme as ResolvedTheme)
   );
 
   useEffect(() => {
-    const update = () => setResolved(theme === 'system' ? resolveSystem() : theme);
-    update();
+    const apply = () => setResolved(theme === 'system' ? resolveSystem() : (theme as ResolvedTheme));
+    apply();
+    // system 档：监听 OS 深浅偏好变化，实时跟随
+    if (theme === 'system' && window.matchMedia) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      mq.addEventListener('change', apply);
+      return () => mq.removeEventListener('change', apply);
+    }
   }, [theme]);
 
   useEffect(() => {

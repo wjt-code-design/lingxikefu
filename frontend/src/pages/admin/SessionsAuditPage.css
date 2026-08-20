@@ -7,28 +7,8 @@
 .audit-page {
   max-width: 1320px;
   margin: 0 auto;
-  position: relative;
 }
-/* 顶部氛围渐变：极淡品牌色 → 透明，营造纵深；不占布局、不遮挡点击。 */
-.audit-page::before {
-  content: "";
-  position: absolute;
-  inset: -16px -16px auto -16px;
-  height: 160px;
-  background: linear-gradient(
-    180deg,
-    rgba(83, 159, 216, 0.06) 0%,
-    rgba(83, 159, 216, 0.02) 60%,
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 0;
-  border-radius: var(--radius-md);
-}
-.audit-page > * {
-  position: relative;
-  z-index: 1;
-}
+/* 氛围渐变与移动端基础适配已收敛至 globals.css 的 .page-atmo 公共类 */
 .audit-page__head {
   display: flex;
   align-items: baseline;
@@ -96,7 +76,8 @@
 .audit-msg--user {
   justify-content: flex-end;
 }
-.audit-msg--assistant {
+.audit-msg--assistant,
+.audit-msg--agent {
   justify-content: flex-start;
 }
 .audit-msg__bubble {
@@ -107,7 +88,8 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
 }
-.audit-msg--assistant .audit-msg__bubble {
+.audit-msg--assistant .audit-msg__bubble,
+.audit-msg--agent .audit-msg__bubble {
   border-bottom-left-radius: 6px;
 }
 .audit-msg--user .audit-msg__bubble {

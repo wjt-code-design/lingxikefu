@@ -112,7 +112,7 @@ export function TicketsPage() {
   ];
 
   return (
-    <div className="agent-tickets">
+    <div className="agent-tickets page-atmo">
       <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
         <Typography.Title level={3} style={{ margin: 0 }}>
           工单列表

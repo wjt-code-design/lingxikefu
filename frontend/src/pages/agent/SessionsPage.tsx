@@ -95,7 +95,7 @@ export function SessionsPage() {
   ];
 
   return (
-    <div className="agent-sessions">
+    <div className="agent-sessions page-atmo">
       <Typography.Title level={3}>会话列表</Typography.Title>
       <AppTable<Session>
         rowKey="id"

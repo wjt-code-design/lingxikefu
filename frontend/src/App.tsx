@@ -5,7 +5,7 @@ import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from '@/router';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
 import { useTheme } from '@/hooks/useTheme';
-import { lightTokens } from '@/theme'; // 拒绝深色：单一浅色海盐系 token
+import { darkTokens, lightTokens } from '@/theme';
 
 // 全局 QueryClient：REST 服务端状态缓存（FE-02+ 复用）
 const queryClient = new QueryClient({
@@ -15,16 +15,17 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  // 拒绝深色：恒用 defaultAlgorithm + lightTokens。
-  // useTheme 仅负责同步 <html data-theme>（恒 light），无深色切换逻辑。
-  useTheme();
+  // 三态主题（light/dark/system）：useTheme 解析 resolved 并同步 <html data-theme>，
+  // AntD 层按 resolved 切 algorithm + token（2026-08-20 恢复真深色支持）。
+  const { resolved } = useTheme();
+  const isDark = resolved === 'dark';
 
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
-        algorithm: antdTheme.defaultAlgorithm,
-        token: lightTokens,
+        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+        token: isDark ? darkTokens : lightTokens,
       }}
     >
       <QueryClientProvider client={queryClient}>

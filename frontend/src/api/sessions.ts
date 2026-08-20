@@ -46,8 +46,12 @@ export async function listSessions(req: SessionListReq): Promise<SessionListResp
   return { items: r.data.items.map(toSession), total: r.data.total };
 }
 
-export async function getSessionDetail(id: string): Promise<SessionDetail> {
-  const r = await http.get<BackendSessionDetail>(`/sessions/${id}`);
+/**
+ * 会话详情（含消息历史）。
+ * limit：返回最新 N 条（升序时间线），默认 200；审计 Drawer 拉全量上下文可传大值（上限 1000）。
+ */
+export async function getSessionDetail(id: string, limit?: number): Promise<SessionDetail> {
+  const r = await http.get<BackendSessionDetail>(`/sessions/${id}`, { params: limit ? { limit } : {} });
   return {
     // BUG-FIX（Branch 3 顺带）：后端详情响应字段是 id，此前误读 session_id →
     // ?session= 打开时 sessionId 恒为 undefined，staff 转人工/建单静默失效。

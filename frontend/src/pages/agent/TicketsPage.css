@@ -1,41 +1,7 @@
-/* 工单列表页氛围渐变 */
-.agent-tickets {
-  position: relative;
-}
-.agent-tickets::before {
-  content: "";
-  position: absolute;
-  inset: -16px -16px auto -16px;
-  height: 160px;
-  background: linear-gradient(
-    180deg,
-    rgba(83, 159, 216, 0.06) 0%,
-    rgba(83, 159, 216, 0.02) 60%,
-    transparent 100%
-  );
-  pointer-events: none;
-  z-index: 0;
-  border-radius: var(--radius-md);
-}
-.agent-tickets > * {
-  position: relative;
-  z-index: 1;
-}
+/* 工单列表页：氛围渐变与移动端基础适配已收敛至 globals.css 的 .page-atmo 公共类（保留本页特有规则） */
 
-/* 移动端适配 */
+/* 移动端：筛选操作区纵向堆叠（本页特有） */
 @media (max-width: 767px) {
-  .agent-tickets {
-    padding: 12px;
-  }
-  .agent-tickets .ant-card {
-    border-radius: var(--radius-sm);
-  }
-  .agent-tickets .ant-table-wrapper {
-    overflow-x: auto;
-  }
-  .agent-tickets .ant-table {
-    min-width: 600px;
-  }
   .agent-tickets .ant-space {
     flex-direction: column;
     width: 100%;

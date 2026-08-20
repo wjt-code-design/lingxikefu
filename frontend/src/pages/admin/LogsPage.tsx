@@ -122,7 +122,7 @@ export function LogsPage() {
   ];
 
   return (
-    <div className="page logs-page">
+    <div className="page logs-page page-atmo">
       <div className="logs-page__header">
         <div className="logs-page__head">
           <Typography.Title level={3} className="logs-page__title">

@@ -112,6 +112,44 @@ def test_admin_feedback_lists_down_only(client):
     assert r2.status_code == 403
 
 
+def test_stats_avg_first_token_ms(client):
+    """R-3：first_token_ms 均值——SQL 聚合等价验证（带埋点/无埋点/非数值混合）。
+
+    预期独立手算：带埋点 3 条（100.0 / 200.0 / 300.0）→ 均值 200.0；
+    无 meta / meta 无 first_token_ms / 非 assistant 的行一律不计。
+    """
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.assistant, content="a1", meta={"first_token_ms": 100.0}))
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.assistant, content="a2", meta={"first_token_ms": 200.0}))
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.assistant, content="a3", meta={"first_token_ms": 300.0}))
+        # 干扰项：不计入均值
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.assistant, content="a4", meta={}))  # 无埋点
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.assistant, content="a5", meta=None))  # meta 为空
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.user, content="q1", meta={"first_token_ms": 999.0}))  # 非 assistant
+        db.commit()
+    finally:
+        gen.close()
+
+    r = client.get(f"{API}/admin/stats", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    assert r.json()["avg_first_token_ms"] == 200.0
+
+
+def test_stats_avg_first_token_ms_empty(client):
+    """R-3：无任何埋点数据 → 均值 0.0（不是 None/500）。"""
+    r = client.get(f"{API}/admin/stats", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    assert r.json()["avg_first_token_ms"] == 0.0
+
+
 def test_stats_trend_aggregates_days(client):
     """P1：stats/trend 按日聚合会话/消息/工单 + 无数据日期补零 + 权限 403。"""
     from datetime import datetime, timedelta

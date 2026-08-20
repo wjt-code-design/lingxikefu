@@ -38,7 +38,7 @@ export function CustomersPage() {
   ];
 
   return (
-    <div className="agent-customers">
+    <div className="agent-customers page-atmo">
       <Typography.Title level={3} style={{ marginBottom: 16 }}>
         客户管理
       </Typography.Title>

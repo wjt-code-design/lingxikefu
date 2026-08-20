@@ -83,10 +83,11 @@
   --text-5xl: 40px; /* h1 */
 
   /* ---- 纵深氛围 ---- */
+  /* 渐变停止点对齐各页面实际使用的 60%（此 token 唯一消费方是 globals.css 的 .page-atmo） */
   --atmo-gradient: linear-gradient(
     180deg,
     rgba(83, 159, 216, 0.06) 0%,
-    rgba(83, 159, 216, 0.02) 50%,
+    rgba(83, 159, 216, 0.02) 60%,
     transparent 100%
   );
   --atmo-glow: radial-gradient(
@@ -105,6 +106,70 @@
   --dur-slow: 400ms;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- 组件级语义（light 值；dark 由 [data-theme='dark'] 覆盖） ---- */
+  --table-head-bg: #fafcfe; /* 工作台表格表头（极浅蓝灰） */
+  --chat-avatar-fill: #96c8e8; /* 聊天品牌头像气泡底 */
+  --chat-avatar-dot: #539fd8; /* 头像圆点（眼睛） */
+}
+
+/* ============================================================
+   暗色主题（海盐蓝 · 暗夜版）：[data-theme='dark'] 全量色彩覆盖。
+   几何/间距/动效/字体与 light 共用（仅色彩层切换）。
+   铁律不变：背景有纵深、品牌海盐蓝点缀、文字层级对比 AA。
+   ============================================================ */
+[data-theme='dark'] {
+  /* 品牌/语义色与 light 同值（深底对比更佳，显式声明"不变"；check-tokens 校验映射） */
+  --color-brand: #539fd8;
+  --color-brand-dark: #3e7cb1;
+  --color-brand-deep: #2e5d85;
+  --color-brand-pale: #96c8e8;
+  --color-accent: #4da07f;
+  --color-amber: #e0a86a;
+  --color-orange: #e0a86a;
+  --color-danger: #d97a7a;
+  /* soft/whisper 提高透明度保证深底可见性 */
+  --color-brand-soft: rgba(83, 159, 216, 0.18);
+  --color-brand-whisper: rgba(83, 159, 216, 0.07);
+
+  /* 文字层级（深底反白，对比度 AA） */
+  --text-1: #e9eff5;
+  --text-2: #cfd9e3;
+  --text-3: #9db0c0; /* 对 #1c2531 ≈ 5.9:1 ✓ */
+  --text-4: #71828f; /* 占位/禁用（大文本 AA） */
+
+  /* 背景/边框（深蓝灰，非纯黑——保留纵深） */
+  --color-surface: #1c2531;
+  --bg-page: #141b24;
+  --bg-page-deep: #101720;
+  --border: #2b3644;
+  --border-strong: #3d4a5a;
+
+  /* 阴影（深色下阴影需更重才有形） */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3), 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.32), 0 4px 16px rgba(0, 0, 0, 0.28);
+  --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.34);
+
+  /* 纵深氛围与玻璃（深底） */
+  --atmo-gradient: linear-gradient(
+    180deg,
+    rgba(83, 159, 216, 0.09) 0%,
+    rgba(83, 159, 216, 0.03) 60%,
+    transparent 100%
+  );
+  --glass-bg: rgba(28, 37, 49, 0.78);
+  --glass-border: rgba(43, 54, 68, 0.7);
+
+  /* 组件级语义 */
+  --table-head-bg: #1f2a37;
+  --chat-avatar-fill: rgba(83, 159, 216, 0.42);
+  --chat-avatar-dot: #7ab5e0;
+}
+
+/* dark 下工作台外壳：内容区比 User 端更深一档（对应 light 的 #ECF0F4 加深逻辑） */
+[data-theme='dark'].app-workbench {
+  --bg-page: #101720;
+  --border: #26303d;
 }
 
 /* ===== semantic-workbench（工作台外壳：AdminLayout） =====

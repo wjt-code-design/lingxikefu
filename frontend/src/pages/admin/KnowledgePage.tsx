@@ -207,7 +207,7 @@ export function KnowledgePage() {
     <div className="page">
       <Typography.Title level={3}>知识库管理</Typography.Title>
 
-      <div className="kb-layout">
+      <div className="kb-layout page-atmo">
         {/* 左侧：知识库树形导航 */}
         <aside className="kb-sidebar">
           <div className="kb-sidebar__header">

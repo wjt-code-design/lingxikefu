@@ -40,7 +40,7 @@ export function TrendChart({ days }: { days: TrendPoint[] }) {
           return (
             <g key={g}>
               <line x1={PAD.left} y1={gy} x2={W - PAD.right} y2={gy} stroke="#E3E9EF" strokeWidth="1" />
-              <text x={PAD.left - 6} y={gy + 3} textAnchor="end" fontSize="10" fill="#8A9DB0">
+              <text x={PAD.left - 6} y={gy + 3} textAnchor="end" fontSize="10" fill="var(--text-4)">
                 {Math.round(max - (max * g) / 4)}
               </text>
             </g>
@@ -60,7 +60,7 @@ export function TrendChart({ days }: { days: TrendPoint[] }) {
         ))}
         {/* X 轴刻度 */}
         {ticks.map(({ d, i }) => (
-          <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="#8A9DB0">
+          <text key={i} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--text-4)">
             {d.date.slice(5)}
           </text>
         ))}
