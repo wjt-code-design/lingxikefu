@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
 
 env:
@@ -87,6 +87,9 @@ jobs:
         run: alembic upgrade head
       - name: Run tests (coverage >= 70%)
         run: pytest
+      # 契约门禁：根 contracts/api.ts vs api-schema.json 一致（防漂移静默回归，纯标准库脚本）
+      - name: Contract check (check_contracts.py)
+        run: python ../scripts/check_contracts.py
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4

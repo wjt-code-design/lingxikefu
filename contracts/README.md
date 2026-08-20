@@ -46,7 +46,9 @@ python scripts/check_contracts.py
 以下后端 OpenAPI 模型暂未回填到 `api.ts`（已加入校验白名单 `IGNORE_EXTRA`，不产生噪音；待后续轮次补齐）：
 
 - **命名差异（契约已有对应）**：`AdminSettingsResp`↔AdminSettings、`KnowledgeSearchHit`↔KnowledgeHit、`FaqDocItem`↔FaqDoc、`FaqKbItem`↔FaqKBItem、`FaqListResp`↔PublicFaqResp、`UserRole`↔Role
-- **未回填**：`CreateSessionReq`、`CreateTicketReq`、`SatisfactionReq`、`StatusUpdateReq`、`AgentReplyReq`、`FrontendErrorReq`、`SessionItem`、`SessionMessage`、`FeedbackItem`、`FeedbackListResp`、`FeedbackResp`、`ModelSettings`、`QuotaSettings`、`RagSettings`、`RateLimitSettings`、`FeedbackRating`
+- **枚举 → TS 内联 union（同名忽略）**：`FeedbackRating`、`SuggestionType`（TS 端以字面量 union 表达，无独立 interface）
+- **未回填（待后续轮次补齐）**：`CreateSessionReq`、`CreateTicketReq`、`SatisfactionReq`、`FrontendErrorReq`、`SessionItem`、`SessionMessage`、`FeedbackItem`、`FeedbackListResp`、`FeedbackResp`、`ModelSettings`、`QuotaSettings`、`RagSettings`、`RateLimitSettings`
+- **字段命名偏差（前端 API 适配层映射）**：`SessionItem.session_id`（后端）↔ 契约 `Session.id`（前端 `sessions.ts` 的 `toSession` 负责 session_id→id 映射，避免渗透到组件层）
 
 > 校验脚本只比对「契约有且后端有」的 A 类类型字段；后端新增未列入白名单的模型会 FAIL 提示，保证门禁不被静默绕过。
 

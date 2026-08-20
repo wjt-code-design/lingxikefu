@@ -12,7 +12,8 @@ import { RouteChrome } from '@/components/common/RouteChrome';
 export function AdminLayout() {
   return (
     <Layout className="admin-layout app-workbench" hasSider>
-      <Layout.Sider collapsible width={220} className="admin-layout__sider">
+      {/* breakpoint="lg"：窄屏（<992px，平板竖屏/小窗 iframe）自动收起为 64px；collapsedWidth 可手动再折叠 */}
+      <Layout.Sider collapsible breakpoint="lg" collapsedWidth={64} width={220} className="admin-layout__sider">
         <div className="admin-layout__logo">灵犀</div>
         <SideNav />
       </Layout.Sider>

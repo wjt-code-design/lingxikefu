@@ -28,5 +28,10 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      // 移动端回归（375px 级）：登录页/公开路由响应式；屏内不横向滚动
+      name: 'chromium-mobile',
+      use: { ...devices['Pixel 5'] },
+    },
   ],
 });
