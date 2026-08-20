@@ -87,11 +87,12 @@ export function AppRoutes() {
         </Route>
         <Route path="/help" element={<Navigate to="/faq" replace />} />
 
+        {/* 用户侧页面（统一使用 AdminLayout，所有页面都有左侧边栏） */}
         <Route
           path="/chat"
           element={
             <RequireAuth>
-              <WidgetShell />
+              <AdminLayout />
             </RequireAuth>
           }
         >
@@ -103,7 +104,7 @@ export function AppRoutes() {
           path="/tickets"
           element={
             <RequireAuth>
-              <WidgetShell />
+              <AdminLayout />
             </RequireAuth>
           }
         >
@@ -115,7 +116,7 @@ export function AppRoutes() {
           path="/profile"
           element={
             <RequireAuth>
-              <WidgetShell />
+              <AdminLayout />
             </RequireAuth>
           }
         >
@@ -127,7 +128,7 @@ export function AppRoutes() {
           path="/feedback"
           element={
             <RequireAuth>
-              <WidgetShell />
+              <AdminLayout />
             </RequireAuth>
           }
         >

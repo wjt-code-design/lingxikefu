@@ -21,6 +21,7 @@ from app.models.base import Base, tenant_id_column
 class MessageRole(StrEnum):
     user = "user"
     assistant = "assistant"
+    agent = "agent"  # Branch 3：人工客服消息（契约 P2 角色）
 
 
 class Message(Base):
@@ -45,6 +46,9 @@ class Message(Base):
         server_default=sa.func.now(),
     )
     intent: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    # Branch 3：人工客服消息归属（契约 Message.agent_id / agent_name；user/assistant 为 NULL）
+    agent_id: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    agent_name: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     meta: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         nullable=False,

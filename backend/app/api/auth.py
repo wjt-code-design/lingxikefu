@@ -103,10 +103,12 @@ def me(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
     quota_left = get_quota_service().left_today(str(user.id))
+    quota_total = get_quota_service().daily_limit
     return MeResp(
         user_id=str(user.id),
         email=user.email,
         phone=user.phone,
         role=user.role,
         quota_left=quota_left,
+        quota_total=quota_total,
     )

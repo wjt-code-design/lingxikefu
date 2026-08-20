@@ -20,6 +20,14 @@ export function escalateSession(sessionId: string): Promise<TicketItem> {
   return http.post<TicketItem>(`/tickets/escalate/${sessionId}`).then((r) => r.data);
 }
 
+/** 客服手动建单（agent/admin；POST /tickets，staff 专属，契约无独立 TS 类型故内联）。
+ *  与 转人工（escalate）区分：建单仅记录工单，不切换客服介入视角。 */
+export function createTicket(sessionId: string): Promise<TicketItem> {
+  return http
+    .post<TicketItem>('/tickets', { session_id: sessionId })
+    .then((r) => r.data);
+}
+
 /** 我的工单（P2-1，user 可调）：只返回当前用户会话的工单 */
 export function listMyTickets(status?: TicketStatus, page = 1, size = 20): Promise<TicketListResp> {
   return http

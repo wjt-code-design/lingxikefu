@@ -1,5 +1,5 @@
 import { http } from '@/api/client';
-import type { Session, SessionDetail, SessionListReq, SessionListResp } from '@/contracts/api';
+import type { Message, Session, SessionDetail, SessionListReq, SessionListResp } from '@/contracts/api';
 
 /**
  * 会话接口。
@@ -16,13 +16,11 @@ interface BackendSession {
   user_phone: string | null;
 }
 
-interface BackendSessionDetail extends BackendSession {
-  messages: Array<{
-    id: string;
-    role: 'user' | 'assistant';
-    content: string;
-    created_at: string;
-  }>;
+/** 会话详情响应：后端字段为 id（非 session_id，见 getSessionDetail 映射）。 */
+interface BackendSessionDetail {
+  id: string;
+  title: string | null;
+  messages: Message[];
 }
 
 function toSession(s: BackendSession): Session {
@@ -51,11 +49,13 @@ export async function listSessions(req: SessionListReq): Promise<SessionListResp
 export async function getSessionDetail(id: string): Promise<SessionDetail> {
   const r = await http.get<BackendSessionDetail>(`/sessions/${id}`);
   return {
-    id: r.data.session_id,
+    // BUG-FIX（Branch 3 顺带）：后端详情响应字段是 id，此前误读 session_id →
+    // ?session= 打开时 sessionId 恒为 undefined，staff 转人工/建单静默失效。
+    id: r.data.id,
     title: r.data.title ?? undefined,
     messages: r.data.messages.map((m) => ({
       ...m,
-      session_id: r.data.session_id,
+      session_id: r.data.id,
     })),
   };
 }
@@ -71,4 +71,10 @@ export async function rateSatisfaction(
   rating: 'satisfied' | 'neutral' | 'unsatisfied'
 ): Promise<void> {
   await http.post(`/sessions/${id}/satisfaction`, { rating });
+}
+
+/** 人工客服代发消息（Branch 3）：仅 agent/admin；落库 role='agent'，顾客端轮询/刷新可见。 */
+export async function sendAgentMessage(id: string, content: string): Promise<Message> {
+  const r = await http.post<Omit<Message, 'session_id'>>(`/sessions/${id}/messages`, { content });
+  return { ...r.data, session_id: id };
 }

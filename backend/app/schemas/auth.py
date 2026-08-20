@@ -53,3 +53,4 @@ class MeResp(BaseModel):
     phone: str | None = None
     role: UserRole
     quota_left: int
+    quota_total: int  # 每日配额上限（契约曾声明但后端未返回 → 前端恒 undefined，2026-08-20 补齐）

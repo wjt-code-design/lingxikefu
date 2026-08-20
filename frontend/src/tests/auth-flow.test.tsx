@@ -16,6 +16,7 @@ vi.mock('@/api/auth', () => ({
     user_id: 'u1',
     role: 'user',
     quota_left: 5,
+    quota_total: 200,
   })),
   register: vi.fn(),
   refresh: vi.fn(),

@@ -1,11 +1,5 @@
 import { Avatar, Dropdown, Tag, Typography } from 'antd';
-import {
-  FileTextOutlined,
-  LogoutOutlined,
-  MessageOutlined,
-  ProfileOutlined,
-  UserOutlined,
-} from '@ant-design/icons';
+import { LogoutOutlined, UserOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { logout as logoutApi } from '@/api/auth';
@@ -18,12 +12,10 @@ const ROLE_TAG: Record<Role, { label: string; color: string }> = {
 };
 
 /**
- * 用户菜单（精简版 2026-08-19）：
- * - 通用项：个人中心 / 退出登录；
- * - user：额外保留"我的工单"——侧边栏无入口，只能从下拉菜单进；
- * - agent/admin：去掉"后台管理/工单管理"——这两项在侧边栏已经存在，
- *   重复入口会让用户困惑（哪个是真正的入口？）。
- * 由 AppHeader 与 WidgetShell 接入；无登录态时渲染 null。
+ * 用户菜单（2026-08-20 极简版）：
+ * 所有导航入口（对话/工单/个人中心/反馈/工作台/管理端）均在左侧边栏，
+ * 下拉菜单仅保留「退出登录」，避免重复入口。
+ * 由 AppHeader 接入；无登录态时渲染 null。
  */
 export function UserMenu() {
   const navigate = useNavigate();
@@ -33,7 +25,6 @@ export function UserMenu() {
 
   const initial = (user.email || user.phone || '客').slice(0, 1).toUpperCase();
   const tag = ROLE_TAG[role];
-  const isStaff = role === 'agent' || role === 'admin';
 
   const handleLogout = async () => {
     try {
@@ -50,18 +41,10 @@ export function UserMenu() {
       trigger={['click']}
       menu={{
         items: [
-          { key: 'profile', icon: <ProfileOutlined />, label: '个人中心' },
-          // 仅 user 角色显示"我的工单"——侧边栏无入口,菜单是唯一通路
-          ...(isStaff ? [] : [{ key: 'tickets', icon: <FileTextOutlined />, label: '我的工单' }]),
-          { key: 'feedback', icon: <MessageOutlined />, label: '意见反馈' },
-          { type: 'divider' },
           { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true },
         ],
         onClick: ({ key }) => {
           if (key === 'logout') void handleLogout();
-          else if (key === 'profile') navigate('/profile');
-          else if (key === 'tickets') navigate('/tickets');
-          else if (key === 'feedback') navigate('/feedback');
         },
       }}
     >

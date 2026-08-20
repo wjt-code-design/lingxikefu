@@ -73,15 +73,19 @@ export function MessageBubble({
     }
   };
 
-  // 头像渲染：自我侧头像用 email 首字母；其他侧按角色区分（customer→UserOutlined、agent→工牌、assistant→AI 机器人 SVG）
+  // 头像渲染：自我侧头像用 email 首字母；其他侧按角色区分（customer→暖橙圆、agent→工牌、assistant→AI 机器人 SVG）
+  // observe 视角下用户消息统一用 --customer 头像（暖橙），与 AI 冷蓝头像区分
   const renderAvatar = () => {
     if (isUser) {
+      // self 视角：用户自己 → 海盐蓝圆形 + 本人首字母；observe 视角：顾客 → 暖橙圆形 + 固定"客"
+      // （2026-08-20：observe 下此前误用当前登录客服的首字母，语义错位 → 改"客"）
+      const avatarCls = layout === 'observe' ? 'chat-msg__avatar--customer' : 'chat-msg__avatar--user';
       return (
         <div
-          className={`chat-msg__avatar ${layout === 'observe' ? 'chat-msg__avatar--customer' : 'chat-msg__avatar--user'}`}
+          className={`chat-msg__avatar ${avatarCls}`}
           aria-hidden="true"
         >
-          {userInitial}
+          {layout === 'observe' ? '客' : userInitial}
         </div>
       );
     }

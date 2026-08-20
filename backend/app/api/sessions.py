@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session as OrmSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.message import Message
+from app.models.message import Message, MessageRole
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
@@ -50,6 +51,9 @@ class SessionMessage(BaseModel):
     content: str
     created_at: str
     intent: str | None = None  # BUG-07：消息意图（qa/handoff/chitchat）
+    # Branch 3：人工客服归属（契约 Message.agent_id / agent_name，仅 role=agent 携带）
+    agent_id: str | None = None
+    agent_name: str | None = None
 
 
 class SessionDetail(BaseModel):
@@ -171,9 +175,61 @@ def get_session(
                 content=m.content,
                 created_at=m.created_at.isoformat(),
                 intent=m.intent,  # BUG-07：返回真实意图供客服判断转人工
+                agent_id=m.agent_id,  # Branch 3：人工客服归属透出
+                agent_name=m.agent_name,
             )
             for m in msgs
         ],
+    )
+
+
+class AgentMessageReq(BaseModel):
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
+@router.post("/{session_id}/messages", response_model=SessionMessage, status_code=201)
+def post_agent_message(
+    session_id: uuid.UUID,
+    body: AgentMessageReq,
+    payload: dict = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+) -> SessionMessage:
+    """人工客服代发消息（Branch 3）：仅 admin/agent 可写。
+
+    - 落库 role='agent'（契约 P2），顾客端刷新/轮询即可看到——替代"仅本地模拟"，
+      刷新不丢、顾客端真实可见；
+    - 写后 touch session.updated_at → 会话在列表/工作台排序提前；
+    - 归属：agent_id=操作人 sub，agent_name=操作人 email/phone（无则「人工客服」）。
+    """
+    if payload.get("role") not in ("admin", "agent"):
+        raise HTTPException(status_code=403, detail="staff role required")
+    s = db.scalar(select(Session).where(Session.id == session_id))
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    content = body.content.strip()
+    if not content:
+        raise HTTPException(status_code=422, detail="empty content")
+    staff = db.scalar(select(User).where(User.id == uuid.UUID(payload["sub"])))
+    m = Message(
+        tenant_id=settings.TENANT_DEFAULT,
+        session_id=session_id,
+        role=MessageRole.agent,
+        content=content,
+        agent_id=str(payload["sub"]),
+        agent_name=(staff.email or staff.phone or "人工客服") if staff else "人工客服",
+    )
+    db.add(m)
+    s.updated_at = datetime.now(timezone.utc)  # touch：客服回复后会话排序提前
+    db.commit()
+    db.refresh(m)
+    return SessionMessage(
+        id=str(m.id),
+        role=m.role.value,
+        content=m.content,
+        created_at=m.created_at.isoformat(),
+        intent=m.intent,
+        agent_id=m.agent_id,
+        agent_name=m.agent_name,
     )
 
 

@@ -10,21 +10,37 @@ import {
   SafetyOutlined,
   SettingOutlined,
   TeamOutlined,
+  UserOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
 /**
  * 通用侧栏导航：按角色渲染菜单项。
- * - admin：运营总览 / 知识库 / 用户管理 / 运营统计 / 踩反馈 / 会话审计 / 系统设置 / 审计日志
- * - agent：客服工作台 / 会话列表 / 工单 / 客户管理 / 知识库快搜
+ * - user：我的对话 / 我的工单 / 个人中心 / 意见反馈
+ * - agent：客服工作台 / 会话列表 / 工单处理 / 客户管理 / 知识快搜（+ 我的对话 / 个人中心）
+ * - admin：运营总览 / 知识库 / 用户管理 / 运营统计 / 踩反馈 / 会话审计 / 系统设置 / 审计日志（+ 我的对话 / 个人中心）
  */
 export function SideNav() {
   const role = useAuthStore((s) => s.role);
   const navigate = useNavigate();
   const location = useLocation();
 
+  // 所有已登录用户都有的"个人"菜单
+  const personalMenu = {
+    type: 'group' as const,
+    label: '我的',
+    children: [
+      { key: '/chat', icon: <MessageOutlined />, label: '我的对话' },
+      { key: '/tickets', icon: <FileTextOutlined />, label: '我的工单' },
+      { key: '/profile', icon: <UserOutlined />, label: '个人中心' },
+      { key: '/feedback', icon: <DislikeOutlined />, label: '意见反馈' },
+    ],
+  };
+
   const items = [
+    // 个人菜单（所有角色可见）
+    personalMenu,
     // 客服工作台（agent 或 admin 可见）
     ...(role === 'admin' || role === 'agent'
       ? [
@@ -68,7 +84,7 @@ export function SideNav() {
     const path = location.pathname;
     if (path.startsWith('/admin')) return ['admin-group'];
     if (path.startsWith('/agent')) return ['agent-group'];
-    return [];
+    return ['personal-group'];
   };
 
   return (

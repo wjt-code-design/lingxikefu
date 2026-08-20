@@ -367,6 +367,10 @@ body {
   min-height: 0;
   overflow: hidden;
 }
+.page--chat {
+  /* W1：聊天页放宽容器上限（默认 1400px 在左侧全局导航展开时显得中间过窄） */
+  max-width: 1600px;
+}
 /* 对话头部（observe 模式：客服查看对话时显示） */
 .chat-header {
   display: flex;
@@ -417,7 +421,7 @@ body {
 .chat-container {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   min-height: 0;
 }
 .chat-container__body {
@@ -490,6 +494,30 @@ body {
   border-radius: 10px;
   border: 1px solid var(--border);
 }
+
+/* 历史消息折叠区域 */
+.chat-collapse-zone {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+  margin: 8px 0;
+}
+.chat-collapse-btn {
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 16px;
+  font-size: 12px;
+  color: var(--text-2);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.chat-collapse-btn:hover {
+  background: var(--color-brand-light);
+  border-color: var(--color-brand);
+  color: var(--color-brand);
+}
+
 /* 消息行：规范间距、对齐、宽度 */
 .chat-msg {
   display: flex;
@@ -498,7 +526,7 @@ body {
   max-width: 100%;
 }
 .chat-msg--user {
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-direction: row-reverse;
 }
 .chat-msg--ai {
@@ -516,19 +544,23 @@ body {
   word-break: break-word;
   white-space: pre-wrap;
 }
-/* 用户消息：海盐蓝纯色（居右） */
+/* 用户消息：海盐蓝纯色（居右）
+ * row-reverse 下：avatar 在右，bubble 在左，整行靠右
+ * 折角在右上角（远离头像方向） */
 .chat-msg--user .chat-msg__bubble {
   background: var(--color-brand);
   color: #ffffff;
   border: 1px solid var(--color-brand);
-  border-top-left-radius: 4px; /* 折角朝左（靠右的气泡） */
+  border-top-right-radius: 4px;
 }
-/* AI 消息：纯白卡片（无阴影，更紧凑） */
+/* AI 消息：纯白卡片（无阴影，更紧凑）
+ * 默认 row：avatar 在左，bubble 在右
+ * 折角在左上角（靠近头像方向） */
 .chat-msg--ai .chat-msg__bubble {
   background: #ffffff;
   border: 1px solid var(--border);
   box-shadow: none;
-  border-top-right-radius: 4px; /* 折角朝右（靠左的气泡） */
+  border-top-left-radius: 4px;
 }
 
 /* ---------- 人工客服消息气泡（P2：role='agent'） ---------- */
@@ -540,19 +572,20 @@ body {
   background: #f0f8f4; /* 薄荷绿/客服色，比 AI 气泡略深 */
   border: 1px solid #cfe7da;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  border-top-left-radius: 4px;
+  border-top-left-radius: 4px; /* self 模式靠左，折角在左上 */
   color: #244c3a;
 }
-/* observe 视角下 agent 是"我"——居右，用户蓝风格略调（绿光带） */
+/* observe 视角下 agent 是"我"——居右，用户蓝风格略调（绿光带）
+ * row-reverse 下 flex-start = 主轴 start = 右边（正确靠右） */
 .chat-msg--agent[data-layout='observe'] {
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-direction: row-reverse;
 }
 .chat-msg--agent[data-layout='observe'] .chat-msg__bubble {
   background: linear-gradient(180deg, #5fb38c 0%, #4a9c79 100%);
   color: #ffffff;
   border: 1px solid #4a9c79;
-  border-top-right-radius: 4px;
+  border-top-right-radius: 4px; /* observe 模式靠右，折角在右上 */
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 /* 客服头像：薄荷绿渐变方块 + 工牌图标 */
@@ -811,6 +844,12 @@ body {
   gap: 10px;
   align-items: flex-end;
 }
+/* W5：客服视角下输入框居中显示（收窄并水平居中于中间列） */
+.chat-composer--centered {
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+}
 .chat-composer .ant-input-textarea {
   flex: 1;
 }
@@ -872,41 +911,47 @@ body {
   position: relative;
   z-index: 1;
 }
-.wb-mobile-bar {
-  display: none; /* 仅 <768px 显示 */
-}
+/* A+：移动端切换栏已移除，统一由对话工具栏图标触发抽屉 */
 .wb-grid {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr) 280px;
+  /* A+：默认单栏满宽对话；历史/溯源改为抽屉，对话区拿到最大宽度 */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
   width: 100%;
-  max-width: 1320px;
-  margin: 0 auto;
 }
 .wb-col {
   min-height: 0;
+  max-height: 100%;
   overflow: hidden;
   display: flex;
   flex-direction: column;
 }
-.wb-col--left,
-.wb-col--right {
-  background: var(--color-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-card);
-  overflow-y: auto;
-  padding: 12px 10px;
-}
+/* A+：左右栏已改为抽屉，常驻列样式不再使用（保留 .wb-col 基础用于 main） */
 .wb-col--main {
   background: var(--color-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* A+：对话工具栏（历史/溯源抽屉入口），默认对话区满宽，面板按需展开 */
+.wb-chat-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--color-surface);
+  flex: 0 0 auto;
+}
+.wb-chat-toolbar .ant-btn {
+  color: var(--text-2);
 }
 /* 品牌区（参考稿：灵犀·星河智家 + 客服在线 7×24） */
 .wb-brand {
@@ -945,6 +990,65 @@ body {
   color: var(--text-3);
   margin-bottom: 8px;
   letter-spacing: 0.02em;
+}
+/* W3：左栏内部采用 flex 列布局，历史会话区自适应剩余高度并内部滚动，避免撑高整页 */
+.wb-left {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+}
+.wb-section--history {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0;
+}
+.wb-section--history .wb-section__head,
+.wb-section--history > .ant-input-affix-wrapper {
+  flex-shrink: 0;
+}
+.wb-sessions {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.wb-session-group {
+  margin-bottom: 12px;
+}
+.wb-session-group__title {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-4);
+  padding: 4px 6px;
+  margin-bottom: 4px;
+  background: var(--color-surface);
+  backdrop-filter: blur(2px);
+}
+.wb-history-footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding-top: 6px;
+}
+.wb-history-footer button {
+  font-size: 12px;
+  color: var(--color-brand-dark);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-fast) var(--ease-out);
+}
+.wb-history-footer button:hover {
+  background: var(--color-brand-soft);
 }
 .wb-spin {
   display: block;
@@ -1105,13 +1209,9 @@ body {
 /* L1（建议书）：中屏 768-1080px —— 右栏收窄为 240px，避免对话区被挤压 */
 @media (max-width: 1080px) and (min-width: 768px) {
   .wb-grid {
-    grid-template-columns: 200px minmax(0, 1fr) 240px;
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     padding: 10px;
-  }
-  .wb-col--left,
-  .wb-col--right {
-    padding: 12px 10px;
   }
 }
 /* L2（建议书）：移动端去 .page 外框，对话区全宽沉浸 */
@@ -1126,26 +1226,10 @@ body {
     max-width: calc(100vw - 88px);
   }
 
-  .wb-mobile-bar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 16px;
-    border-bottom: 1px solid var(--border);
-    background: var(--color-surface);
-  }
-  .wb-mobile-hint {
-    color: var(--text-4);
-    font-size: 14px;
-  }
   .wb-grid {
     grid-template-columns: minmax(0, 1fr);
     gap: 0;
     padding: 0;
-  }
-  .wb-col--left,
-  .wb-col--right {
-    display: none; /* 走 Drawer */
   }
   .wb-col--main {
     border-radius: 0;
@@ -1269,7 +1353,6 @@ body {
 .wb-session:focus-visible,
 .wb-reply:focus-visible,
 .wb-new:focus-visible,
-.wb-mobile-bar button:focus-visible,
 .chat-container__hot-btn:focus-visible,
 .chat-source__toggle:focus-visible {
   outline: 2px solid var(--color-brand-dark);
@@ -2128,18 +2211,20 @@ body {
   align-items: flex-start;
   gap: 6px;
 }
-/* 顾客气泡：暖橙浅底（与 AI 冷蓝区分；语义上"人"=暖色，复用 --color-orange 调性） */
+/* 顾客气泡：暖橙浅底（与 AI 冷蓝区分；语义上"人"=暖色，复用 --color-orange 调性）
+ * observe 模式默认 row：avatar 在左，bubble 在右，折角在左上 */
 .chat-msg--observe-customer .chat-msg__bubble {
   background: linear-gradient(135deg, rgba(246, 195, 142, 0.30), rgba(246, 195, 142, 0.16));
   color: var(--text-1);
-  border-bottom-left-radius: 6px;
+  border-top-left-radius: 4px;
 }
-/* AI 气泡：白卡 + 浅蓝边（与 self 模式一致，仅统一居左） */
+/* AI 气泡：白卡 + 浅蓝边（与 self 模式一致，仅统一居左）
+ * 折角在左上 */
 .chat-msg--observe-ai .chat-msg__bubble {
   background: #ffffff;
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
-  border-bottom-left-radius: 6px;
+  border-top-left-radius: 4px;
 }
 /* 顾客头像：暖橙圆形（与 AI 品牌头像区分） */
 .chat-msg__avatar--customer {

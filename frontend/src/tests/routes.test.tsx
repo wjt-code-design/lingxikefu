@@ -27,10 +27,11 @@ describe('路由可达与 RequireAuth 守卫', () => {
     expect(await screen.findByText('您好，我是灵犀智能客服')).toBeInTheDocument();
   });
 
-  it('普通用户访问 /admin/knowledge → 显示 403 无权限页（不再踢登录）', () => {
+  it('普通用户访问 /admin/knowledge → 显示 403 无权限页（不再踢登录）', async () => {
     loginAs('user');
     renderApp('/admin/knowledge');
-    expect(screen.getByText('403')).toBeInTheDocument();
+    // 403 页随角色判断异步渲染（此前同步断言在 Skeleton 加载期失败）
+    expect(await screen.findByText('403')).toBeInTheDocument();
   });
 
   it('admin 访问 /admin/knowledge → 渲染知识库管理页', async () => {

@@ -1,9 +1,11 @@
 @echo off
 cd /d %~dp0
-REM 覆盖 Windows 用户环境变量里的脏占位符 ZHIPU_API_KEY=你的Key。
-REM pydantic-settings 优先级: 环境变量 > .env，脏值会无声盖掉 .env 真实 key。
-REM 这里显式设成真实 key，不依赖也不修改系统环境变量。
-set "ZHIPU_API_KEY=[REDACTED-ZHIPU-KEY]"
+REM 从 .env 读取真实 ZHIPU_API_KEY 注入（覆盖 Windows 用户环境变量里的脏占位符 ZHIPU_API_KEY=你的Key，
+REM 避免 pydantic-settings 的"环境变量 > .env"优先级让脏值无声盖掉 .env 真实 key；
+REM key 只存 .env（已被 .gitignore 双保险忽略），此处不硬编码任何密钥）。
+for /f "usebackq tokens=1,* delims==" %%a in ("%~dp0.env") do (
+  if /i "%%a"=="ZHIPU_API_KEY" set "ZHIPU_API_KEY=%%b"
+)
 REM 宿主机直接跑时 docker 服务名(postgres/qdrant)解析不了，改回 localhost
 set "POSTGRES_HOST=localhost"
 set "REDIS_URL=redis://localhost:6379/0"

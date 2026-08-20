@@ -48,7 +48,7 @@ export interface MeResp {
   phone?: string;
   role: Role;
   quota_left: number;
-  quota_total?: number;
+  quota_total: number; // 每日配额上限（2026-08-20 后端补齐，此前恒 undefined）
 }
 
 // ---------- Sessions ----------
@@ -73,6 +73,10 @@ export interface SessionDetail {
   id: string;
   title?: string;
   messages: Message[];
+}
+/** Branch 3：人工客服代发消息请求体（POST /sessions/{id}/messages，仅 admin/agent 可用）。 */
+export interface AgentMessageReq {
+  content: string;
 }
 
 // ---------- Messages ----------

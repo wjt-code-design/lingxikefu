@@ -426,6 +426,65 @@
         }
       }
     },
+    "/api/v1/sessions/{session_id}/messages": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Post Agent Message",
+        "description": "人工客服代发消息（Branch 3）：仅 admin/agent 可写。\n\n- 落库 role='agent'（契约 P2），顾客端刷新/轮询即可看到——替代\"仅本地模拟\"，\n  刷新不丢、顾客端真实可见；\n- 写后 touch session.updated_at → 会话在列表/工作台排序提前；\n- 归属：agent_id=操作人 sub，agent_name=操作人 email/phone（无则「人工客服」）。",
+        "operationId": "post_agent_message_api_v1_sessions__session_id__messages_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentMessageReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionMessage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/sessions/{session_id}/satisfaction": {
       "post": {
         "tags": [
@@ -2184,6 +2243,21 @@
         ],
         "title": "AdminStats"
       },
+      "AgentMessageReq": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "AgentMessageReq"
+      },
       "AgentReplyReq": {
         "properties": {
           "session_id": {
@@ -3044,13 +3118,18 @@
           "quota_left": {
             "type": "integer",
             "title": "Quota Left"
+          },
+          "quota_total": {
+            "type": "integer",
+            "title": "Quota Total"
           }
         },
         "type": "object",
         "required": [
           "user_id",
           "role",
-          "quota_left"
+          "quota_left",
+          "quota_total"
         ],
         "title": "MeResp"
       },
@@ -3599,6 +3678,28 @@
               }
             ],
             "title": "Intent"
+          },
+          "agent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Id"
+          },
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Name"
           }
         },
         "type": "object",

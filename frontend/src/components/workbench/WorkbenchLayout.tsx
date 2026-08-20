@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Drawer, Segmented } from 'antd';
+import { Button, Drawer } from 'antd';
 import { ReadOutlined, CommentOutlined } from '@ant-design/icons';
 import { ChatContainer } from '@/components/chat/ChatContainer';
 import type { MessageSource } from '@/contracts/api';
@@ -14,43 +14,33 @@ import { SourcePanel } from './SourcePanel';
 export function WorkbenchLayout() {
   const [sources, setSources] = useState<MessageSource[]>([]);
   const onSourcesChange = useCallback((s: MessageSource[]) => setSources(s), []);
-  const [mobilePanel, setMobilePanel] = useState<'history' | 'source' | null>(null);
+  // A+：历史/溯源默认收起，由对话工具栏图标触发抽屉（桌面/移动统一）；panel 取代原 mobilePanel
+  const [panel, setPanel] = useState<'history' | 'source' | null>(null);
   // P1-3：Composer 的"填入输入框"能力注册到这里，快捷话术点击时调用
   const [fillReply, setFillReply] = useState<((t: string) => void) | null>(null);
   const onRegisterFill = useCallback((fill: (t: string) => void) => setFillReply(() => fill), []);
 
   return (
     <div className="wb">
-      {/* 移动端：顶部栏（左栏/右栏切换入口） */}
-      <div className="wb-mobile-bar">
-        <Segmented
-          size="small"
-          options={[
-            { label: '历史', value: 'history', icon: <CommentOutlined /> },
-            { label: '溯源', value: 'source', icon: <ReadOutlined /> },
-          ]}
-          value={mobilePanel ?? undefined}
-          onChange={(v) => setMobilePanel((v as 'history' | 'source') ?? null)}
-        />
-
-      </div>
-
+      {/* A+：默认满宽对话（仅全局导航占侧栏）；历史/溯源收起为抽屉，对话区拿到最大宽度 */}
       <div className="wb-grid">
-        <div className="wb-col wb-col--left">
-          <HistoryPanel />
-        </div>
         <main className="wb-col wb-col--main">
+          <div className="wb-chat-toolbar">
+            <Button type="text" icon={<CommentOutlined />} onClick={() => setPanel('history')}>
+              历史会话
+            </Button>
+            <Button type="text" icon={<ReadOutlined />} onClick={() => setPanel('source')}>
+              溯源来源
+            </Button>
+          </div>
           <ChatContainer onSourcesChange={onSourcesChange} onRegisterFill={onRegisterFill} />
         </main>
-        <div className="wb-col wb-col--right">
-          <SourcePanel sources={sources} onUseReply={fillReply ?? undefined} />
-        </div>
       </div>
 
-      {/* 移动端抽屉：历史左滑（符合返回直觉）、溯源右滑（符合右侧详情心智模型） */}
+      {/* 抽屉：历史左滑、溯源右滑（桌面/移动一致） */}
       <Drawer
-        open={mobilePanel === 'history'}
-        onClose={() => setMobilePanel(null)}
+        open={panel === 'history'}
+        onClose={() => setPanel(null)}
         placement="left"
         width={300}
         styles={{ body: { padding: 0 } }}
@@ -59,8 +49,8 @@ export function WorkbenchLayout() {
         <HistoryPanel />
       </Drawer>
       <Drawer
-        open={mobilePanel === 'source'}
-        onClose={() => setMobilePanel(null)}
+        open={panel === 'source'}
+        onClose={() => setPanel(null)}
         placement="right"
         width={300}
         styles={{ body: { padding: 0 } }}

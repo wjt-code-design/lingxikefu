@@ -40,7 +40,7 @@ vi.mock('@/api/tickets', () => ({ escalateSession: vi.fn().mockResolvedValue({ t
 function Wrapper({ children }: { children: React.ReactNode }) {
   useAuthStore.setState({
     token: 't', refreshToken: 't', role: 'user',
-    user: { user_id: 'u', role: 'user', quota_left: 10 },
+    user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
   });
   return (
     <ConfigProvider>
@@ -73,8 +73,9 @@ describe('P0-1 消息生命周期', () => {
     const input = screen.getByRole('textbox', { name: '问题输入' });
     await userEvent.type(input, '七天无理由退货怎么申请？');
     await userEvent.click(screen.getByRole('button', { name: '发送' }));
-    // 立即断言（不等 mock done）
-    expect(screen.getByText('七天无理由退货怎么申请？')).toBeInTheDocument();
+    // 立即断言（不等 mock done）——注意：AI 首回复前快捷卡片仍在（V5 有意设计），
+    // 同文本会同时出现在快捷卡片与消息气泡，故用 getAllByText 断言"消息已上屏"
+    expect(screen.getAllByText('七天无理由退货怎么申请？').length).toBeGreaterThan(0);
     expect(screen.getByText('发送中…')).toBeInTheDocument();
   });
 

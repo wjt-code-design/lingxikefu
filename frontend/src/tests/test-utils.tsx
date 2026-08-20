@@ -32,7 +32,7 @@ export function renderApp(route = '/', extra?: ReactNode) {
 
 /** 模拟以指定角色登录（写入 authStore） */
 export function loginAs(role: Role) {
-  const me: MeResp = { user_id: 'u-test', role, quota_left: 10 };
+  const me: MeResp = { user_id: 'u-test', role, quota_left: 10, quota_total: 200 };
   useAuthStore.setState({
     token: 'test-access-token',
     refreshToken: 'test-refresh-token',
