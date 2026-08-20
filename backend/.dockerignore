@@ -9,6 +9,7 @@ venv/
 !.env.example
 .git/
 .gitignore
-tests/
 .github/
 *.md
+# tests/ 移除排除（2026-08-20）：镜像内直接 pytest 冒烟（宿主环境无后端依赖，
+# 容器是唯一测试途径；测试代码只读不影响运行时）

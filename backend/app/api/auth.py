@@ -103,7 +103,7 @@ def me(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
     quota_left = get_quota_service().left_today(str(user.id))
-    quota_total = get_quota_service().daily_limit
+    quota_total = get_quota_service().daily_limit()  # 方法是属性访问会传 bound method，导致 pydantic 校验失败
     return MeResp(
         user_id=str(user.id),
         email=user.email,
