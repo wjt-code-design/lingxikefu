@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Input, Space } from 'antd';
+import { Button, Input } from 'antd';
 import { CustomerServiceOutlined, PauseCircleOutlined, RedoOutlined, SendOutlined } from '@ant-design/icons';
 
 interface ComposerProps {
@@ -36,67 +36,73 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, 
 
   return (
     <div className={`chat-composer${centered ? ' chat-composer--centered' : ''}`}>
-      <Input.TextArea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="请输入您的问题，如：七天无理由退货怎么申请？"
-        autoSize={{ minRows: 1, maxRows: 4 }}
-        maxLength={4000}
-        showCount
-        onPressEnter={(e) => {
-          // C3：中文输入法组词中（isComposing）回车不发送，避免半句话误发
-          if (!e.shiftKey && !e.nativeEvent.isComposing) {
-            e.preventDefault();
-            submit();
-          }
-        }}
-        disabled={disabled}
-        aria-label="问题输入"
-      />
-      <Space.Compact block>
-        {retry && (
-          <Button
-            icon={<RedoOutlined />}
-            onClick={retry.onRetry}
-            disabled={disabled}
-            title={`重试：${retry.text.slice(0, 20)}`}
-          >
-            重试
-          </Button>
-        )}
-        {disabled && onStop && (
-          <Button
-            danger
-            icon={<PauseCircleOutlined />}
-            onClick={onStop}
-            aria-label="停止生成"
-          >
-            停止
-          </Button>
-        )}
-        {onEscalate && !disabled && (
-          <Button
-            icon={<CustomerServiceOutlined />}
-            onClick={onEscalate}
-            disabled={disabled}
-            className="chat-composer__escalate"
-          >
-            转人工
-          </Button>
-        )}
-        {!disabled && (
-          <Button
-            type="primary"
-            icon={<SendOutlined />}
-            onClick={submit}
-            loading={disabled}
-            disabled={disabled}
-            aria-label="发送"
-          >
-            发送
-          </Button>
-        )}
-      </Space.Compact>
+      <div className="chat-composer__field">
+        <Input.TextArea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="请输入您的问题，如：七天无理由退货怎么申请？"
+          autoSize={{ minRows: 1, maxRows: 4 }}
+          maxLength={4000}
+          onPressEnter={(e) => {
+            // C3：中文输入法组词中（isComposing）回车不发送，避免半句话误发
+            if (!e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              submit();
+            }
+          }}
+          disabled={disabled}
+          aria-label="问题输入"
+        />
+      </div>
+      <div className="chat-composer__bar">
+        <span className="chat-composer__hint">Enter 发送 · Shift+Enter 换行</span>
+        <div className="chat-composer__actions">
+          {retry && (
+            <Button
+              icon={<RedoOutlined />}
+              onClick={retry.onRetry}
+              disabled={disabled}
+              title={`重试：${retry.text.slice(0, 20)}`}
+            >
+              重试
+            </Button>
+          )}
+          {disabled && onStop && (
+            <Button
+              danger
+              icon={<PauseCircleOutlined />}
+              onClick={onStop}
+              aria-label="停止生成"
+            >
+              停止
+            </Button>
+          )}
+          {onEscalate && !disabled && (
+            <Button
+              icon={<CustomerServiceOutlined />}
+              onClick={onEscalate}
+              disabled={disabled}
+              className="chat-composer__escalate"
+            >
+              转人工
+            </Button>
+          )}
+          {!disabled && (
+            <Button
+              type="primary"
+              icon={<SendOutlined />}
+              onClick={submit}
+              loading={disabled}
+              // 空内容时置灰（点亮式微交互），有输入才高亮可用
+              disabled={!text.trim()}
+              aria-label="发送"
+              className="chat-composer__send"
+            >
+              发送
+            </Button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

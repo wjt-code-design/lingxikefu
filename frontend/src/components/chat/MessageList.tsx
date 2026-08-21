@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Typography } from 'antd';
 import type { ChatStage } from '@/hooks/useChatStream';
 import type { ChatMessage } from './types';
 import { MessageBubble } from './MessageBubble';
+import { MarkdownContent } from '@/components/common/MarkdownContent';
 import { StageIndicator } from './StageIndicator';
 
 /** 流式中状态（来自 useChatStream，用于尾部渲染）。 */
@@ -155,10 +155,10 @@ export function MessageList({
           <div className="chat-msg__bubble">
             <StageIndicator stage={stream.stage as 'retrieving' | 'generating'} />
             {stream.tokens && (
-              <Typography.Paragraph className="chat-msg__text">
-                {stream.tokens}
-                <span className="chat-cursor" aria-hidden="true" />
-              </Typography.Paragraph>
+              <MarkdownContent
+                content={stream.tokens}
+                className="chat-msg__text chat-msg__text--stream"
+              />
             )}
           </div>
         </div>

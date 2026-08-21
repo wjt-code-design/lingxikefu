@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { Button, Typography, message } from 'antd';
 import { CopyOutlined, CustomerServiceOutlined } from '@ant-design/icons';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import rehypeSanitize from 'rehype-sanitize';
 import type { ChatMessage } from './types';
+import { MarkdownContent } from '@/components/common/MarkdownContent';
 import { SourceAccordion } from './SourceAccordion';
 import { ThumbsBar } from './ThumbsBar';
 
@@ -56,7 +54,10 @@ export function MessageBubble({
   const isAi = msg.role === 'assistant';
   const selfSide = layout === 'self' ? isUser : isAgent; // self 视角的右栏身份
   const authUser = useAuthStore((s) => s.user);
+  const role = useAuthStore((s) => s.role);
   const userInitial = (authUser?.email?.charAt(0) ?? '我').toUpperCase();
+  // 2026-08-21：检索来源仅客服/管理员可见（工作台溯源），顾客端不展示来源（用户确认的方向）。
+  const isStaff = role === 'admin' || role === 'agent';
   const [copied, setCopied] = useState(false);
   // P0-1：sending 态半透明 + failed 态红色提示（可重试）
   const statusCls = msg.status === 'sending' ? ' chat-msg__bubble--sending' : msg.status === 'failed' ? ' chat-msg__bubble--failed' : '';
@@ -163,16 +164,12 @@ export function MessageBubble({
             >
               {copied ? '已复制' : '复制'}
             </Button>
-            <div className="chat-msg__text">
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeSanitize]}>
-                {msg.content}
-              </ReactMarkdown>
-            </div>
+            <MarkdownContent content={msg.content} className="chat-msg__text" />
           </>
         ) : (
           <Typography.Paragraph className="chat-msg__text">{msg.content}</Typography.Paragraph>
         )}
-        {!isUser && !isAgent && msg.sources && msg.sources.length > 0 && <SourceAccordion sources={msg.sources} />}
+        {isStaff && !isUser && !isAgent && msg.sources && msg.sources.length > 0 && <SourceAccordion sources={msg.sources} />}
         {!isUser && !isAgent && msg.ticketId && (
           <div className="chat-msg__ticket">
             已为您创建工单 <b>#{msg.ticketId.slice(0, 8)}</b>，客服将尽快跟进

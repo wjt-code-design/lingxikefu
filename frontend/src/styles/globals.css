@@ -165,11 +165,21 @@ body {
   .chat-msg {
     animation: none;
   }
+  .chat-welcome__icon,
+  .hot-card__icon {
+    animation: none;
+    transition: none;
+  }
   .ant-btn {
     transition: none;
   }
   .ant-btn:not(:disabled):hover {
     transform: none;
+  }
+  .hot-card,
+  .hot-card__item {
+    transform: none !important;
+    box-shadow: var(--shadow-card);
   }
 }
 
@@ -748,6 +758,20 @@ body {
   white-space: pre-wrap;
   word-break: break-word;
 }
+/* 流式尾部：末尾追加闪烁光标（复用 chat-cursor-blink），随内容实时排版 */
+.chat-msg__text--stream {
+  padding-right: 10px;
+}
+.chat-msg__text--stream::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 1.1em;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  background: var(--color-brand-dark);
+  animation: chat-cursor-blink 1s step-end infinite;
+}
 /* Markdown 渲染 */
 .chat-msg__text p {
   margin: 0 0 1px;
@@ -796,6 +820,42 @@ body {
   border-left: 3px solid var(--color-brand, #539FD8);
   border-radius: 0 6px 6px 0;
   white-space: normal;
+}
+/* GFM 表格（remark-gfm）：发丝线 + 表头浅底 + 隔行微色 */
+.chat-msg__text table {
+  border-collapse: collapse;
+  margin: 2px 0 4px;
+  width: 100%;
+  font-size: 12.5px;
+}
+.chat-msg__text th,
+.chat-msg__text td {
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  text-align: left;
+  vertical-align: top;
+}
+.chat-msg__text thead th {
+  background: var(--table-head-bg);
+  font-weight: 600;
+  color: var(--text-1);
+}
+.chat-msg__text tbody tr:nth-child(even) td {
+  background: rgba(150, 200, 232, 0.05);
+}
+/* 引用块：左竖线 + 浅品牌底 */
+.chat-msg__text blockquote {
+  margin: 2px 0 4px;
+  padding: 3px 8px;
+  border-left: 3px solid var(--color-brand-pale);
+  background: var(--color-brand-soft);
+  color: var(--text-3);
+  border-radius: 0 6px 6px 0;
+}
+/* 加粗：统一加深，利于用户扫重点 */
+.chat-msg__text strong {
+  font-weight: 650;
+  color: var(--text-1);
 }
 
 /* 来源折叠（海盐蓝胶囊） */
@@ -941,8 +1001,19 @@ body {
 }
 .chat-composer {
   display: flex;
-  gap: 10px;
-  align-items: flex-end;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 8px 10px 8px 14px;
+  box-shadow: var(--shadow-sm);
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+/* 聚焦整卡：品牌色描边 + 柔和光晕（替代单输入框描边） */
+.chat-composer:focus-within {
+  border-color: var(--color-brand);
+  box-shadow: 0 0 0 3px var(--color-brand-soft), var(--shadow-card);
 }
 /* W5：客服视角下输入框居中显示（收窄并水平居中于中间列） */
 .chat-composer--centered {
@@ -954,33 +1025,62 @@ body {
   flex: 1;
 }
 .chat-composer textarea {
-  background: var(--color-surface) !important;
-  border-color: var(--border) !important;
-  border-radius: var(--radius-sm) !important;
-  padding: 11px 14px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 4px 2px !important;
   font-size: 15px !important;
-  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  line-height: 1.5;
 }
 .chat-composer textarea:focus {
-  border-color: var(--color-brand) !important;
-  box-shadow: 0 0 0 3px var(--color-brand-soft) !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
 }
 .chat-composer textarea::placeholder {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--text-4);
 }
+.chat-composer__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.chat-composer__hint {
+  font-size: 11px;
+  color: var(--text-4);
+  user-select: none;
+}
+.chat-composer__actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.chat-composer__actions .ant-btn {
+  border-radius: 999px;
+  height: 32px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+}
+.chat-composer__send.ant-btn-primary,
 .chat-composer .ant-btn-primary {
   background: var(--color-brand) !important;
   border-color: var(--color-brand) !important;
   color: #fff !important;
-  border-radius: var(--radius-sm) !important;
-  height: 44px !important;
-  font-size: 15px !important;
-  font-weight: 600 !important;
+  padding: 0 16px;
+  font-weight: 600;
 }
+.chat-composer__send.ant-btn-primary:hover,
 .chat-composer .ant-btn-primary:hover {
   background: var(--color-brand-dark) !important;
   border-color: var(--color-brand-dark) !important;
+}
+/* 发送按钮 hover：轻微上浮 + 品牌色柔影（覆盖全局 scale(1.02)，避免和药丸形状冲突） */
+.chat-composer__send.ant-btn-primary:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px var(--color-brand-soft);
 }
 
 /* ===================== 三栏工作台（Workbench，海盐蓝） ===================== */
@@ -1437,6 +1537,18 @@ body {
   border: 1px solid var(--border);
   box-shadow: var(--shadow-card);
   margin-bottom: 4px;
+  animation: welcome-breathe 3.4s ease-in-out infinite;
+  transform-origin: center;
+}
+/* 欢迎区品牌图标：轻柔缩放呼吸（品牌印象 + 引导视线） */
+@keyframes welcome-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
 }
 .chat-welcome__title {
   font-size: 18px;
@@ -2400,8 +2512,9 @@ body {
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .hot-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 18px rgba(148, 198, 232, 0.22);
+  transform: translateY(-3px);
+  border-color: var(--color-brand-pale);
+  box-shadow: 0 8px 22px rgba(148, 198, 232, 0.28);
 }
 .hot-card__head {
   display: flex;
@@ -2419,6 +2532,11 @@ body {
   background: var(--color-brand-soft);
   color: var(--color-brand-dark);
   font-size: 13px;
+  transition: transform var(--dur-fast) var(--ease-out);
+}
+/* hover 图标轻微上浮放大，增强点击反馈 */
+.hot-card:hover .hot-card__icon {
+  transform: translateY(-1px) scale(1.08);
 }
 .hot-card__title {
   font-size: 13px;
@@ -2445,6 +2563,8 @@ body {
 .hot-card__item:hover {
   border-color: var(--color-brand);
   background: rgba(150, 200, 232, 0.08);
+  transform: translateX(2px);
+  box-shadow: 0 2px 6px rgba(83, 159, 216, 0.1);
 }
 .hot-card__item:active {
   background: rgba(150, 200, 232, 0.16);
