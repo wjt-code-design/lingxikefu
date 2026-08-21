@@ -128,7 +128,7 @@ def test_chat_stream_events_and_persist(client, monkeypatch):
 
     r = tc.post(
         f"{API}/chat/stream",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "保修多久", "stream": True},
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
         headers=_headers(),
     )
     assert r.status_code == 200
@@ -174,7 +174,7 @@ def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
     monkeypatch.setattr("app.api.chat.stream_answer", _fake)
     r = tc.post(
         f"{API}/chat/stream",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "保修多久", "stream": True},
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
         headers=_headers(),
     )
     assert r.status_code == 200

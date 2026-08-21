@@ -38,7 +38,8 @@ from app.api.tickets import ensure_active_ticket
 from app.services.answer_cache import put as cache_put
 from app.services.query_rewrite import rewrite
 from app.services.quota import get_quota_service
-from app.services.rag_service import stream_answer
+from app.services.rag_service import _split_tokens as _split_answer, stream_answer
+from app.services.quick_answers import match_quick
 
 logger = logging.getLogger(__name__)
 
@@ -286,9 +287,25 @@ async def chat_stream(
                 logger.info("chat stream aborted: client disconnected (pre-llm)")
                 quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额
                 return
-            async for event, data in stream_answer(
-                req.content, kb_id, history=history, kb_version=kb_version
-            ):
+            quick_ans = await run_in_threadpool(match_quick, req.content)
+
+            async def _events():
+                # 方案A：快捷预置话术短路——命中固定问句（按钮或手打同文案）直接秒回，不检索/不判缓存版本
+                if quick_ans:
+                    yield ("intent", {"intent": "qa", "refuse": False})
+                    yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
+                    yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
+                    for delta in _split_answer(quick_ans):
+                        yield ("token", {"delta": delta})
+                    yield ("sources", {"sources": []})
+                    yield ("done", {"message_id": ""})
+                    return
+                async for e, d in stream_answer(
+                    req.content, kb_id, history=history, kb_version=kb_version
+                ):
+                    yield (e, d)
+
+            async for event, data in _events():
                 # BUG-09：每收到一个事件检查客户端连接，断开即终止（不再消费下一个事件）
                 if await request.is_disconnected():
                     logger.info("chat stream aborted: client disconnected during %s", event)
