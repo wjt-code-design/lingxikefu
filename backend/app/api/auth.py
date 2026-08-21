@@ -24,6 +24,7 @@ from app.schemas.auth import (
 from app.schemas.knowledge import OkResp
 from app.services.auth import AuthError, AuthService
 from app.services.quota import get_quota_service
+from app.services.user_profile_service import reset_profile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -122,3 +123,19 @@ def me(
         quota_left=quota_left,
         quota_total=quota_total,
     )
+
+
+@router.post("/me/profile/reset", response_model=OkResp)
+def reset_my_profile(
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> OkResp:
+    """隐私自主控制（2026-08-22 Phase E）：清空当前用户的画像（长期记忆）。
+
+    - 任何登录用户可清自己的画像（画像来源全为本人历史会话/反馈，隐私合规最小化）；
+    - 清空后画像归零，后续不再注入（重新对话会重新采集）；
+    - fail-open：无画像时返回 ok（幂等，重复调无副作用）。
+    """
+    user_id = UUID(payload["sub"])
+    reset_profile(db, user_id)
+    return OkResp()
