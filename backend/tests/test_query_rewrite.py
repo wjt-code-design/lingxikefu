@@ -53,6 +53,18 @@ def test_coreference_resolution():
     assert meta["adopted"]
 
 
+def test_coreference_resolution_business_order():
+    """2026-08-21 业务实体：上轮订单号，本轮"这个订单"消解为订单号（最具体优先）。"""
+    history = [{"role": "user", "content": "我的订单 XOZ-12345 到哪了"}]
+    r, meta = rewrite("这个订单怎么退款", history=history)
+    assert "XOZ-12345" in r, r
+    assert meta["adopted"]
+
+    history2 = [{"role": "user", "content": "订单 SO2026080118 显示派送中"}]
+    r2, _ = rewrite("它什么时候到", history=history2)
+    assert "SO2026080118" in r2, r2
+
+
 def test_intent_preserved_after_rewrite():
     """意图保持：改写后 classify_intent 与原句一致（口语集抽样）。"""
     samples = [

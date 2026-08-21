@@ -81,6 +81,16 @@ def test_intent_emotional_escalation_handoff():
         "你们就是骗子，再不退钱我就去投诉，气死我了！",
         "垃圾服务，马上解决，受不了了",
         "我要退钱，投诉无门",
+        "我很生气！",  # 2026-08-21：显式情绪词扩充（生气/愤怒等）
+        "气死我了火大，赶紧处理！",
+        # 2026-08-21：口语化/网络化情绪表达扩充
+        "烦死了，等了这么久还没到",
+        "我太无语了，这客服是怎么回事",
+        "无语，这个产品真的差",
+        "好气，说好明天到结果还没发货",
+        # 2026-08-21：责骂/质问式情绪表达扩充
+        "你们干什么吃的",
+        "到底怎么搞的，等半天没人管",
     ):
         assert classify_intent(q) == "handoff", q
 
@@ -101,9 +111,9 @@ def test_refuse_low_score_uses_no_llm(patch, monkeypatch):
 
 
 def test_handoff_reply_uses_no_llm(patch):
-    """TC-情绪/投诉：handoff 文案固定，不调 LLM（零成本兜底）。"""
+    """TC-情绪/投诉：handoff 文案固定（先安抚再转人工），不调 LLM（零成本兜底）。"""
     r = RagResult(intent="handoff")
-    assert _no_llm_reply(r) == "已为您转接人工客服，请稍候。您也可以描述具体问题，我会先帮您查询。"
+    assert _no_llm_reply(r) == "很抱歉给您带来不好的体验。已为您转接人工客服，请稍候；您也可以描述具体问题，我会先尽力帮您解决。"
 
 
 def test_chitchat_reply_uses_no_llm(patch):

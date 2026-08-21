@@ -22,6 +22,7 @@ from app.llm_clients.chat import get_chat_client
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.query_rewrite import rewrite
 from app.services.retrieval_service import RetrievalError, RetrievedChunk, search_kb
+from app.services.session_context import extract_topic
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,13 @@ HANDOFF_KEYWORDS = (
 EMOTIONAL_KEYWORDS = (
     "退钱", "赔偿", "太慢", "差评", "气死", "骗子", "欺诈",
     "立刻解决", "马上解决", "马上处理", "服务太差", "受不了", "垃圾", "投诉无门",
+    # 2026-08-21 情绪词扩充：显式情绪词命中 → handoff（高优转人工，先安抚再转）
+    "生气", "愤怒", "气人", "恼火", "火大", "发火", "很烦", "烦死",
+    "很不爽", "太气人", "气坏了", "气炸",
+    # 2026-08-21 口语化/网络化情绪表达扩充（避开单字防误伤正常问答）
+    "烦死了", "太烦了", "无语", "好气", "崩溃", "气死我了",
+    # 2026-08-21 责骂/质问式情绪表达扩充（抱怨态度差 → handoff 高优）
+    "干什么吃的", "怎么搞的", "搞什么名堂",
 )
 CHITCHAT_KEYWORDS = (
     "你好", "在吗", "谢谢", "再见", "你是谁", "你是机器人",
@@ -174,10 +182,12 @@ async def stream_answer(
         return
 
     try:
+        topic = extract_topic(history)  # 2026-08-21：会话主题注入（轻量状态），跨轮保持主题
         messages = build_qa_messages(
             query=query,
             chunks=result.chunks,
             history=history or [],
+            context_hint=topic,
         )
         client = get_chat_client()
         # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（provider-aware），
@@ -193,7 +203,7 @@ async def stream_answer(
 
 def _no_llm_reply(result: RagResult) -> str:
     if result.intent == "handoff":
-        return "已为您转接人工客服，请稍候。您也可以描述具体问题，我会先帮您查询。"
+        return "很抱歉给您带来不好的体验。已为您转接人工客服，请稍候；您也可以描述具体问题，我会先尽力帮您解决。"
     if result.intent == "chitchat":
         return "我是星河智家智能客服，可以帮您解答退换货、保修、配送等问题。有什么可以帮您？"
     return "抱歉，我暂时没有找到关于这个问题的可靠信息，为避免误导您，建议转人工客服处理。"

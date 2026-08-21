@@ -59,14 +59,19 @@ _REFERENCE_RE = re.compile(r"(这个|那个|它|这)")
 _PRODUCT_TERMS = ("手机", "冰箱", "空调", "电视", "洗衣机", "电脑", "平板", "耳机", "充电器", "显示器", "笔记本")
 #: 型号正则（字母+数字组合，支持多段如 Z9 Pro / X100 Ultra）
 _MODEL_RE = re.compile(r"\b[A-Za-z]+\s?\d+[A-Za-z0-9]*(?:\s+[A-Za-z0-9]+)*\b")
+#: 订单号正则（2026-08-21 业务实体消解）：`XOZ-12345`（字母-数字）或 `SO2026080118`（字母+长数字）。
+#: 前缀字母 ≥2 位 + 连续数字 ≥4 位，避免与普通型号/单字误配。
+_ORDER_RE = re.compile(r"\b[A-Z]{2,}-\d{3,}(?:-\d+)?\b|\b[A-Z]{2,}\d{4,}[0-9A-Z]*\b")
 
 #: 数字/型号保护（指代消解禁入上下文）
 _HAS_NUMERIC = re.compile(r"\d")
 
 
 def _extract_entities(query: str) -> list[str]:
-    """从问句中提取候选实体：型号 + 商品词（供指代消解）。"""
+    """从问句中提取候选实体：订单号（优先，最具体）+ 型号 + 商品词（供指代消解）。"""
     entities: list[str] = []
+    for m in _ORDER_RE.finditer(query):
+        entities.append(m.group(0).strip())
     for m in _MODEL_RE.finditer(query):
         entities.append(m.group(0).strip())
     for term in _PRODUCT_TERMS:
