@@ -77,8 +77,8 @@ export function MessageList({
           // 计算折叠区域最后一条消息的时间，用于判断是否显示分隔线
           const lastCollapsedTime = collapsedMessages[collapsedMessages.length - 1]?.createdAt || 0;
           const firstRecentTime = recentMessages[0]?.createdAt || 0;
-          const showDividerAfterCollapse = firstRecentTime && lastCollapsedTime && 
-            firstRecentTime - lastCollapsedTime > 5 * 60 * 1000;
+          const showDividerAfterCollapse = !!(firstRecentTime && lastCollapsedTime && 
+            firstRecentTime - lastCollapsedTime > 5 * 60 * 1000);
           
           return (
             <>
@@ -103,7 +103,7 @@ export function MessageList({
               {/* 最近消息 */}
               {messagesToRender.map((m) => {
                 const time = m.createdAt || 0;
-                const showDivider = time && time - lastTime > 5 * 60 * 1000;
+                const showDivider = !!(time && time - lastTime > 5 * 60 * 1000);
                 if (time) lastTime = time;
                 return (
                   <div key={m.id}>
@@ -123,7 +123,7 @@ export function MessageList({
         // 未折叠时渲染全部消息
         return messages.map((m) => {
           const time = m.createdAt || 0;
-          const showDivider = time && time - lastTime > 5 * 60 * 1000;
+          const showDivider = !!(time && time - lastTime > 5 * 60 * 1000);
           if (time) lastTime = time;
           return (
             <div key={m.id}>

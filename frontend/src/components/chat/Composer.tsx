@@ -21,6 +21,9 @@ interface ComposerProps {
 /** 输入区：多行文本框 + 发送（流式中禁用；Enter 发送 / Shift+Enter 换行）。 */
 export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, onStop, centered }: ComposerProps) {
   const [text, setText] = useState('');
+  const MAX_LEN = 4000;
+  const nearLimit = text.length >= MAX_LEN * 0.8;
+  const atLimit = text.length >= MAX_LEN;
 
   // P1-3：把"填入输入框"能力注册给父组件（快捷话术调用）；卸载时注销
   useEffect(() => {
@@ -43,7 +46,6 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, 
           placeholder="请输入您的问题，如：七天无理由退货怎么申请？"
           autoSize={{ minRows: 1, maxRows: 4 }}
           maxLength={4000}
-          showCount
           onPressEnter={(e) => {
             // C3：中文输入法组词中（isComposing）回车不发送，避免半句话误发
             if (!e.shiftKey && !e.nativeEvent.isComposing) {
@@ -57,6 +59,9 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, 
       </div>
       <div className="chat-composer__bar">
         <span className="chat-composer__hint">Enter 发送 · Shift+Enter 换行</span>
+        <span className={`chat-composer__count${atLimit ? ' at-limit' : nearLimit ? ' near-limit' : ''}`}>
+          {text.length} / 4000
+        </span>
         <div className="chat-composer__actions">
           {retry && (
             <Button

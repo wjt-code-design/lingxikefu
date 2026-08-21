@@ -527,6 +527,24 @@ body {
   border-radius: 50%;
   background: var(--color-accent);
 }
+/* Phase D：用户画像摘要胶囊（客服视角头部；浅色底 + 品牌色小标签，一眼可读） */
+.chat-header__profile {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.chat-header__profile-tag {
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--color-brand-dark);
+  background: var(--color-brand-soft);
+  border: 1px solid var(--color-brand-pale);
+  border-radius: var(--radius-full);
+  padding: 0 8px;
+  white-space: nowrap;
+  user-select: none;
+}
 .chat-header__actions {
   display: flex;
   gap: 8px;
@@ -806,13 +824,15 @@ body {
 .chat-msg__text h1,
 .chat-msg__text h2,
 .chat-msg__text h3 {
-  margin: 2px 0 1px;
-  padding: 1px 5px 1px 7px;
+  margin: 4px 0 3px;
+  padding: 4px 10px;
   font-size: 13px;
+  font-weight: 600;
   line-height: 1.35;
-  background: var(--color-brand-soft, rgba(83,159,216,0.15));
-  border-left: 3px solid var(--color-brand, #539FD8);
-  border-radius: 0 6px 6px 0;
+  text-align: center;
+  background: var(--color-brand-soft, rgba(83,159,216,0.12));
+  border-bottom: 2px solid var(--color-brand, #539FD8);
+  border-radius: 8px;
   white-space: normal;
 }
 /* GFM 表格（remark-gfm）：发丝线 + 表头浅底 + 隔行微色 */
@@ -1045,6 +1065,20 @@ body {
   font-size: 11px;
   color: var(--text-4);
   user-select: none;
+}
+.chat-composer__count {
+  font-size: 11px;
+  color: var(--text-4);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+  padding: 0 8px;
+  margin-left: auto;
+}
+.chat-composer__count.near-limit {
+  color: #d48806;
+}
+.chat-composer__count.at-limit {
+  color: #cf1322;
 }
 .chat-composer__actions {
   display: inline-flex;
@@ -2489,7 +2523,8 @@ body {
 /* task 9：首屏快捷问题场景化卡片（图标 + 标题 + 描述） */
 .chat-container__hot {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, 220px);
+  justify-content: center;
   gap: 10px;
   width: 100%;
   max-width: 760px;
@@ -2501,8 +2536,11 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
-  padding: 10px 12px;
-  text-align: left;
+  padding: 12px 14px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
 }
 .hot-card:hover {
@@ -2513,8 +2551,12 @@ body {
 .hot-card__head {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
+  width: 100%;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--border);
 }
 .hot-card__icon {
   width: 26px;
@@ -2540,24 +2582,28 @@ body {
 .hot-card__list {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
+  width: 100%;
+  align-items: stretch;
 }
 .hot-card__item {
   display: flex;
   flex-direction: column;
-  gap: 1px;
-  text-align: left;
-  padding: 6px 8px;
+  align-items: center;
+  gap: 2px;
+  text-align: center;
+  padding: 8px 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   background: transparent;
   cursor: pointer;
+  width: 100%;
   transition: all var(--dur-fast) var(--ease-out);
 }
 .hot-card__item:hover {
   border-color: var(--color-brand);
   background: rgba(150, 200, 232, 0.08);
-  transform: translateX(2px);
+  transform: translateY(-1px);
   box-shadow: 0 2px 6px rgba(83, 159, 216, 0.1);
 }
 .hot-card__item:active {
