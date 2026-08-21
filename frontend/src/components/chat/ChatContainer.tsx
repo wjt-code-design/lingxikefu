@@ -7,7 +7,7 @@ import { createSession, getSessionDetail, rateSatisfaction, sendAgentMessage } f
 import { escalateSession, createTicket } from '@/api/tickets';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStream } from '@/hooks/useChatStream';
-import type { MessageSource } from '@/contracts/api';
+import type { MessageSource, SessionDetail } from '@/contracts/api';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
 import { SatisfactionBar } from './SatisfactionBar';
@@ -162,6 +162,8 @@ export function ChatContainer({
   const [satisfactionRated, setSatisfactionRated] = useState(false);
   // 2026-08-21 方案B：首屏精品外的"更多常见问题"折叠展开
   const [moreOpen, setMoreOpen] = useState(false);
+  // Phase D：用户画像摘要（客服视角 observeMode 时展示；来自 getSessionDetail.profile）
+  const [userProfile, setUserProfile] = useState<SessionDetail['profile']>(undefined);
 
   // 三栏工作台：sources 变化时同步给右栏溯源面板（引用稳定，避免重复渲染）
   useEffect(() => {
@@ -181,6 +183,7 @@ export function ChatContainer({
       if (prev && sessionId) {
         setSessionId(null);
         setMessages([]);
+        setUserProfile(undefined); // Phase D：切会话重置画像
         streamingUserRef.current = null;
         setTurnCount(0); // P2-2：新会话重置满意度轮次
         setSatisfactionRated(false);
@@ -199,6 +202,7 @@ export function ChatContainer({
     getSessionDetail(sessionParam)
       .then((d) => {
         setSessionId(d.id);
+        setUserProfile(d.profile); // Phase D：客服视角展示画像
         setMessages(
           d.messages.map((m) => ({
             id: m.id,
@@ -207,6 +211,7 @@ export function ChatContainer({
             content: m.content,
             status: 'done',
             createdAt: new Date(m.created_at || Date.now()).getTime(),
+            sources: m.sources ?? [], // 2026-08-21：历史消息带来源，修复无溯源
             ...(m.role === 'assistant' ? { messageId: m.id } : {}),
             ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
           }))
@@ -450,6 +455,8 @@ export function ChatContainer({
                       ? '人工客服接待中'
                       : 'AI 自动接待'}
               </div>
+              {/* Phase D：用户画像摘要（客服视角；后端仅 agent/admin 返回 profile，顾客端无此块） */}
+              {userProfile && <UserProfileSummary profile={userProfile} />}
             </div>
           </div>
         </div>
@@ -605,6 +612,47 @@ export function ChatContainer({
           centered={chatLayout === 'observe'}
         />
       </div>
+    </div>
+  );
+}
+
+/** Phase D：用户画像摘要胶囊（客服视角头部展示，替代裸 JSON——客服一眼看懂用户画像）。 */
+function UserProfileSummary({ profile }: { profile: SessionDetail['profile'] }) {
+  if (!profile) return null;
+  const tags: string[] = [];
+  const topics = profile.topics;
+  if (topics && Object.keys(topics).length) {
+    // 取 Top3 常问主题
+    const top = Object.entries(topics)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([k]) => k);
+    if (top.length) tags.push(`常问:${top.join('/')}`);
+  }
+  const entities = profile.entities;
+  if (entities && entities.length) {
+    tags.push(`订单:${entities.slice(0, 2).join('/')}`);
+  }
+  const sat = profile.satisfaction;
+  if (sat && (sat.up || sat.down)) {
+    tags.push(`满意度:赞${sat.up ?? 0}/踩${sat.down ?? 0}`);
+  }
+  const handoff = profile.handoff;
+  if (handoff?.count) {
+    tags.push(handoff.count >= 2 ? '高优服务' : '曾转人工');
+  }
+  const prefs = profile.preferences?.['品类'];
+  if (prefs && prefs.length) {
+    tags.push(`偏好:${prefs.slice(0, 2).join('/')}`);
+  }
+  if (!tags.length) return null;
+  return (
+    <div className="chat-header__profile" aria-label="用户画像摘要">
+      {tags.map((t) => (
+        <span key={t} className="chat-header__profile-tag">
+          {t}
+        </span>
+      ))}
     </div>
   );
 }

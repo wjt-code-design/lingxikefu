@@ -21,6 +21,7 @@ interface BackendSessionDetail {
   id: string;
   title: string | null;
   messages: Message[];
+  profile?: SessionDetail['profile']; // Phase D：用户画像（agent/admin 视角返回；顾客端 undefined）
 }
 
 function toSession(s: BackendSession): Session {
@@ -61,6 +62,7 @@ export async function getSessionDetail(id: string, limit?: number): Promise<Sess
       ...m,
       session_id: r.data.id,
     })),
+    profile: r.data.profile, // Phase D：透传画像（agent/admin 可见；顾客端 undefined）
   };
 }
 

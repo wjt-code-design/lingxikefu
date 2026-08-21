@@ -16,12 +16,13 @@ from sqlalchemy.orm import Session as OrmSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.message import Message, MessageRole
+from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
+from app.services.user_profile_service import get_profile as get_user_profile
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -45,6 +46,17 @@ class SessionItem(BaseModel):
     user_phone: str | None = None
 
 
+class SessionMessageSource(BaseModel):
+    """消息引用来源（对齐契约 MessageSource：chunk_id/doc_id/doc_title/snippet/score）。
+    2026-08-21：会话详情补曝光引用来源，修复历史消息无溯源（此前详情接口不含 sources）。"""
+
+    chunk_id: str
+    doc_id: str | None = None
+    doc_title: str
+    snippet: str
+    score: float
+
+
 class SessionMessage(BaseModel):
     id: str
     role: str
@@ -54,6 +66,8 @@ class SessionMessage(BaseModel):
     # Branch 3：人工客服归属（契约 Message.agent_id / agent_name，仅 role=agent 携带）
     agent_id: str | None = None
     agent_name: str | None = None
+    # 2026-08-21：AI 回复的引用来源（assistant 角色）；user/agent 通常为空
+    sources: list[SessionMessageSource] = Field(default_factory=list)
 
 
 class SessionDetail(BaseModel):
@@ -61,6 +75,8 @@ class SessionDetail(BaseModel):
     id: str
     title: str | None
     messages: list[SessionMessage]
+    # 2026-08-22 Phase D：用户画像摘要（仅 agent/admin 可见；顾客端为 None 不泄露他人画像）。
+    profile: dict | None = None
 
 
 class SessionListResp(BaseModel):
@@ -192,9 +208,35 @@ def get_session(
             ).all()
         )
     )
+    # 2026-08-21：批量取这些消息的引用来源（message_sources），按 message_id 分组。
+    # 修复历史消息无溯源：此前详情接口遗漏 sources，前端历史气泡/溯源面板恒空。
+    src_by_msg: dict[str, list[dict]] = {}
+    msg_ids = [m.id for m in msgs]
+    if msg_ids:
+        for src in db.scalars(
+            select(MessageSource).where(MessageSource.message_id.in_(msg_ids))
+        ).all():
+            src_by_msg.setdefault(str(src.message_id), []).append(
+                {
+                    "chunk_id": str(src.chunk_id),
+                    "doc_id": str(src.doc_id),
+                    "doc_title": src.doc_title,
+                    "snippet": src.snippet,
+                    "score": float(src.score),
+                }
+            )
+    # 2026-08-22 Phase D：客服侧展示画像——仅 agent/admin 返回（读会话 owner 画像；
+    # 顾客端 None 不泄露；fail-open：读取异常 → None，不影响会话详情主流程）。
+    profile: dict | None = None
+    if role in ("admin", "agent"):
+        try:
+            profile = get_user_profile(db, s.user_id)
+        except Exception:  # noqa: BLE001 - fail-open
+            profile = None
     return SessionDetail(
         id=str(s.id),
         title=s.title,
+        profile=profile,
         messages=[
             SessionMessage(
                 id=str(m.id),
@@ -204,6 +246,7 @@ def get_session(
                 intent=m.intent,  # BUG-07：返回真实意图供客服判断转人工
                 agent_id=m.agent_id,  # Branch 3：人工客服归属透出
                 agent_name=m.agent_name,
+                sources=src_by_msg.get(str(m.id), []),
             )
             for m in msgs
         ],

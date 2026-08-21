@@ -76,6 +76,15 @@ export interface SessionDetail {
   id: string;
   title?: string;
   messages: Message[];
+  /** 用户画像摘要（Phase D，长期记忆）：仅 agent/admin 视角返回；顾客端为 undefined。 */
+  profile?: {
+    schema_version?: number;
+    topics?: Record<string, number>; // 常问主题 -> 次数
+    entities?: string[]; // 历史订单号/型号
+    satisfaction?: { up?: number; down?: number };
+    handoff?: { count?: number; last_at?: string };
+    preferences?: { 品类?: string[] };
+  };
 }
 /** Branch 3：人工客服代发消息请求体（POST /sessions/{id}/messages，仅 admin/agent 可用）。 */
 export interface AgentMessageReq {
@@ -101,6 +110,8 @@ export interface Message {
   /** 仅 agent 角色携带：客服标识（工号 / 昵称），用于气泡身份标签 */
   agent_id?: string;
   agent_name?: string;
+  /** 2026-08-21：AI 回复的引用来源（message_sources，session 详情透出）。user/agent 通常为空 */
+  sources?: MessageSource[];
 }
 export interface MessageSource {
   chunk_id: string;
