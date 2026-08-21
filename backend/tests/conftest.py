@@ -43,6 +43,7 @@ _REDIS_PATCH_TARGETS = (
     "app.services.answer_cache.get_redis",
     "app.api.telemetry.get_redis",
     "app.services.quota.get_redis",
+    "app.services.user_profile_service.get_redis",  # 2026-08-22 Phase B：画像幂等键查重
 )
 
 

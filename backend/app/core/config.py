@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # 2026-08-21：TTL 24→72h，提高常见问题命中窗口（miss 仅回落 LLM，无副作用）。
     ANSWER_CACHE_TTL_HOURS: int = 72
 
+    # --- 用户画像（长期记忆，2026-08-22 Phase B）：可一键关闭（关闭=不采集不注入，回答不变） ---
+    USER_PROFILE_ENABLED: bool = True
+
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
 

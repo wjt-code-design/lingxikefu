@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -17,8 +18,10 @@ from app.core.database import get_db
 from app.models.feedback import Feedback, FeedbackRating
 from app.models.message import Message
 from app.models.session import Session
+from app.services.user_profile_service import merge_profile
 
 router = APIRouter(prefix="/messages", tags=["feedback"])
+logger = logging.getLogger(__name__)
 
 
 class FeedbackReq(BaseModel):
@@ -64,4 +67,16 @@ def submit_feedback(
             )
         )
     db.commit()
+    # 2026-08-22 Phase B：满意度入画像（幂等键=消息+评分，同消息同评分只计一次；
+    # 用户改评（up→down）按真实态度各计一次）。fail-open 不影响反馈主流程。
+    try:
+        merge_profile(
+            db,
+            user_id,
+            "",
+            sat_rating=req.rating.value,
+            idem_key=f"fb:{message_id}:{req.rating.value}",
+        )
+    except Exception:  # noqa: BLE001 - 采集兜底
+        logger.exception("满意度采集异常（不影响反馈）")
     return FeedbackResp()
