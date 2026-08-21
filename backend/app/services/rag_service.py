@@ -138,6 +138,7 @@ async def stream_answer(
     history: list[dict] | None = None,
     top_k: int | None = None,
     kb_version: str | None = None,
+    user_profile: str | None = None,
 ):
     """流式回答：yield (event_type, data)。
 
@@ -146,6 +147,8 @@ async def stream_answer(
     - 拒答/闲聊/转人工 不发 token，直接 sources([])+done
     - T10 缓存命中：intent → stage* → token*(缓存答案分片) → sources(缓存) → done(cache_hit=true)
     - 任一异常 → error（fail-closed，不静默）
+    - user_profile（可选，2026-08-22 Phase C）：画像文本，透传 build_qa_messages 注入
+      <<用户画像>> 块；None 不注入（输出与旧版一致）。仅影响 prompt，不影响缓存 key。
     """
     result = RagResult(intent="qa")
     top_k = settings.RETRIEVAL_TOP_K if top_k is None else top_k
@@ -188,6 +191,7 @@ async def stream_answer(
             chunks=result.chunks,
             history=history or [],
             context_hint=topic,
+            profile=user_profile,  # 2026-08-22 Phase C：用户画像注入（None=不注入，兼容旧输出）
         )
         client = get_chat_client()
         # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（provider-aware），

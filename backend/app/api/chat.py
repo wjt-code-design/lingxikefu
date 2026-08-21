@@ -40,6 +40,11 @@ from app.services.query_rewrite import rewrite
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer, stream_answer
 from app.services.quick_answers import match_quick
+from app.services.user_profile_service import (
+    get_profile,
+    merge_profile,
+    to_prompt_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +265,10 @@ async def chat_stream(
     if kb_id is not None:
         kb_version = await run_in_threadpool(_kb_version_str, db, kb_id)
 
+    # 画像归属：会话 owner（在 gen 外捕获——gen 内 sources 事件把 `s` 用作迭代变量，
+    # 使 `s` 在 gen 作用域内变成局部名，闭包内引用会 UnboundLocalError——测试亲眼红过此 bug）
+    session_owner_id = s.user_id
+
     async def gen():
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
         if await request.is_disconnected():
@@ -289,6 +298,16 @@ async def chat_stream(
                 return
             quick_ans = await run_in_threadpool(match_quick, req.content)
 
+            # 2026-08-22 Phase C：读取用户画像注入 prompt（fail-open：读取异常 → 不注入，回答照常）。
+            # 画像归属会话 owner（session_owner_id）；仅影响 prompt，不影响缓存 key。
+            user_profile: str | None = None
+            try:
+                if settings.USER_PROFILE_ENABLED:
+                    p = await run_in_threadpool(get_profile, db, session_owner_id)
+                    user_profile = to_prompt_text(p)
+            except Exception:  # noqa: BLE001 - fail-open
+                logger.exception("读取用户画像失败（不注入，回答照常）")
+
             async def _events():
                 # 方案A：快捷预置话术短路——命中固定问句（按钮或手打同文案）直接秒回，不检索/不判缓存版本
                 if quick_ans:
@@ -301,7 +320,11 @@ async def chat_stream(
                     yield ("done", {"message_id": ""})
                     return
                 async for e, d in stream_answer(
-                    req.content, kb_id, history=history, kb_version=kb_version
+                    req.content,
+                    kb_id,
+                    history=history,
+                    kb_version=kb_version,
+                    user_profile=user_profile,
                 ):
                     yield (e, d)
 
@@ -352,6 +375,20 @@ async def chat_stream(
                     msg_id = await _persist_answer(
                         db, session_id, content, source_payloads, intent, meta
                     )
+                    # 2026-08-22 Phase B：assistant 落库后增量采集用户画像（幂等键=user_msg.id；
+                    # fail-open：采集异常不影响响应；手打/快捷问题都记主题与实体）。
+                    # 归属用 session_owner_id（会话 owner）而非当前操作者：agent/admin 代答时不把画像记到客服头上。
+                    try:
+                        await run_in_threadpool(
+                            merge_profile,
+                            db,
+                            session_owner_id,
+                            req.content,
+                            intent=intent,
+                            idem_key=str(user_msg.id),
+                        )
+                    except Exception:  # noqa: BLE001 - 采集兜底（merge_profile 内部已 fail-open，双保险）
+                        logger.exception("用户画像采集异常（不影响响应）")
                     # T10：未命中 → 回填缓存（qa 非拒答且有内容；改写后 query 作 key）
                     if not cache_hit and intent == "qa" and content:
                         rewritten, _r = rewrite(req.content, history)
