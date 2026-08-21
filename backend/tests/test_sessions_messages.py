@@ -18,7 +18,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
 from app.models.base import Base
-from app.models.message import Message
+from app.models.message import Message, MessageSource
 from app.models.session import Session
 from app.models.user import User, UserRole
 from fastapi.testclient import TestClient
@@ -47,7 +47,7 @@ def client(monkeypatch):
             c.server_default = None
     Base.metadata.create_all(
         engine,
-        tables=[Session.__table__, Message.__table__, User.__table__],
+        tables=[Session.__table__, Message.__table__, User.__table__, MessageSource.__table__],
     )
     Local = sessionmaker(bind=engine, expire_on_commit=False)
 
