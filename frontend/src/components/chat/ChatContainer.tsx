@@ -13,15 +13,19 @@ import { MessageList } from './MessageList';
 import { SatisfactionBar } from './SatisfactionBar';
 import type { ChatMessage } from './types';
 
-/** F3：首屏快捷问题场景化卡片（图标 + 标题 + 描述，点击直接发送，移动端零门槛） */
-const HOT_SCENARIOS = [
+/** 快捷问题单一数据源（2026-08-21 合并原 HOT_SCENARIOS + MORE_GROUPS，消除双数组漂移）。
+ * 每问题可带 `featured:true`（首屏精品卡片）+ `d` 描述；其余进"更多常见问题"折叠分组。
+ * 改问题/加分组一律改这里，一处维护。 */
+const QUESTION_GROUPS = [
   {
-    key: 'return',
+    key: 'aftersale',
     icon: <SwapOutlined />,
     title: '售后退换',
     questions: [
-      { q: '七天无理由退货怎么申请？', d: '在线申请 · 快速退款' },
-      { q: '退款一般多久到账？', d: '原路退回 · 1-3 个工作日' },
+      { q: '七天无理由退货怎么申请？', d: '在线申请 · 快速退款', featured: true },
+      { q: '退款一般多久到账？', d: '原路退回 · 1-3 个工作日', featured: true },
+      { q: '换货要怎么做？' },
+      { q: '退货进度在哪看？' },
     ],
   },
   {
@@ -29,21 +33,46 @@ const HOT_SCENARIOS = [
     icon: <TruckOutlined />,
     title: '配送物流',
     questions: [
-      { q: '支持哪些支付方式？', d: '微信 / 支付宝 / 银联' },
-      { q: '可以开发票吗？', d: '电子发票 · 随时申请' },
+      { q: '支持哪些支付方式？', d: '微信 / 支付宝 / 银联', featured: true },
+      { q: '可以开发票吗？', d: '电子发票 · 随时申请', featured: true },
+      { q: '物流单号在哪查？' },
+      { q: '下单后多久发货？' },
+      { q: '预售要等多久？' },
     ],
   },
   {
     key: 'warranty',
     icon: <ToolOutlined />,
     title: '保修维修',
-    questions: [{ q: '保修多久？', d: '整机保修 · 全国联保' }],
+    questions: [
+      { q: '保修多久？', d: '整机保修 · 全国联保', featured: true },
+      { q: '屏幕有坏点保修吗？' },
+      { q: '电池健康度低于80%保修吗？' },
+      { q: '手机配置参数在哪看？' },
+      { q: '系统怎么升级？' },
+    ],
   },
   {
     key: 'account',
-    icon: <SafetyCertificateOutlined />,
+    icon: <UserOutlined />,
     title: '账户支付',
-    questions: [{ q: '如何修改收货地址？', d: '个人中心 · 随时修改' }],
+    questions: [
+      { q: '如何修改收货地址？', d: '个人中心 · 随时修改', featured: true },
+      { q: '怎么修改登录密码？' },
+      { q: '如何绑定或解绑手机号？' },
+      { q: '短信验证码收不到怎么办？' },
+    ],
+  },
+  {
+    key: 'value',
+    icon: <SafetyCertificateOutlined />,
+    title: '价保与回收',
+    questions: [
+      { q: '价保怎么申请？退差价多久到账？' },
+      { q: '优惠券能叠加使用吗？' },
+      { q: '手机可以以旧换新吗？' },
+      { q: '以旧换新怎么估价？' },
+    ],
   },
 ];
 
@@ -131,6 +160,8 @@ export function ChatContainer({
   // P2-2：会话满意度——对话轮次 ≥2 后内联出现，评分一次后隐藏
   const [turnCount, setTurnCount] = useState(0);
   const [satisfactionRated, setSatisfactionRated] = useState(false);
+  // 2026-08-21 方案B：首屏精品外的"更多常见问题"折叠展开
+  const [moreOpen, setMoreOpen] = useState(false);
 
   // 三栏工作台：sources 变化时同步给右栏溯源面板（引用稳定，避免重复渲染）
   useEffect(() => {
@@ -445,14 +476,14 @@ export function ChatContainer({
               <div className="chat-welcome__sub">可点击下方问题快速开始，或直接输入您的问题</div>
             </div>
             <div className="chat-container__hot">
-              {HOT_SCENARIOS.map((g) => (
+              {QUESTION_GROUPS.filter((g) => g.questions.some((q) => q.featured)).map((g) => (
                 <div key={g.key} className="hot-card">
                   <div className="hot-card__head">
                     <span className="hot-card__icon">{g.icon}</span>
                     <span className="hot-card__title">{g.title}</span>
                   </div>
                   <div className="hot-card__list">
-                    {g.questions.map((it) => (
+                    {g.questions.filter((it) => it.featured).map((it) => (
                       <button
                         key={it.q}
                         type="button"
@@ -467,6 +498,47 @@ export function ChatContainer({
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="hot-more">
+              <button
+                type="button"
+                className="hot-more__toggle"
+                onClick={() => setMoreOpen((v) => !v)}
+                disabled={creating || streaming}
+                aria-expanded={moreOpen}
+              >
+                {moreOpen ? '收起常见问题' : `更多常见问题（共 ${QUESTION_GROUPS.reduce((n, g) => n + g.questions.filter((x) => !x.featured).length, 0)} 个）`}
+              </button>
+              {moreOpen && (
+                <div className="hot-more__body">
+                  {QUESTION_GROUPS.map((g) => {
+                    const others = g.questions.filter((it) => !it.featured);
+                    if (!others.length) return null;
+                    return (
+                      <div key={g.key} className="hot-more__group">
+                        <div className="hot-more__group-title">
+                          <span className="hot-card__icon">{g.icon}</span>
+                          <span>{g.title}</span>
+                          <span className="hot-more__count">{others.length}</span>
+                        </div>
+                        <div className="hot-more__list">
+                          {others.map((it) => (
+                            <button
+                              key={it.q}
+                              type="button"
+                              className="hot-more__item"
+                              onClick={() => onSend(it.q)}
+                              disabled={creating || streaming}
+                            >
+                              {it.q}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
