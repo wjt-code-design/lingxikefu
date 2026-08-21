@@ -62,15 +62,17 @@ def client():
         db.add(User(id=ADMIN, email="admin@b.com", role=UserRole.admin, tenant_id="default", password_hash="x"))
         db.add(User(id=USER, email="u@b.com", role=UserRole.user, tenant_id="default", password_hash="x"))
         db.add(Session(id=SID, user_id=USER, tenant_id="default"))
-        # handoff 问句 ×2（同一问句 → 聚合 count=2）+ refuse 问句 ×1 + 同义问法 ×1（归一化后并入 count=2）
-        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
-                       content="怎么申请以旧换新？", intent="handoff"))
-        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
-                       content="怎么申请以旧换新？", intent="handoff"))
-        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
-                       content=" 怎么申请以旧换新？ ", intent="handoff"))  # 归一化后与上同组（去空白）
+        # refuse 问句 ×1 + 同义问法 ×1（归一化后并入 count=2）+ handoff ×3（应被排除，非知识缺口）
         db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
                        content="商品详情页在哪？", intent="refuse"))
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
+                       content=" 商品详情页在哪？ ", intent="refuse"))  # 归一化后与上同组（去空白）
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
+                       content="怎么申请以旧换新？", intent="handoff"))
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
+                       content="我要找人工客服", intent="handoff"))
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
+                       content="你们就是骗子不退钱", intent="handoff"))
         # qa 消息不应计入
         db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default", role=MessageRole.user,
                        content="退款多久到账？", intent="qa"))
@@ -80,16 +82,19 @@ def client():
 
 
 def test_stats_hot_gaps_grouped(client):
-    """F1：handoff/refuse 用户消息归一化聚合 Top10，qa 不计入。"""
+    """F1：仅 refuse 用户消息归一化聚合 Top10；handoff（转人工/情绪）与 qa 不计入。"""
     r = client.get(f"{API}/admin/stats", headers=_h(ADMIN, "admin"))
     assert r.status_code == 200
     data = r.json()
     gaps = {g["question"]: g["count"] for g in data["hot_gaps"]}
-    # 3 条同义问法（含空白差异）归一化后聚合 count=3，展示保留完整问句
-    assert gaps.get("怎么申请以旧换新？") == 3
-    assert gaps.get("商品详情页在哪？") == 1
+    # 2 条同义问法（含空白差异）归一化后聚合 count=2，展示保留完整问句
+    assert gaps.get("商品详情页在哪？") == 2
+    assert " 商品详情页在哪？ " not in gaps  # 归一化后不重复出现
+    # handoff（转人工/情绪分流）不属于知识缺口 → 不得计入待补录
+    assert "怎么申请以旧换新？" not in gaps
+    assert "我要找人工客服" not in gaps
+    assert "你们就是骗子不退钱" not in gaps
     assert "退款多久到账？" not in gaps  # qa 意图排除
-    assert " 怎么申请以旧换新？ " not in gaps  # 归一化后不重复出现
 
 
 def test_stats_forbidden_for_user(client):
