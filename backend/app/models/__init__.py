@@ -14,6 +14,7 @@ from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 
 __all__ = [
     "Base",
@@ -34,4 +35,5 @@ __all__ = [
     "FeedbackRating",
     "Ticket",
     "TicketStatus",
+    "UserProfile",
 ]
