@@ -43,6 +43,7 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, 
           placeholder="请输入您的问题，如：七天无理由退货怎么申请？"
           autoSize={{ minRows: 1, maxRows: 4 }}
           maxLength={4000}
+          showCount
           onPressEnter={(e) => {
             // C3：中文输入法组词中（isComposing）回车不发送，避免半句话误发
             if (!e.shiftKey && !e.nativeEvent.isComposing) {

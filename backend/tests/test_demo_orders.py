@@ -21,7 +21,8 @@ CASES = {
     "已发货改地址": ("订单已发货想改收货地址", "拦截"),
     "物流超时催单": ("快递快三天没更新帮我催一下", "48 小时"),
     "查无订单": ("帮我查订单 999999", "999999"),
-    "退款超过 7 天": ("退款说三天到账都七天了还没到", "财务核查"),
+    # 退款延迟属退款政策文档，不在"改地址"文档（原 golden 错位导致 top_k=5 后必失配）。
+    "退款超过 7 天": ("退款说三天到账都七天了还没到", "支付与退款"),
     "多实体整合(尾号8823/洗衣机/签收未收到)": (
         "订单尾号 8823 洗衣机显示已签收但我没收到货",
         "8823",
@@ -64,7 +65,7 @@ def test_order_demo_recall(demo_kb_id: str, label: str, spec: tuple[str, str]):
     from uuid import UUID
 
     query, must_hit = spec
-    chunks = search_kb(query, UUID(demo_kb_id), top_k=8)
+    chunks = search_kb(query, UUID(demo_kb_id), top_k=settings.RETRIEVAL_TOP_K)  # 跟随降噪口径(=5)
     assert chunks, f"{label}: 无检索结果（KB 空/嵌入异常）"
     joined = " ".join(c.text for c in chunks)
     assert must_hit in joined, (
