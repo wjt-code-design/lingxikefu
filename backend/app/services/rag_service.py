@@ -78,13 +78,15 @@ def classify_intent(query: str) -> str:
     return "qa"
 
 
-def run_pipeline(query: str, kb_id: UUID, top_k: int = 8, history: list[dict] | None = None, kb_version: str | None = None) -> RagResult:
+def run_pipeline(query: str, kb_id: UUID, top_k: int | None = None, history: list[dict] | None = None, kb_version: str | None = None) -> RagResult:
     """RAG 管线入口（非流式部分）：intent(原文) → 缓存/检索(改写后) → 拒答判定。
 
     顺序契约（T9-S3）：intent 恒用原文判定；改写只服务检索与缓存 key（query_rewrite）。
     T10：kb_version 由调用方（chat 层查 KB.updated_at）传入，缓存命中即返回（不走 LLM）。
+    自 2026-08-21：top_k 默认跟随 settings.RETRIEVAL_TOP_K（单一真源；外部显式传参可覆盖）。
     返回 RagResult，生成阶段由 Chat 层用 build_qa_messages 组装后流式调用。
     """
+    top_k = settings.RETRIEVAL_TOP_K if top_k is None else top_k
     intent = classify_intent(query)
     result = RagResult(intent=intent)
 
@@ -114,6 +116,9 @@ def run_pipeline(query: str, kb_id: UUID, top_k: int = 8, history: list[dict] | 
         if not chunks or best_dense < settings.MIN_SCORE:
             result.refuse = True
             result.refuse_reason = "未找到可靠依据"
+        # 降噪（2026-08-21）：MIN_SCORE 亦作 context 硬过滤——低于阈值的低分近义片段
+        # 不进 prompt，减少生成期噪声。拒答判定已用原始 best_dense，不受此处过滤影响。
+        result.chunks = [c for c in chunks if c.dense_score >= settings.MIN_SCORE]
         logger.info("RAG qa: best_dense=%.3f refuse=%s", best_dense, result.refuse)
 
     return result
@@ -123,7 +128,7 @@ async def stream_answer(
     query: str,
     kb_id: UUID,
     history: list[dict] | None = None,
-    top_k: int = 8,
+    top_k: int | None = None,
     kb_version: str | None = None,
 ):
     """流式回答：yield (event_type, data)。
@@ -135,6 +140,7 @@ async def stream_answer(
     - 任一异常 → error（fail-closed，不静默）
     """
     result = RagResult(intent="qa")
+    top_k = settings.RETRIEVAL_TOP_K if top_k is None else top_k
     try:
         # H2 修复：run_pipeline 内含阻塞式 embedding（model.encode），搬出事件循环
         # T9-S3：history 传入供指代消解（检索用改写，intent 用原文）；kb_version 供 T10 缓存校验

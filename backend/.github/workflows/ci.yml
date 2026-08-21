@@ -85,6 +85,10 @@ jobs:
         run: pip install -r requirements.txt
       - name: Apply migrations (fresh PG)
         run: alembic upgrade head
+      # 订单集成回归（test_demo_orders.py）需要 KB 有订单 demo 数据；全新空库下脚本自动建 demo KB。
+      # 幂等（sha256 去重），可安全在每次 CI 前执行。
+      - name: Seed demo KB order data
+        run: python scripts/seed_demo_data.py
       - name: Run tests (coverage >= 70%)
         run: pytest
       # 契约门禁：根 contracts/api.ts vs api-schema.json 一致（防漂移静默回归，纯标准库脚本）

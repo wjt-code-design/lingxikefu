@@ -148,7 +148,9 @@ def get_stats(
         )
     ).one()
     avg_first_token_ms = round(float(avg_row[0]), 1) if avg_row[0] is not None else 0.0
-    # F1：待补录问题 Top10——聚合 handoff/refuse 意图的用户消息（KB 未覆盖 → 运营补录信号）。
+    # F1：待补录问题 Top10——仅聚合 refuse 意图的用户消息（QA 检索但无依据被拒答 → KB 未覆盖
+    # 的真正补录信号）。handoff（转人工/情绪）是正常分流、非知识缺口：补录知识解决不了"转人工"
+    # 诉求，收进来只会污染运维补录清单（此前误把 handoff 一并统计，见修复备注）。
     # SQL 先按原文 GROUP BY 压缩行数（同问句一行，count 由数据库算），Python 仅做跨变体
     # 归一化归并（NFKC/去标点）——传输量从"消息数"降到"不同问句数"。
     raw_rows = db.execute(
@@ -156,7 +158,7 @@ def get_stats(
         .where(
             Message.tenant_id == tenant,
             Message.role == MessageRole.user,
-            Message.intent.in_(["handoff", "refuse"]),
+            Message.intent == "refuse",
         )
         .group_by(Message.content)
     ).all()

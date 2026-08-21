@@ -5,19 +5,23 @@
 幂等：sha256 去重，重复运行不会产生重复文档。
 """
 import hashlib
+import logging
 import os
 import sys
 import uuid
 from pathlib import Path
 
+logger = logging.getLogger(__name__)
+
 # 允许从 scripts/ 子目录直接运行：把 backend 根加入 sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# 覆盖脏 env（pydantic-settings: env > .env）
-os.environ["ZHIPU_API_KEY"] = "[REDACTED-ZHIPU-KEY]"
-os.environ["POSTGRES_HOST"] = "localhost"
-os.environ["REDIS_URL"] = "redis://localhost:6379/0"
-os.environ["QDRANT_URL"] = "http://localhost:6333"
+# 使用 setdefault（而非强覆盖）：已注入的 hostname env（如容器内 postgres/redis/qdrant）优先，
+# 否则回退本机 localhost。防脏 env 覆盖 .env 真实值；容器内也能一次跑通。
+os.environ.setdefault("ZHIPU_API_KEY", "[REDACTED-ZHIPU-KEY]")
+os.environ.setdefault("POSTGRES_HOST", "localhost")
+os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 
 import sqlalchemy
 
@@ -37,9 +41,19 @@ def latest_kb(db) -> uuid.UUID:
         .order_by(KnowledgeBase.created_at.desc())
         .limit(1)
     )
-    if kb is None:
-        raise SystemExit("知识库为空，请先在后台创建知识库")
-    return kb.id
+    if kb is not None:
+        return kb.id
+    # CI/全新环境：无知识库时不退出，自动创建 demo 库（订单集成回归 seed 自给自足）。
+    demo = KnowledgeBase(
+        name="demo",
+        description="自动创建：承载演示订单数据，供订单检索集成回归（test_demo_orders.py）",
+        tenant_id=settings.TENANT_DEFAULT,
+    )
+    db.add(demo)
+    db.commit()
+    db.refresh(demo)
+    logger.info("自动创建 demo 知识库 %s", demo.id)
+    return demo.id
 
 
 def main() -> None:

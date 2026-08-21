@@ -74,7 +74,8 @@ class Settings(BaseSettings):
     # 0.85：同义改写（0.84-0.94）命中、不同主题（0.43）拒绝，区分清晰；
     # 串答风险由实体锁定（_entities_ok）+ kb_id/kb_version 校验兜底，阈值偏激进无副作用（miss 仅回落 LLM）。
     ANSWER_CACHE_THRESHOLD: float = 0.85
-    ANSWER_CACHE_TTL_HOURS: int = 24
+    # 2026-08-21：TTL 24→72h，提高常见问题命中窗口（miss 仅回落 LLM，无副作用）。
+    ANSWER_CACHE_TTL_HOURS: int = 72
 
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
@@ -111,8 +112,9 @@ class Settings(BaseSettings):
     # 分块参数：中文按字符计；块内尽量保留段落结构，单段超长再硬切
     CHUNK_SIZE: int = 500
     CHUNK_OVERLAP: int = 50
-    # 检索 top_k（L4：与 RAG 调用默认对齐，统一为 8）
-    RETRIEVAL_TOP_K: int = 8
+    # 检索 top_k：2026-08-21 降噪，8→5。参数扫描（10 条业务查询真检索）显示 top5 相对 top8
+    # precision@5 20%→32%（纯收益），recall@5 不变（95%）；top8 多出的低分近义文档只稀释上下文。
+    RETRIEVAL_TOP_K: int = 5
     # 检索拒答阈值（L4：top-1 分数低于此值视为无可靠依据 → 拒答；原硬编码 0.30 提为配置）
     MIN_SCORE: float = 0.30
     # 上传文件大小上限（MB），超出拒绝

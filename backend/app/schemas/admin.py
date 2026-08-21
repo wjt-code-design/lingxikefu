@@ -25,7 +25,8 @@ class RoleUpdateReq(BaseModel):
 
 
 class HotGap(BaseModel):
-    """F1：待补录问题（handoff/refuse 高频问句，运营补 KB 信号）。"""
+    """F1：待补录问题（refuse 意图高频问句——QA 检索无依据被拒答，运营补 KB 信号）。
+    handoff（转人工/情绪）是正常分流，不属于知识缺口，不计入。"""
 
     question: str
     count: int
