@@ -19,27 +19,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
     <script>
-      // 主题首帧兜底（防 FOUC）：读 zustand persist 的 lingxi-theme + OS 深浅偏好，
-      // 在 React 挂载前把 data-theme 写到 <html>（与 useTheme/index 兜底逻辑一致）。
+      // 仅浅色主题（2026-08-20 取消深色/跟随系统）：固定 <html data-theme="light">，防默认深色 FOUC。
       (function () {
-        try {
-          var mode = 'light';
-          var raw = localStorage.getItem('lingxi-theme');
-          if (raw) {
-            var parsed = JSON.parse(raw);
-            if (parsed && parsed.state && parsed.state.theme) mode = parsed.state.theme;
-          }
-          var resolved =
-            mode === 'dark' ||
-            (mode === 'system' &&
-              window.matchMedia &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches)
-              ? 'dark'
-              : 'light';
-          document.documentElement.setAttribute('data-theme', resolved);
-        } catch (e) {
-          document.documentElement.setAttribute('data-theme', 'light');
-        }
+        document.documentElement.setAttribute('data-theme', 'light');
       })();
     </script>
   </head>

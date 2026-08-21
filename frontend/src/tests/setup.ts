@@ -3,9 +3,8 @@ import '@ant-design/v5-patch-for-react-19';
 import { afterEach, beforeEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { useAuthStore } from '@/store/authStore';
-import { useThemeStore } from '@/store/themeStore';
 
-// jsdom 未实现 matchMedia：补 mock（默认 matches=false → light）
+// jsdom 未实现 matchMedia：补 mock（antd responsiveObserver 依赖；默认 matches=false → 浅色/非深色）
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: vi.fn().mockImplementation((query: string) => ({
@@ -20,15 +19,15 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 });
 
+// 固定浅色主题（2026-08-20 取消深色/跟随系统）
+document.documentElement.setAttribute('data-theme', 'light');
+
 beforeEach(() => {
   localStorage.clear();
-  // 重置持久化 store 的内存态，避免跨用例耦合
-  useThemeStore.setState({ theme: 'system' });
   useAuthStore.setState({ token: null, refreshToken: null, user: null, role: null });
 });
 
 afterEach(() => {
   cleanup();
   localStorage.clear();
-  document.documentElement.removeAttribute('data-theme');
 });

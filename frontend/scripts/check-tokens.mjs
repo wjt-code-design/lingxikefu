@@ -2,6 +2,7 @@
  * 校验 tokens.css（CSS 变量真源）与 theme.ts（AntD JS token）关键值一致（v2.1 修订 A）。
  * 用法：node scripts/check-tokens.mjs（package.json: check:tokens）
  * 映射：tokens.css 变量 → theme.ts 字段
+ * 2026-08-20：取消深色，仅校验浅色。
  */
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
@@ -9,14 +10,11 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-function extractVars(file, block) {
+function extractVars(file) {
   const css = readFileSync(resolve(root, file), 'utf-8');
-  const re =
-    block === 'light'
-      ? /:root\s*\{([^}]*)\}/
-      : /\[data-theme='dark'\]\s*\{([^}]*)\}/;
+  const re = /:root\s*\{([^}]*)\}/;
   const m = css.match(re);
-  if (!m) throw new Error(`tokens.css 找不到 ${block} 块`);
+  if (!m) throw new Error(`tokens.css 找不到 :root 块`);
   const vars = {};
   for (const line of m[1].split('\n')) {
     const kv = line.match(/--([\w-]+):\s*([^;]+);/);
@@ -28,19 +26,14 @@ function extractVars(file, block) {
 function extractTsTokens() {
   const ts = readFileSync(resolve(root, 'src/theme.ts'), 'utf-8');
   const out = {};
-  for (const [name, re] of [
-    ['light', /lightTokens[\s\S]*?\{([\s\S]*?)\};/],
-    ['dark', /darkTokens[\s\S]*?\{([\s\S]*?)\};/],
-  ]) {
-    const m = ts.match(re);
-    if (!m) throw new Error(`theme.ts 找不到 ${name}Tokens`);
-    const vals = {};
-    for (const line of m[1].split('\n')) {
-      const kv = line.match(/([\w]+):\s*'([^']+)'/);
-      if (kv) vals[kv[1]] = kv[2].trim();
-    }
-    out[name] = vals;
+  const m = ts.match(/lightTokens[\s\S]*?\{([\s\S]*?)\};/);
+  if (!m) throw new Error(`theme.ts 找不到 lightTokens`);
+  const vals = {};
+  for (const line of m[1].split('\n')) {
+    const kv = line.match(/([\w]+):\s*'([^']+)'/);
+    if (kv) vals[kv[1]] = kv[2].trim();
   }
+  out.light = vals;
   return out;
 }
 
@@ -56,8 +49,8 @@ const MAP = [
 
 const ts = extractTsTokens();
 let fails = 0;
-for (const mode of ['light', 'dark']) {
-  const vars = extractVars('src/styles/tokens.css', mode);
+for (const mode of ['light']) {
+  const vars = extractVars('src/styles/tokens.css');
   for (const [cssVar, tsField] of MAP) {
     const cssVal = vars[cssVar];
     const tsVal = ts[mode][tsField];

@@ -1,11 +1,10 @@
-import { ConfigProvider, theme as antdTheme } from 'antd';
+import { ConfigProvider } from 'antd';
 import zhCN from 'antd/locale/zh_CN';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
 import AppRoutes from '@/router';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
-import { useTheme } from '@/hooks/useTheme';
-import { darkTokens, lightTokens } from '@/theme';
+import { lightTokens } from '@/theme';
 
 // 全局 QueryClient：REST 服务端状态缓存（FE-02+ 复用）
 const queryClient = new QueryClient({
@@ -15,17 +14,12 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
-  // 三态主题（light/dark/system）：useTheme 解析 resolved 并同步 <html data-theme>，
-  // AntD 层按 resolved 切 algorithm + token（2026-08-20 恢复真深色支持）。
-  const { resolved } = useTheme();
-  const isDark = resolved === 'dark';
-
+  // 仅浅色（2026-08-20 取消深色/跟随系统）：AntD 层固定 defaultAlgorithm + lightTokens。
   return (
     <ConfigProvider
       locale={zhCN}
       theme={{
-        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
-        token: isDark ? darkTokens : lightTokens,
+        token: lightTokens,
       }}
     >
       <QueryClientProvider client={queryClient}>
