@@ -23,9 +23,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
       - name: Install ruff
-        run: pip install "ruff>=0.4,<1.0"
+        # 锁定已验证版本：浮动范围会被新版 ruff 的新规则打破（2026-08-22 曾全仓翻红）
+        run: pip install "ruff==0.16.4"
       - name: Ruff check
-        run: ruff check app tests alembic
+        run: ruff check app tests alembic scripts
 
   test:
     name: Unit tests (pytest)

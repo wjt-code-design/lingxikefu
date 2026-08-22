@@ -55,3 +55,5 @@ ignore = ["E501", "UP035"]
 
 [tool.ruff.lint.per-file-ignores]
 "alembic/versions/*" = ["E402"]
+# scripts/ 直跑脚本：先 sys.path.insert 再 import app.*（E402 是引导模式的固有形态）
+"scripts/*" = ["E402"]
