@@ -338,8 +338,12 @@ async def chat_stream(
                 if event == "intent":
                     # R-2：真实意图（qa/handoff/chitchat）——落库用 + 转发客户端
                     intent = data.get("intent", "qa")
+                    # H2（外部审查 2026-08-22）：拒答是 intent 事件里的布尔标志（{"intent":"qa","refuse":true}），
+                    # 落库时折叠为专属值 refuse——否则 admin 待补录 Top10（intent=='refuse'）数据源恒空
+                    if data.get("refuse") and intent == "qa":
+                        intent = "refuse"
                     # Bug 修复：回写 user 消息真实 intent（此前恒 qa 导致
-                    # admin hot_gaps（聚合 handoff/refuse 用户消息）数据源失效）
+                    # admin hot_gaps（聚合 refuse 用户消息）数据源失效）
                     if intent != user_msg.intent:
                         user_msg.intent = intent
                         await run_in_threadpool(db.commit)

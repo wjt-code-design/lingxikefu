@@ -156,16 +156,19 @@ def test_stats_avg_first_token_ms_empty(client):
 
 
 def test_stats_trend_aggregates_days(client):
-    """P1：stats/trend 按日聚合会话/消息/工单 + 无数据日期补零 + 权限 403。"""
-    from datetime import datetime, timedelta
+    """P1：stats/trend 按日聚合会话/消息/工单 + 无数据日期补零 + 权限 403。
+
+    2026-08-23 修：键与造数统一按 UTC（端点轴用 datetime.now(UTC) 生成）——旧写法用
+    本地时间，本地跨零点而 UTC 未跨时 today_key 不在轴上直接 KeyError（跨天假红）。"""
+    from datetime import UTC, datetime, timedelta
 
     from app.models.ticket import Ticket
 
-    # 用 fixture 已有的 SID 会话 + 补历史数据（2 天前）
+    # 用 fixture 已有的 SID 会话 + 补历史数据（2 天前，naive UTC 对齐列语义）
     gen = app.dependency_overrides[get_db]()
     db = next(gen)
     try:
-        old = datetime.now() - timedelta(days=2)
+        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=2)
         s_old = Session(id=uuid.uuid4(), user_id=USER, tenant_id="default", created_at=old)
         db.add(s_old)
         db.add(Message(id=uuid.uuid4(), session_id=s_old.id, tenant_id="default",
@@ -180,12 +183,12 @@ def test_stats_trend_aggregates_days(client):
     days = r.json()["days"]
     assert len(days) == 7
     by_date = {d["date"]: d for d in days}
-    # 2 天前：1 会话 + 1 消息 + 1 工单；今天：至少 1 会话（fixture SID）
-    old_key = (datetime.now() - timedelta(days=2)).strftime("%Y-%m-%d")
+    # 键直接取自端点返回的 UTC 轴（今天=最后一天，2 天前=倒数第三天），免本地/UTC 口径漂移
+    today_key = days[-1]["date"]
+    old_key = days[-3]["date"]
     assert by_date[old_key]["sessions"] == 1
     assert by_date[old_key]["messages"] == 1
     assert by_date[old_key]["tickets"] == 1
-    today_key = datetime.now().strftime("%Y-%m-%d")
     assert by_date[today_key]["sessions"] >= 1
     # 无数据日期补零（连续轴）
     assert all(d["sessions"] >= 0 for d in days)

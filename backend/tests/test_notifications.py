@@ -8,7 +8,6 @@
 from __future__ import annotations
 
 import asyncio
-import queue
 import uuid
 
 import pytest
@@ -165,20 +164,45 @@ def test_stream_headers_200():
 
 
 def test_sse_stream_events(monkeypatch):
-    """SSE 事件序列：connected 握手 → 心跳 ping（队列空兜底），wait_for 超时保护防挂起。"""
+    """SSE 事件序列：connected 握手 → 心跳 ping（无通知时兜底），wait_for 超时保护防挂起。"""
     import app.api.notifications as mod
 
-    def _empty_get(timeout=None):
-        raise queue.Empty
-
-    monkeypatch.setattr(mod._notify_queue, "get", _empty_get)
+    # M1 重写后无共享队列可注入：把心跳间隔缩到极短，让 ping 立即产生
+    monkeypatch.setattr(mod, "_HEARTBEAT_INTERVAL", 0.05)
     frames: list[str] = []
 
     async def _probe():
         gen = mod._sse_gen("agent")
-        for _ in range(3):
+        for _ in range(2):
             frames.append(await gen.__anext__())
 
     asyncio.run(asyncio.wait_for(_probe(), timeout=5))
     assert any("connected" in f for f in frames)
     assert any("ping" in f for f in frames)
+
+
+def test_same_role_subscribers_both_receive_notification():
+    """M1（外部审查 2026-08-22）：同角色两个 SSE 连接（双开标签页）必须都收到同一条通知。
+
+    旧实现是单队列抢占式消费：一条通知被其中一个连接 get 走、角色不匹配即丢弃——
+    同角色的另一个连接永远收不到，实时推送静默失效。改为每连接独立队列 + 按角色
+    广播后本测试才可能通过。"""
+
+    async def scenario():
+        import app.api.notifications as nmod
+        import app.services.notification_service as svc
+
+        g1 = nmod._sse_gen("agent")
+        g2 = nmod._sse_gen("agent")
+        await asyncio.wait_for(g1.__anext__(), 5)  # connected
+        await asyncio.wait_for(g2.__anext__(), 5)  # connected
+
+        n = Notification(recipient_role="agent", event_type="ticket.transfer", title="t")
+        svc._enqueue(n)  # 与 create_notification 同一发布入口
+
+        got1 = await asyncio.wait_for(g1.__anext__(), 5)  # 旧实现：g1 抢走或 g2 抢走，另一个超时
+        got2 = await asyncio.wait_for(g2.__anext__(), 5)
+        assert '"notification"' in got1
+        assert '"notification"' in got2
+
+    asyncio.run(asyncio.wait_for(scenario(), timeout=10))

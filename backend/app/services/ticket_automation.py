@@ -132,7 +132,6 @@ def auto_resolve_after_timeout(
     仅处理配置开启（AUTO_TICKET_RESOLVE_TIMEOUT_MIN > 0）的环境。
     """
     # 显式 None 才回退配置：0 是"关闭"信号（`or` 会把 0 当假值吞掉，导致关不掉）
-    # 显式 None 才回退配置：0 是"关闭"信号（`or` 会把 0 当假值吞掉，导致关不掉）
     minutes = (
         timeout_minutes
         if timeout_minutes is not None

@@ -85,15 +85,6 @@ class _FakeRedis:
         return True
 
 
-def test_quota_service_increment_and_left():
-    qs = QuotaService(redis_client=_FakeRedis())
-    uid = "u1"
-    assert qs.used_today(uid) == 0
-    qs.increment(uid)
-    qs.increment(uid, 2)
-    assert qs.used_today(uid) == 3
-    assert qs.left_today(uid) == qs.daily_limit() - 3
-
 def test_quota_try_consume_idempotent():
     """R2：同一 client_msg_id 幂等 —— 重试不重复扣费。"""
     qs = QuotaService(redis_client=_FakeRedis())

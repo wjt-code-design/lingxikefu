@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import queue
 import uuid
 from datetime import UTC, datetime
 
@@ -23,7 +22,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.notification import Notification
 from app.schemas.notification import NotificationItem, NotificationListResp, UnreadCountResp
-from app.services.notification_service import _notify_queue
+from app.services.notification_service import subscribe, unsubscribe
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -143,16 +142,23 @@ def _sse(data: dict) -> str:
 
 
 async def _sse_gen(role: str):
-    """SSE 事件生成器（独立函数便于单测：connected 握手 → 心跳 ping / 实时通知）。"""
-    yield _sse({"event": "connected", "data": {"role": role}})
-    while True:
-        try:
-            item = await asyncio.to_thread(_notify_queue.get, timeout=_HEARTBEAT_INTERVAL)
-        except queue.Empty:
-            yield _sse({"event": "ping", "data": {"ts": datetime.now(UTC).isoformat()}})
-            continue
-        if item.get("recipient_role") == role:
+    """SSE 事件生成器（M1 重写 2026-08-22）：connected 握手 → 心跳 ping / 实时通知。
+
+    每连接独立 asyncio.Queue（由 notification_service 按角色广播填充，多连接互不
+    抢占），断开/中止时注销防泄漏；不再经 to_thread 阻塞取队列——消灭每连接占死
+    一个线程池线程的问题（该线程池同时承担聊天链路 DB/embedding）。"""
+    q, _loop = subscribe(role)
+    try:
+        yield _sse({"event": "connected", "data": {"role": role}})
+        while True:
+            try:
+                item = await asyncio.wait_for(q.get(), timeout=_HEARTBEAT_INTERVAL)
+            except TimeoutError:  # py3.11+ asyncio.TimeoutError 即内建 TimeoutError
+                yield _sse({"event": "ping", "data": {"ts": datetime.now(UTC).isoformat()}})
+                continue
             yield _sse({"event": "notification", "data": item})
+    finally:
+        unsubscribe(role, (q, _loop))
 
 
 @router.get("/stream")

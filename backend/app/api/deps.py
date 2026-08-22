@@ -22,6 +22,15 @@ def get_current_user(
             detail="invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # H1（外部审查 2026-08-22）：令牌类型校验——refresh 与 access 同密钥签发且同样带
+    # sub/jti，不校验 type 则 7 天有效期的 refresh token 可直接通过全部用户端守卫，
+    # 绕过轮换机制的吊销窗口（/auth/refresh 侧已校验 type=="refresh"，此处补对称防线）
+    if payload.get("type") != "access":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="invalid token type",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     # M1：登出后吊销的 token 立即失效
     if is_revoked(payload.get("jti")):
         raise HTTPException(

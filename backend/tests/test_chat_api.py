@@ -280,6 +280,37 @@ def test_chat_stream_handoff_creates_ticket(client, monkeypatch):
         assert user_msg is not None and user_msg.intent == "handoff"
 
 
+def test_chat_stream_refuse_intent_persisted(client, monkeypatch):
+    """H2（外部审查 2026-08-22）：拒答必须以 intent='refuse' 落库。
+
+    classify_intent 只返回 qa/handoff/chitchat，refuse 是 intent 事件里的布尔标志——
+    若落库只写 data['intent']，生产链路永远不产生 refuse 行，admin 待补录 Top10 恒空。"""
+
+    async def _fake(*_a, **_k):
+        yield ("intent", {"intent": "qa", "refuse": True})
+        yield ("stage", {"stage": "generating"})
+        yield ("token", {"delta": "未收录该问题"})
+        yield ("done", {"message_id": ""})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
+    tc, Local, _ = client
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "你们多久上市", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+
+    with Local() as db:
+        user_msg = db.scalars(
+            select(Message).where(
+                Message.role == MessageRole.user,
+                Message.session_id == uuid.UUID("11111111-1111-1111-1111-111111111111"),
+            )
+        ).first()
+        assert user_msg is not None and user_msg.intent == "refuse"
+
+
 def test_agent_can_reply_on_user_session(client, monkeypatch):
     """T5：agent 代答——可对用户会话 chat/stream（记录 agent_id）。
 

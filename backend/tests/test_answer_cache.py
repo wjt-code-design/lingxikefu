@@ -101,6 +101,30 @@ def test_put_and_get_roundtrip(monkeypatch):
     assert payload and payload["answer"] == "12 个月"
     assert payload["doc_ids"] == ["d1"]
 
+
+def test_put_same_query_reuses_deterministic_point_id(monkeypatch):
+    """M5（外部审查 2026-08-22）：同一 问题+kb 重复回填必须命中同一 point id。
+
+    确定性 id（uuid5）→ Qdrant upsert 幂等覆盖；旧实现 uuid4 随机 id 语义层只增
+    不减，高频问句反复回填导致集合无界膨胀。"""
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    qd = _FakeQdrant()
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: qd)
+    monkeypatch.setattr(answer_cache, "get_redis", _FakeRedis)
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type("E", (), {"dim": 768, "embed": lambda *a: [[0.1] * 768]})())
+
+    put("保修多久", "12 个月", [], [], "v1", kb_id="kb-a")
+    put("保修多久", "12 个月（更新）", [], [], "v1", kb_id="kb-a")
+    put("退货怎么退", "7 天无理由", [], [], "v1", kb_id="kb-a")
+    ids = [kw["points"][0]["id"] for kw in qd.upserted]
+    assert len(ids) == 3
+    assert ids[0] == ids[1], "同问句同库重复回填必须复用同一点（幂等覆盖）"
+    assert ids[2] != ids[0], "不同问句必须是不同的点"
+
 def test_kb_isolation_prevents_cross_kb_hit(monkeypatch):
     """跨 KB 隔离（审查修复）：kb_id 不同的缓存不得互相命中（精确层 key 维度隔离）。"""
     monkeypatch.setattr(answer_cache, "settings", type("S", (), {

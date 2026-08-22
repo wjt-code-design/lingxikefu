@@ -158,13 +158,36 @@ def merge_profile(
             db.add(row)
             db.flush()
 
-        merged = _merge_one(row.profile, signals)
-        row.profile = merged  # 整体赋值（JSON 原地突变不触发变更检测）
-        row.version += 1
-        db.commit()
-        if idem_key:
-            _mark_processed(idem_key)
-        return True
+        # M3（外部审查 2026-08-22）：真乐观锁——UPDATE 带 WHERE version 条件 + 失败重读重试。
+        # 此前是纯读-改-写（注释声称防并发丢更新，实无 WHERE 条件）：同一用户连续快速提问时
+        # 后提交者会覆盖先提交者的画像增量（主题次数/实体漏记）。
+        for _attempt in range(3):
+            result = db.execute(
+                sa.update(UserProfile)
+                .where(UserProfile.id == row.id, UserProfile.version == row.version)
+                .values(
+                    profile=_merge_one(row.profile, signals),
+                    version=row.version + 1,
+                )
+                .execution_options(synchronize_session=False)
+            )
+            db.commit()
+            if result.rowcount:
+                if idem_key:
+                    _mark_processed(idem_key)
+                return True
+            # CAS 未命中 = 并发覆盖：回滚、重读最新行再试（保留对方增量后合并本次信号）
+            db.rollback()
+            row = db.scalar(
+                sa.select(UserProfile).where(
+                    UserProfile.tenant_id == settings.TENANT_DEFAULT,
+                    UserProfile.user_id == user_id,
+                )
+            )
+            if row is None:
+                return False
+        logger.warning("画像合并连续 CAS 冲突，放弃本信号（fail-open 不阻断回答）: user=%s", user_id)
+        return False
     except Exception:  # noqa: BLE001 - fail-open
         logger.exception("用户画像采集失败（跳过，不阻断回答）")
         db.rollback()

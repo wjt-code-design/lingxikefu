@@ -147,14 +147,25 @@ def upload_document(
     if not repo.get(kb_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "knowledge base not found")
 
-    content = file.file.read()
+    # M6（外部审查 2026-08-22）：分块读取到上限即止——此前先全量 read() 再校验，
+    # 传超大文件会先吃满内存才返回 413
+    max_bytes = settings.MAX_UPLOAD_MB * 1024 * 1024
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = file.file.read(1024 * 1024)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                f"file exceeds {settings.MAX_UPLOAD_MB}MB limit",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
     if len(content) == 0:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "empty file")
-    if len(content) > settings.MAX_UPLOAD_MB * 1024 * 1024:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            f"file exceeds {settings.MAX_UPLOAD_MB}MB limit",
-        )
 
     filename = file.filename or "unnamed"
     if "." not in filename:

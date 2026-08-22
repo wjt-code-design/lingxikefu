@@ -68,3 +68,20 @@ def test_decode_rejects_expired():
     )
     with pytest.raises(JWTError):  # ExpiredSignatureError is subclass of InvalidTokenError
         decode_token(expired)
+
+
+def test_get_current_user_rejects_refresh_token():
+    """H1（外部审查 2026-08-22）：refresh token 不得当 access token 用。
+
+    refresh payload 同样含 sub/jti 且同密钥签发——若 get_current_user 不校验 type，
+    7 天有效期的 refresh token 可直接通过全部用户端守卫、绕过轮换吊销窗口。"""
+
+    class _Creds:  # HTTPAuthorizationCredentials 最小替身（只读 credentials）
+        credentials = create_refresh_token("u-123")
+
+    from app.api.deps import get_current_user
+    from fastapi import HTTPException
+
+    with pytest.raises(HTTPException) as ei:
+        get_current_user(creds=_Creds())  # type: ignore[arg-type]
+    assert ei.value.status_code == 401

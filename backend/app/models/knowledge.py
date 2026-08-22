@@ -92,7 +92,10 @@ class Chunk(Base):
 
 
 class ChunkContext(Base):
-    """Phase2 预留：相邻块扩展（chunk_id 主键，无独立 id，第一个非主键列即 tenant_id）。"""
+    """Phase2 预留：相邻块扩展（chunk_id 主键，无独立 id，第一个非主键列即 tenant_id）。
+
+    ⚠️ 当前全仓无任何读写路径（2026-08-22 外部审查核实）——表结构与模型均为
+    BU-01 规划书的有意预留，勿据此推断在用；Phase3 语义分块启用或裁撤时一并处理。"""
 
     __tablename__ = "chunk_context"
 

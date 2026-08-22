@@ -107,17 +107,6 @@ class QuotaService:
         except Exception:  # noqa: BLE001 - fail-open：回滚失败不阻塞
             logger.warning("quota refund: redis 不可用，跳过回滚", exc_info=True)
 
-    def increment(self, user_id: str, n: int = 1) -> int:
-        """原子累加（供展示/兼容），Redis 不可达时返回 0。"""
-        try:
-            r = self.redis
-            used = r.incr(self._key(user_id), n)
-            if used == n:
-                r.expire(self._key(user_id), 60 * 60 * 48)
-            return int(used)
-        except Exception:
-            return 0
-
 
 _quota_service: QuotaService | None = None
 

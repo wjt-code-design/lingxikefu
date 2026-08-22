@@ -67,8 +67,14 @@ export function useChatStream() {
     setState(INITIAL);
   }, []);
 
-  // P0-4：停止生成（中止进行中的流式响应，保留已接收的 tokens）
+  // P0-4 + H3（外部审查 2026-08-22）：停止生成——abort 的同时必须显式落到终止态。
+  // 只 abort 不改状态时，AbortError 非超时分支静默（该静默是为保护 reset 流，不能动），
+  // stage 会永远停在 retrieving/generating → streaming 恒真 → 输入区永久禁用。
+  // 落到 done 保留已收 tokens，ChatContainer 的 finalize 照常把部分回答并入历史。
   const stop = useCallback(() => {
+    setState((s) =>
+      s.stage === 'retrieving' || s.stage === 'generating' ? { ...s, stage: 'done' } : s
+    );
     abortRef.current?.abort();
   }, []);
 

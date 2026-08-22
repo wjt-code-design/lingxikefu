@@ -118,7 +118,10 @@ def put(query: str, answer: str, sources: list[dict], doc_ids: list[str], kb_ver
             collection_name=COLLECTION,
             points=[
                 {
-                    "id": str(uuid.uuid4()),
+                    # M5（外部审查 2026-08-22）：确定性 point id——同一问题+库重复回填时
+                    # upsert 覆盖同一点（天然去重）。此前用 uuid4 随机 id，语义层只增不减、
+                    # 高频问句反复回填导致集合无界膨胀。（kb_id 已隔离，单租户无需再加租户段）
+                    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{kb_id}:{query}")),
                     "vector": vector,
                     "payload": payload,
                 }

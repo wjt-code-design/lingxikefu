@@ -181,3 +181,38 @@ def test_reset_profile(db, monkeypatch):
     assert reset_profile(db, UID) is True
     assert get_profile(db, UID) is None
     assert reset_profile(db, UID) is False  # 已清空再清 → False
+
+
+def test_profile_cas_update_version_mismatch_is_noop(db):
+    """M3（外部审查 2026-08-22）：画像乐观锁的 SQL 语义——UPDATE 带 WHERE version。
+
+    错版本 → rowcount=0（不覆盖并发方写入）；对版本 → 生效。merge_profile 的重试
+    循环依赖这一语义；真并发竞争无法在单连接 sqlite 里复现，此处锁定 CAS 原语本身。"""
+    import sqlalchemy as sa
+    from app.models.user_profile import UserProfile
+
+    row = UserProfile(tenant_id="default", user_id=UID, profile={"schema_version": 1})
+    db.add(row)
+    db.commit()
+
+    r_bad = db.execute(
+        sa.update(UserProfile)
+        .where(UserProfile.id == row.id, UserProfile.version == 99)
+        .values(profile={"schema_version": 1, "topics": {"被覆盖": 1}}, version=100)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    assert r_bad.rowcount == 0, "版本不匹配的更新必须是 no-op"
+    db.refresh(row)
+    assert row.version == 0 and row.profile == {"schema_version": 1}
+
+    r_ok = db.execute(
+        sa.update(UserProfile)
+        .where(UserProfile.id == row.id, UserProfile.version == 0)
+        .values(profile={"schema_version": 1, "topics": {"退款": 1}}, version=1)
+        .execution_options(synchronize_session=False)
+    )
+    db.commit()
+    assert r_ok.rowcount == 1
+    db.refresh(row)
+    assert row.version == 1 and row.profile["topics"] == {"退款": 1}
