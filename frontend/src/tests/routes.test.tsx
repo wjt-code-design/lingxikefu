@@ -44,9 +44,10 @@ describe('路由可达与 RequireAuth 守卫', () => {
   it('admin 访问 /admin/users 与 /admin/stats → 渲染对应空壳', async () => {
     loginAs('admin');
     renderApp('/admin/users');
-    expect(await screen.findByRole('heading', { name: '用户管理' })).toBeInTheDocument();
+    // timeout 3s：懒加载 chunk 在高负载机器（docker + dev server 并行）下会超 findBy 默认 1s
+    expect(await screen.findByRole('heading', { name: '用户管理' }, { timeout: 3_000 })).toBeInTheDocument();
     renderApp('/admin/stats');
-    expect(await screen.findByRole('heading', { name: '运营统计' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '运营统计' }, { timeout: 3_000 })).toBeInTheDocument();
   });
 
   it('已登录访问 /chat → 渲染对话页', async () => {

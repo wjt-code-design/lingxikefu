@@ -188,8 +188,15 @@ export function MessageBubble({
         {isStaff && !isUser && !isAgent && msg.sources && msg.sources.length > 0 && <SourceAccordion sources={msg.sources} />}
         {!isUser && !isAgent && msg.ticketId && (
           <div className="chat-msg__ticket">
-            已为您创建工单 <b>#{msg.ticketId.slice(0, 8)}</b>，客服将尽快跟进
-            <TicketStatusBadge ticketId={msg.ticketId} />
+            <div className="chat-msg__ticket-body">
+              <div className="chat-msg__ticket-line1">已为您创建工单，客服将尽快跟进</div>
+              <div className="chat-msg__ticket-line2">
+                <span className="chat-msg__ticket-no">
+                  工单 <b>#{msg.ticketId.slice(0, 8)}</b>
+                </span>
+                <TicketStatusBadge ticketId={msg.ticketId} />
+              </div>
+            </div>
           </div>
         )}
         {isAi && msg.messageId && <ThumbsBar value={msg.feedback} onRate={onRate} />}

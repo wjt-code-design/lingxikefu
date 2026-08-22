@@ -80,7 +80,9 @@ const QUESTION_GROUPS = [
 /** 工单系统通知气泡（转人工 / 建单统一）。抽自 manualTicket / ticketCreated 两段重复 JSX。
  * - kind: 'escalate' 转人工 | 'create' 建单
  * - state: { id, loading?, error }（建单无 loading 态）
- * - isStaff: staff/observe 视图下措辞用"为顾客"，普通用户用"为您"。 */
+ * - isStaff: staff/observe 视图下措辞用"为顾客"，普通用户用"为您"。
+ * 排版（2026-08-22）：两行结构——第一行事件描述，第二行"工单号 + 状态角标"元信息，
+ * 修复长句 + 块级角标混排导致的怪异换行。 */
 function TicketNotice({
   kind,
   state,
@@ -99,16 +101,18 @@ function TicketNotice({
             `正在为${who}转人工…`
           ) : state.error ? (
             state.error
-          ) : kind === 'escalate' ? (
-            <>
-              已为{who}转人工，工单号 <b>#{state.id.slice(0, 8)}</b>，客服将尽快跟进
-              {state.id && <TicketStatusBadge ticketId={state.id} />}
-            </>
           ) : (
-            <>
-              已为{who}创建工单 <b>#{state.id.slice(0, 8)}</b>，客服将尽快跟进
-              {state.id && <TicketStatusBadge ticketId={state.id} />}
-            </>
+            <div className="chat-msg__ticket-body">
+              <div className="chat-msg__ticket-line1">
+                {kind === 'escalate' ? `已为${who}转人工` : `已为${who}创建工单`}，客服将尽快跟进
+              </div>
+              <div className="chat-msg__ticket-line2">
+                <span className="chat-msg__ticket-no">
+                  工单 <b>#{state.id.slice(0, 8)}</b>
+                </span>
+                <TicketStatusBadge ticketId={state.id} />
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -264,6 +268,44 @@ export function ChatContainer({
     return () => clearInterval(timer);
   }, [sessionId, observeMode, intervention]);
 
+  // 2026-08-22：客服观察视角实时刷新——用户/AI 新消息 + 用户画像 + 交接摘要都要随会话演进
+  // 更新。此前画像/摘要在打开会话时只拉一次：用户随后点快捷问题产生的画像和新消息，
+  // 客服界面永远看不到，只有从待处理工单/历史会话重新进入才刷新（本次修复的由来）。
+  // 客服自己发消息走乐观上屏（本地临时 id，落库后对齐服务端 id）——发送后短暂停一轮
+  // 轮询，避免"服务端已落库 + 本地临时 id 未对齐"的窗口期拉出双份。
+  const lastAgentSendRef = useRef(0);
+  useEffect(() => {
+    if (!sessionId || !observeMode) return;
+    const timer = setInterval(() => {
+      if (Date.now() - lastAgentSendRef.current < 4_000) return;
+      getSessionDetail(sessionId)
+        .then((d) => {
+          setUserProfile(d.profile);
+          setHandoffSummary(d.handoff_summary);
+          setMessages((prev) => {
+            const known = new Set(prev.map((m) => m.id));
+            const fresh = d.messages
+              .filter((m) => !known.has(m.id))
+              .map((m) => ({
+                id: m.id,
+                role: m.role as 'user' | 'assistant' | 'agent',
+                content: m.content,
+                status: 'done' as const,
+                createdAt: new Date(m.created_at || Date.now()).getTime(),
+                sources: m.sources ?? [],
+                ...(m.role === 'assistant' ? { messageId: m.id } : {}),
+                ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
+              }));
+            return fresh.length ? [...prev, ...fresh] : prev;
+          });
+        })
+        .catch(() => {
+          /* 轮询失败静默：网络抖动下一轮重试 */
+        });
+    }, 4_000);
+    return () => clearInterval(timer);
+  }, [sessionId, observeMode]);
+
   // P0-1：流式结束（done/error）→ 按 user 消息 id 更新状态 + 追加 assistant（不重复追加 user）
   // 防重：streamingUserRef 在首次 finalize 时被置空；uid 为空 → 已 finalize，直接 return（防止
   // done 后 messages 变化（如点赞）触发 effect 重复追加 assistant——原 finalizedRef 语义等价物）
@@ -317,6 +359,7 @@ export function ChatContainer({
       // 乐观上屏保手感；随即 POST /sessions/{id}/messages 落库（role=agent），
       // 成功后用后端 id 对齐本地消息 → 顾客端轮询按 id 去重，不会出现双份。
       if (isStaff && intervened) {
+        lastAgentSendRef.current = Date.now(); // 观察视角轮询让位乐观上屏窗口（见该 effect 注释）
         const aid = `ag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const agentName = useAuthStore.getState().user?.email ?? '人工客服';
         setMessages((prev) => [
@@ -583,16 +626,10 @@ export function ChatContainer({
             {createError}
           </div>
         )}
-        {/* W5：客服视角（observe）下保留输入框（居中于中间列），并把"转人工 / 建单"作为工具栏置于输入框上方，
-            不再用按钮区替换输入框，确保管理员始终有输入入口。 */}
-        {observeMode && (
-          <div className="chat-intervene">
-            <div className="chat-observe-banner" role="status">
-              {intervened
-                ? '已转人工 · 您发送的消息将作为「人工客服」显示在右侧'
-                : '客服视角 · 左侧为顾客与 AI 的对话；点「转人工」后您发送的消息将作为「人工客服」显示在右侧'}
-            </div>
-            <div className="chat-intervene__actions">
+        {/* W5：客服视角（observe）下保留输入框，并把"转人工 / 建单"按钮移到输入框左侧同一行 */}
+        {observeMode ? (
+          <div className="chat-observe-row">
+            <div className="chat-observe-actions">
               <Button
                 type="primary"
                 loading={manualTicket?.loading}
@@ -610,17 +647,29 @@ export function ChatContainer({
                 {ticketCreated?.id ? '已建单' : '建单'}
               </Button>
             </div>
+            <div className="chat-observe-composer">
+              <Composer
+                disabled={streaming || creating}
+                onSend={onSend}
+                retry={retryText ? { text: retryText.text, onRetry } : null}
+                onEscalate={undefined}
+                onRegisterFill={onRegisterFill}
+                onStop={stop}
+                centered={false}
+              />
+            </div>
           </div>
+        ) : (
+          <Composer
+            disabled={streaming || creating}
+            onSend={onSend}
+            retry={retryText ? { text: retryText.text, onRetry } : null}
+            onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
+            onRegisterFill={onRegisterFill}
+            onStop={stop}
+            centered={false}
+          />
         )}
-        <Composer
-          disabled={streaming || creating}
-          onSend={onSend}
-          retry={retryText ? { text: retryText.text, onRetry } : null}
-          onEscalate={observeMode ? undefined : (sessionId && !manualTicket?.loading ? onEscalate : undefined)}
-          onRegisterFill={onRegisterFill}
-          onStop={stop}
-          centered={chatLayout === 'observe'}
-        />
       </div>
     </div>
   );

@@ -26,6 +26,14 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // 测试封闭性：jsdom 默认 baseURL 是 localhost:3000，会撞上本机恰好监听 3000 的
+    // 任意服务（2026-08-22 实测：撞上后 404/401 经 client 拦截器触发登出，路由测试连环红）。
+    // 指向不可路由端口，泄漏的 API 请求统一以网络错误快速失败，不触发任何业务分支。
+    environmentOptions: {
+      jsdom: {
+        url: 'http://localhost:65535/',
+      },
+    },
     setupFiles: ['./src/tests/setup.ts'],
     css: true,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
