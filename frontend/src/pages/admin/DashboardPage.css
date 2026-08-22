@@ -57,16 +57,25 @@
 
 /* KPI 卡本体样式已收敛至 globals.css 的 .kpi-card 公共块（KpiCard 组件） */
 
-/* ---------- 通用区块卡（白卡 + 发丝线 + 小圆角） ---------- */
+/* ---------- 通用区块卡（白卡 + 发丝线 + 小圆角 + 顶部微色条） ---------- */
 .dash-card.ant-card {
   background: var(--color-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition:
+    border-color var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur-fast) var(--ease-out);
+}
+.dash-card.ant-card:hover {
+  border-color: color-mix(in srgb, var(--color-brand) 30%, var(--border));
+  box-shadow: 0 4px 16px rgba(46, 93, 133, 0.08);
 }
 .dash-card .ant-card-head {
   min-height: 48px;
   border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(83, 159, 216, 0.03), transparent);
 }
 .dash-card .ant-card-head-title {
   font-size: 14px;

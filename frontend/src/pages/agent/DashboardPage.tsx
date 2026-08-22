@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Button, Spin, Typography } from 'antd';
+import { Button, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag } from '@/components/common/AppTable';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { KpiCard } from '@/components/common/KpiCard';
+import { KpiCardSkeleton, TableSkeleton } from '@/components/common/Skeleton';
 import { listTickets } from '@/api/tickets';
 import { listSessions } from '@/api/sessions';
 import type { Session, TicketItem, TicketStatus } from '@/contracts/api';
@@ -139,17 +140,48 @@ export function DashboardPage() {
       </div>
 
       {isLoading ? (
-        <Spin className="dash-page__spin" size="large" />
+        <>
+          <div className="dash-kpis">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <KpiCardSkeleton key={i} />
+            ))}
+          </div>
+          <div className="dash-grid">
+            <section className="dash-card">
+              <header className="dash-card__head">
+                <Typography.Title level={5} className="dash-card__title">
+                  待办工单
+                </Typography.Title>
+                <span className="dash-card__count">—</span>
+              </header>
+              <div className="dash-card__body">
+                <TableSkeleton rows={5} columns={3} />
+              </div>
+            </section>
+            <section className="dash-card">
+              <header className="dash-card__head">
+                <Typography.Title level={5} className="dash-card__title">
+                  最近会话
+                </Typography.Title>
+                <span className="dash-card__count">—</span>
+              </header>
+              <div className="dash-card__body">
+                <TableSkeleton rows={5} columns={3} />
+              </div>
+            </section>
+          </div>
+        </>
       ) : (
         <>
           <div className="dash-kpis">
-            <KpiCard label="待办工单" value={stats.todo} caption="open + processing" />
-            <KpiCard label="处理中" value={stats.processing} />
-            <KpiCard label="已解决" value={stats.resolved} />
+            <KpiCard label="待办工单" value={stats.todo} caption="open + processing" accent="warning" />
+            <KpiCard label="处理中" value={stats.processing} accent="brand" />
+            <KpiCard label="已解决" value={stats.resolved} accent="success" />
             <KpiCard
               label="今日会话"
               value={todaySessions}
               caption={`最近 ${sessions.length} 条会话`}
+              accent="brand"
             />
           </div>
 

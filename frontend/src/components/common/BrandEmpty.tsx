@@ -1,5 +1,20 @@
-/** Phase 2 task 9：品牌化空态（替代 antd 默认 Empty）——海盐蓝机器人插画 + 引导文案。 */
-export function BrandEmpty({ title, hint }: { title: string; hint?: string }) {
+import type { ReactNode } from 'react';
+
+/**
+ * 品牌化空态（替代 antd 默认 Empty）——海盐蓝机器人插画 + 引导文案。
+ * - 柔和光晕图标 + 渐变色底，与对话欢迎态视觉语言一致
+ * - 可选 action 插槽：空态下提供快捷操作（如"新建"、"去导入"）
+ */
+export function BrandEmpty({
+  title,
+  hint,
+  action,
+}: {
+  title: string;
+  hint?: string;
+  /** 空态操作按钮，如 <Button type="primary">新建</Button> */
+  action?: ReactNode;
+}) {
   return (
     <div className="brand-empty">
       <div className="brand-empty__icon" aria-hidden="true">
@@ -16,6 +31,7 @@ export function BrandEmpty({ title, hint }: { title: string; hint?: string }) {
       </div>
       <div className="brand-empty__title">{title}</div>
       {hint && <div className="brand-empty__hint">{hint}</div>}
+      {action && <div className="brand-empty__action">{action}</div>}
     </div>
   );
 }

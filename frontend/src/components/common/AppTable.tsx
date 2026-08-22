@@ -1,18 +1,24 @@
 import { Table, Tag } from 'antd';
 import type { TableProps } from 'antd';
 import type { ReactNode } from 'react';
+import { TableSkeleton } from './Skeleton';
 
 /**
  * AppTable：工作台统一表格（设计规范 §3.4，H3 落地）。
  * - 行 hover 高亮（primary-weak 品牌化，非默认灰）
  * - 表头吸顶 + 横向滚动兜底（窄屏不破版）
  * - 中等行高（工作台密度 6-8 分）· 分页默认无 sizeChanger
+ * - loading 态：骨架屏行（替代 Spin 转圈，减少等待焦虑）
  * - 其余完全透传 AntD Table props（columns/loading/dataSource 等）
  */
 export function AppTable<T extends object>(props: TableProps<T>) {
-  const { rowClassName, pagination, ...rest } = props;
+  const { rowClassName, pagination, loading, columns, ...rest } = props;
+  const colCount = columns?.length ?? 4;
+  const isLoading = !!loading;
+
   return (
     <Table<T>
+      columns={columns}
       size="middle"
       sticky={{ offsetHeader: 0 }}
       scroll={{ x: 'max-content' }}
@@ -22,6 +28,15 @@ export function AppTable<T extends object>(props: TableProps<T>) {
         return ['app-table-row', custom].filter(Boolean).join(' ');
       }}
       pagination={{ showSizeChanger: false, ...pagination }}
+      loading={false /* 用自定义骨架替代 AntD 默认 Spin */}
+      locale={{
+        ...rest.locale,
+        emptyText: isLoading ? (
+          <TableSkeleton rows={6} columns={colCount} />
+        ) : (
+          rest.locale?.emptyText
+        ),
+      }}
       {...rest}
     />
   );

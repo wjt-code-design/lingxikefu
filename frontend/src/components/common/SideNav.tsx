@@ -94,6 +94,7 @@ export function SideNav() {
       defaultOpenKeys={getDefaultOpenKeys()}
       items={items}
       onClick={({ key }) => navigate(key)}
+      style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
     />
   );
 }

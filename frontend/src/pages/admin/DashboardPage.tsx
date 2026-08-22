@@ -14,6 +14,7 @@ import { listTickets } from '@/api/tickets';
 import { StatusTag } from '@/components/common/AppTable';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { KpiCard } from '@/components/common/KpiCard';
+import { KpiCardSkeleton, TableSkeleton } from '@/components/common/Skeleton';
 import type { TicketItem, TicketStatus } from '@/contracts/api';
 import './DashboardPage.css';
 
@@ -209,7 +210,28 @@ export function DashboardPage() {
       </div>
 
       {statsLoading && !stats ? (
-        <Spin className="dash-page__spin" />
+        /* KPI 卡骨架：4 张占位，让用户感知内容即将出现 */
+        <>
+          <Row gutter={[16, 16]}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Col xs={12} lg={6} key={i}>
+                <KpiCardSkeleton />
+              </Col>
+            ))}
+          </Row>
+          <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+            <Col xs={24} lg={15}>
+              <Card className="dash-card" title="待办工单">
+                <TableSkeleton rows={5} columns={3} />
+              </Card>
+            </Col>
+            <Col xs={24} lg={9}>
+              <Card className="dash-card dash-card--alerts" title="告警">
+                <TableSkeleton rows={4} columns={1} />
+              </Card>
+            </Col>
+          </Row>
+        </>
       ) : (
         <>
           {/* ① 今日概览 KPI 卡片行（会话 / 消息 / 待办工单 / 反馈） */}
@@ -218,6 +240,7 @@ export function DashboardPage() {
               <KpiCard
                 label="总会话数"
                 value={sessions}
+                accent="brand"
                 foot={
                   <>
                     <span className="kpi-card__caption">近 14 天 {sumSessions14} 会话</span>
@@ -230,6 +253,7 @@ export function DashboardPage() {
               <KpiCard
                 label="总消息数"
                 value={messages}
+                accent="success"
                 foot={
                   <>
                     <span className="kpi-card__caption">近 14 天 {sumMessages14} 消息</span>
@@ -243,6 +267,7 @@ export function DashboardPage() {
                 label="待办工单"
                 value={pendingTotal}
                 suffix="单"
+                accent="warning"
                 foot={<span className="kpi-card__caption">近 14 天 {sumTickets14} 工单</span>}
               />
             </Col>
@@ -251,6 +276,7 @@ export function DashboardPage() {
                 label="反馈总数"
                 value={up + down}
                 suffix="条"
+                accent="brand"
                 foot={<span className="kpi-card__caption">赞 {up} · 踩 {down}</span>}
               />
             </Col>
