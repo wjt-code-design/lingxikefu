@@ -8,13 +8,12 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from app.models.base import Base
+from app.models.knowledge import Document, DocumentStatus, KnowledgeBase
+from app.services.knowledge_import_service import _STALE_ERROR, recover_stale_imports
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app.models.knowledge import Document, DocumentStatus, KnowledgeBase
-from app.models.base import Base
-from app.services.knowledge_import_service import recover_stale_imports, _STALE_ERROR
 
 KB_ID = uuid.uuid4()
 

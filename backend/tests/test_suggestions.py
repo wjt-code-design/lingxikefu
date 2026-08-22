@@ -13,7 +13,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-import sqlalchemy as sa
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app

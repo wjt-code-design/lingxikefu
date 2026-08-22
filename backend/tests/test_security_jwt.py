@@ -8,13 +8,12 @@
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import jwt as pyjwt
 import pytest
-
-from app.core.security import ALGORITHM, JWTError, create_access_token, create_refresh_token, decode_token
 from app.core.config import settings
+from app.core.security import ALGORITHM, JWTError, create_access_token, create_refresh_token, decode_token
 
 
 def test_access_token_roundtrip_fields():

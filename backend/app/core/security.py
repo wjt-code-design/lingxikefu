@@ -8,9 +8,8 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from passlib.context import CryptContext
-
 import jwt as pyjwt
+from passlib.context import CryptContext
 
 from app.core.config import settings
 

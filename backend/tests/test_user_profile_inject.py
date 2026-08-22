@@ -11,7 +11,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.rag_service import stream_answer
 from app.services.retrieval_service import RetrievedChunk

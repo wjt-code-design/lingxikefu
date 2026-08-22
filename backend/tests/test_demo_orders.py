@@ -9,11 +9,11 @@ seed：docker compose exec api python scripts/seed_demo_data.py <kb_id>（幂等
 """
 from __future__ import annotations
 
-import sqlalchemy as sa
 import pytest
+import sqlalchemy as sa
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.knowledge import KnowledgeBase, Document
+from app.models.knowledge import Document, KnowledgeBase
 from app.services.retrieval_service import search_kb
 
 #: 订单 demo 数据的检索锚点（预期召回的业务键）

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import logging
 import queue
-import uuid
 
 from sqlalchemy.orm import Session
 

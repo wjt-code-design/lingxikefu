@@ -19,7 +19,7 @@ import logging
 import threading
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
@@ -29,17 +29,18 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user
+from app.api.tickets import ensure_active_ticket
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
-from app.api.tickets import ensure_active_ticket
 from app.services.answer_cache import put as cache_put
 from app.services.query_rewrite import rewrite
-from app.services.quota import get_quota_service
-from app.services.rag_service import _split_tokens as _split_answer, stream_answer
 from app.services.quick_answers import match_quick
+from app.services.quota import get_quota_service
+from app.services.rag_service import _split_tokens as _split_answer
+from app.services.rag_service import stream_answer
 from app.services.user_profile_service import (
     get_profile,
     merge_profile,
@@ -182,7 +183,7 @@ async def _persist_answer(
         # BUG-03：touch 会话 updated_at（assistant 落库同样触发排序浮顶）
         sess = db.get(Session, session_id)
         if sess is not None:
-            sess.updated_at = datetime.now(timezone.utc)
+            sess.updated_at = datetime.now(UTC)
             db.commit()
         for src in source_payloads:
             db.add(
@@ -252,7 +253,7 @@ async def chat_stream(
         db.commit()
         db.refresh(user_msg)
         # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
-        s.updated_at = datetime.now(timezone.utc)
+        s.updated_at = datetime.now(UTC)
         db.commit()
     except Exception:
         quota.refund(str(user_id), 1, req.client_msg_id)

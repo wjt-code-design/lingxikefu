@@ -158,6 +158,7 @@ def test_stats_avg_first_token_ms_empty(client):
 def test_stats_trend_aggregates_days(client):
     """P1：stats/trend 按日聚合会话/消息/工单 + 无数据日期补零 + 权限 403。"""
     from datetime import datetime, timedelta
+
     from app.models.ticket import Ticket
 
     # 用 fixture 已有的 SID 会话 + 补历史数据（2 天前）

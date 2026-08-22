@@ -16,14 +16,13 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
+from app.models.base import Base
+from app.models.user import User, UserRole
+from app.models.user_profile import UserProfile
 from sqlalchemy import create_engine
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app.models.base import Base
-from app.models.user import User, UserRole
-from app.models.user_profile import UserProfile
 
 UID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 

@@ -1,16 +1,15 @@
 """Admin 路由（BU-09 填充）：/api/v1/admin/users|stats（真实查询，禁空壳）。"""
 from __future__ import annotations
 
-from uuid import UUID
-
 import re
 import unicodedata
+from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
-from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import require_admin
 from app.core.config import settings
@@ -41,7 +40,7 @@ def list_users(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: dict = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: OrmSession = Depends(get_db),
 ) -> UserListResp:
     """分页列出租户内用户（account 取 email/phone 兜底）。"""
     tenant = settings.TENANT_DEFAULT
@@ -73,7 +72,7 @@ def update_user_role(
     user_id: UUID,
     req: RoleUpdateReq,
     payload: dict = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: OrmSession = Depends(get_db),
 ) -> OkResp:
     """变更用户角色（仅限同租户用户）。
 
@@ -116,7 +115,7 @@ def update_user_role(
 @router.get("/stats", response_model=AdminStats)
 def get_stats(
     _: dict = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: OrmSession = Depends(get_db),
 ) -> AdminStats:
     """运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。"""
     tenant = settings.TENANT_DEFAULT
@@ -163,10 +162,13 @@ def get_stats(
         .group_by(Message.content)
     ).all()
 
+    # 去空白与全半角标点：字符类提为普通字符串常量（f-string 表达式内含反斜杠是
+    # py3.12+ 语法，本项目 target py311 不允许）
+    _punct = " \t\n\r，。？！、；：\"'（）【】,.?!;:()[]"
+
     def _norm(s: str) -> str:
         s = unicodedata.normalize("NFKC", s)  # 全角→半角
-        # 去空白与全半角标点（re.escape 字面量拼接，避免 raw string 引号/转义歧义）
-        return re.sub(f"[{re.escape(' \t\n\r，。？！、；：\"\'（）【】,.?!;:()[]')}]", "", s)
+        return re.sub(f"[{re.escape(_punct)}]", "", s)
 
     groups: dict[str, dict] = {}
     for content, cnt in raw_rows:
@@ -206,7 +208,7 @@ def list_feedback(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
     _: dict = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: OrmSession = Depends(get_db),
 ) -> FeedbackListResp:
     """运营反馈列表：只看"踩"（down），join 消息内容（问题/回答），供运营判断补录/优化点。"""
     tenant = settings.TENANT_DEFAULT
@@ -246,7 +248,7 @@ def _day_key(dt) -> str:
 def get_stats_trend(
     days: int = Query(14, ge=7, le=90),
     _: dict = Depends(require_admin),
-    db: Session = Depends(get_db),
+    db: OrmSession = Depends(get_db),
 ) -> StatsTrendResp:
     """运营趋势（P1）：近 N 天会话/消息/工单按日计数。
 
@@ -254,7 +256,7 @@ def get_stats_trend(
     - 无数据日期补 0，保证折线图连续。
     """
     tenant = settings.TENANT_DEFAULT
-    since = datetime.now(timezone.utc) - timedelta(days=days - 1)
+    since = datetime.now(UTC) - timedelta(days=days - 1)
     axis = [(since + timedelta(days=i)).date().isoformat() for i in range(days)]
 
     s_dates = db.scalars(

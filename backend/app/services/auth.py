@@ -3,17 +3,17 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from app.core.security import JWTError
 from sqlalchemy.exc import IntegrityError
 
 from app.core.security import (
+    JWTError,
     create_access_token,
     create_refresh_token,
     decode_token,
     hash_password,
     verify_password,
 )
-from app.core.token_revocation import consume_token, revoke_token
+from app.core.token_revocation import consume_token
 from app.models.user import User, UserRole
 from app.repositories.users import UsersRepository
 from app.schemas.auth import RegisterReq

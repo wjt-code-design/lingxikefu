@@ -14,7 +14,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.base import Base
 from app.models.knowledge import Document, DocumentStatus, KnowledgeBase
-from app.services.retrieval_service import RetrievedChunk, RetrievalError
+from app.services.retrieval_service import RetrievalError, RetrievedChunk
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

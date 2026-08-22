@@ -105,7 +105,6 @@ def test_get_session_sources_visible_to_admin(client):
 def test_get_session_no_sources_for_non_kb_msgs(client):
     """user / 无 message_sources 的消息 sources 为空数组（区别于缺失字段，契约稳定）。"""
     r = client.get(f"{API}/sessions/{SID}", headers=_h(UID, "user"))
-    user_msgs = [m for m in r.json()["messages"] if m["role"] != "assistant"]
     # 该会话只有这一条 assistant 消息；断言字段存在性契约：sources 恒为数组
     for m in r.json()["messages"]:
         assert "sources" in m

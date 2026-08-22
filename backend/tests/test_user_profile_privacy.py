@@ -10,19 +10,18 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
 from app.models.base import Base
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
+from app.services.user_profile_service import get_profile, merge_profile, to_prompt_text
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
-
-from app.core.config import settings
-from app.services.user_profile_service import get_profile, merge_profile, to_prompt_text
 
 API = "/api/v1"
 UID = uuid.UUID("11111111-1111-1111-1111-111111111111")

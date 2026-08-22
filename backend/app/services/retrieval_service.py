@@ -13,11 +13,12 @@ import logging
 from dataclasses import dataclass, field
 from uuid import UUID
 
+from qdrant_client.http.models import FieldCondition, Filter, MatchValue, NamedSparseVector
+
 from app.core.config import settings
 from app.llm_clients.embedding import BGE_QUERY_PREFIX, get_embedding_client
 from app.services.sparse_util import text_to_sparse
 from app.services.vector_service import get_collection_name, get_qdrant_client
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue, NamedSparseVector
 
 logger = logging.getLogger(__name__)
 

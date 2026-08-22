@@ -19,11 +19,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("POSTGRES_DB", "lingxi")
 os.environ.setdefault("CHAT_PROVIDER", "zhipu")
 
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-
 from app.models.knowledge import Document, KnowledgeBase  # noqa: E402
 from app.services.knowledge_import_service import import_document  # noqa: E402
+from sqlalchemy import create_engine, select  # noqa: E402
+from sqlalchemy.orm import sessionmaker  # noqa: E402
 
 DEFAULT_KB = "f3d26c91-cb3e-42b6-8f19-9610e662976e"
 

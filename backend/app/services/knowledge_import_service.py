@@ -21,12 +21,11 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.llm_clients.embedding import get_embedding_client
-from sqlalchemy import update
-
 from app.models.knowledge import Document, DocumentStatus
 from app.repositories.document_repo import (
     ChunkRepository,

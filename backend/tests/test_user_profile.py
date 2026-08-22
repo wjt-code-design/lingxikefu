@@ -13,11 +13,6 @@ from __future__ import annotations
 import uuid
 
 import pytest
-import sqlalchemy as sa
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
 from app.core.config import settings
 from app.models.base import Base
 from app.models.user import User, UserRole
@@ -30,6 +25,9 @@ from app.services.user_profile_service import (
     reset_profile,
     to_prompt_text,
 )
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 UID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 
@@ -143,8 +141,7 @@ def test_merge_profile_disabled_skips(db, monkeypatch):
 def test_merge_profile_fail_open_on_missing_user(db, monkeypatch):
     """user_id 无对应用户（FK 约束）→ fail-open 返回 False，不抛。"""
     monkeypatch.setattr(settings, "USER_PROFILE_ENABLED", True)
-    ghost = uuid.UUID("99999999-9999-9999-9999-999999999999")
-    # SQLite 未开 FK 约束，实际能写入；改用显式异常路径验证 fail-open：传 None user_id
+    # SQLite 未开 FK 约束，造"不存在的 user_id"实际能写入；改用显式异常路径验证 fail-open：传 None
     ok = merge_profile(db, None, "测试")
     assert ok is False  # 异常被捕获，返回 False 不抛
 

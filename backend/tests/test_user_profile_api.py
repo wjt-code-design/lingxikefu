@@ -13,24 +13,23 @@ import uuid
 
 import pytest
 import sqlalchemy as sa
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
-
-from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
 from app.models.base import Base
-from app.models.knowledge import Document, KnowledgeBase
 from app.models.feedback import Feedback
+from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole
 from app.models.session import Session
 from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from app.models.user_profile import UserProfile
-from app.services.user_profile_service import get_profile, get_profile as _gp
+from app.services.user_profile_service import get_profile
+from app.services.user_profile_service import get_profile as _gp
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 API = "/api/v1"
 UID = uuid.UUID("22222222-2222-2222-2222-222222222222")

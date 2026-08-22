@@ -10,7 +10,7 @@ from app.main import app
 from app.models.base import Base
 from app.models.knowledge import Document, KnowledgeBase
 from app.models.session import Session
-from app.models.ticket import Ticket, TicketStatus
+from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

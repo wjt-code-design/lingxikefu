@@ -10,10 +10,9 @@ import asyncio
 import json
 import queue
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import func, select, update
@@ -150,7 +149,7 @@ async def _sse_gen(role: str):
         try:
             item = await asyncio.to_thread(_notify_queue.get, timeout=_HEARTBEAT_INTERVAL)
         except queue.Empty:
-            yield _sse({"event": "ping", "data": {"ts": datetime.now(timezone.utc).isoformat()}})
+            yield _sse({"event": "ping", "data": {"ts": datetime.now(UTC).isoformat()}})
             continue
         if item.get("recipient_role") == role:
             yield _sse({"event": "notification", "data": item})

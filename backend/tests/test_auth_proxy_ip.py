@@ -5,11 +5,9 @@
 """
 from __future__ import annotations
 
-import pytest
-from starlette.requests import Request
-
 from app.api.auth import _client_ip
 from app.core.config import settings
+from starlette.requests import Request
 
 
 def _req(client_host: str = "9.9.9.9", xff: str | None = None) -> Request:
