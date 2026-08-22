@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.knowledge import Document, KnowledgeBase
 from app.services.retrieval_service import RetrievalError, search_kb
@@ -56,7 +57,7 @@ def parse_questions() -> list[dict]:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--top-k", type=int, default=5)
-    ap.add_argument("--kb-name", default="星河智家冒烟库")
+    ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
     args = ap.parse_args()
 
     questions = parse_questions()
@@ -73,7 +74,17 @@ def main() -> int:
             .order_by(KnowledgeBase.created_at.desc())
         )
         if not kb:
-            print(f"[ERR] 知识库不存在：{args.kb_name}（先跑 scripts.smoke_import）")
+            # 兜底：按名找不到时退到租户最新 KB（与 seed_demo_data/chat 路由同规则）。
+            # 全新环境没有任何脚本会创建带名 KB，硬错会让首次评测直接卡死。
+            kb = db.scalar(
+                select(KnowledgeBase)
+                .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
+                .order_by(KnowledgeBase.created_at.desc())
+            )
+            if kb:
+                print(f"[WARN] 未找到 {args.kb_name!r}，回退最新 KB：{kb.name} ({kb.id})")
+        if not kb:
+            print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
             return 2
         # doc 名 → id 映射（来源列是文档名，检索命中按 doc_id 归属判定）
         docs = db.scalars(

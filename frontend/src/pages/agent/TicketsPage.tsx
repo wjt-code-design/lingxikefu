@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Select, Space, Typography, message } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
-import { AppTable, StatusTag } from '@/components/common/AppTable';
+import { AppTable, StatusTag, TICKET_STATUS_TEXT as STATUS_TEXT } from '@/components/common/AppTable';
 import { listTickets, updateTicket } from '@/api/tickets';
 import type { ApiError, TicketItem, TicketStatus } from '@/contracts/api';
 import './TicketsPage.css';
@@ -15,13 +15,6 @@ const STATUS_OPTIONS = [
   { label: '已解决', value: 'resolved' as TicketStatus },
   { label: '已关闭', value: 'closed' as TicketStatus },
 ];
-
-const STATUS_TEXT: Record<TicketStatus, string> = {
-  open: '待处理',
-  processing: '处理中',
-  resolved: '已解决',
-  closed: '已关闭',
-};
 
 /** 合法迁移（与后端 tickets.py _ALLOWED_TRANSITIONS 对齐） */
 const NEXT_STATUS: Record<TicketStatus, TicketStatus[]> = {

@@ -6,6 +6,9 @@ import type { ChatMessage } from './types';
 import { MarkdownContent } from '@/components/common/MarkdownContent';
 import { SourceAccordion } from './SourceAccordion';
 import { ThumbsBar } from './ThumbsBar';
+import { OrderCards } from './OrderCards';
+import { detectOrderTrack } from './orderTrack';
+import { TicketStatusBadge } from './TicketStatusBadge';
 
 /** 单条消息气泡（角色 + 视角双维度 · 2026-08-19）
  *
@@ -164,7 +167,20 @@ export function MessageBubble({
             >
               {copied ? '已复制' : '复制'}
             </Button>
-            <MarkdownContent content={msg.content} className="chat-msg__text" />
+            {(() => {
+              // 订单轨迹识别：流式渐进输出时也能即时切换为卡片视图，绕过 Markdown 纯文本。
+              // detectOrderTrack 契约：detected ⇒ items ≥ 1（preamble/footer 已剔除来源标记）；
+              // 溯源不受影响：来源仍落 message_sources，客服侧 SourceAccordion 照常展示。
+              const order = detectOrderTrack(msg.content);
+              if (order.detected) {
+                return (
+                  <div className="chat-msg__text chat-msg__text--order">
+                    <OrderCards result={order} />
+                  </div>
+                );
+              }
+              return <MarkdownContent content={msg.content} className="chat-msg__text" />;
+            })()}
           </>
         ) : (
           <Typography.Paragraph className="chat-msg__text">{msg.content}</Typography.Paragraph>
@@ -173,6 +189,7 @@ export function MessageBubble({
         {!isUser && !isAgent && msg.ticketId && (
           <div className="chat-msg__ticket">
             已为您创建工单 <b>#{msg.ticketId.slice(0, 8)}</b>，客服将尽快跟进
+            <TicketStatusBadge ticketId={msg.ticketId} />
           </div>
         )}
         {isAi && msg.messageId && <ThumbsBar value={msg.feedback} onRate={onRate} />}

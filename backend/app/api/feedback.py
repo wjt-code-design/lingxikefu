@@ -18,6 +18,7 @@ from app.core.database import get_db
 from app.models.feedback import Feedback, FeedbackRating
 from app.models.message import Message
 from app.models.session import Session
+from app.services.ticket_automation import auto_resolve_on_positive_feedback
 from app.services.user_profile_service import merge_profile
 
 router = APIRouter(prefix="/messages", tags=["feedback"])
@@ -79,4 +80,13 @@ def submit_feedback(
         )
     except Exception:  # noqa: BLE001 - 采集兜底
         logger.exception("满意度采集异常（不影响反馈）")
+
+    # 自动化：用户满意反馈 → processing→resolved（任意消息的 up 均触发，
+    # 语义决策依据见 auto_resolve_on_positive_feedback docstring）
+    if req.rating == FeedbackRating.up:
+        try:
+            auto_resolve_on_positive_feedback(db, msg.session_id)
+        except Exception:  # noqa: BLE001 - 自动化失败不阻塞主流程
+            logger.exception("ticket_auto: auto_resolve_on_positive_feedback failed")
+
     return FeedbackResp()

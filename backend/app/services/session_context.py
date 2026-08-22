@@ -10,6 +10,8 @@
 """
 from __future__ import annotations
 
+from typing import Any
+
 from app.services.query_rewrite import _extract_entities
 
 #: 流程主题 -> 触发词（命中任一即视为该主题；顺序在此 = 优先级：退款先于退换货可共存）
@@ -59,3 +61,40 @@ def extract_topic(history: list[dict] | None) -> str | None:
 def _is_generic(entity: str) -> bool:
     """泛化商品词（手机/冰箱…）不算具体可消解实体，不进主题提示（防止把商品词当实体噪声注入）。"""
     return entity in ("手机", "冰箱", "空调", "电视", "洗衣机", "电脑", "平板", "耳机", "充电器", "显示器", "笔记本")
+
+
+def _extract_topic_names(history: list[dict] | None) -> list[str]:
+    """只返回命中的主题名列表（按词表优先级去重），不拼注入字符串。"""
+    content = _nearest_user_content(history)
+    topics: list[str] = []
+    if content:
+        for name, keys in FLOW_TOPICS:
+            if any(k in content for k in keys) and name not in topics:
+                topics.append(name)
+    return topics
+
+
+def build_handoff_summary(
+    history: list[dict] | None, max_question: int = 120
+) -> dict[str, Any] | None:
+    """转人工交接摘要：本次会话的「当前主题 + 具体实体 + 最近用户诉求」。
+
+    供客服 observe 视角会话头部展示（动态生成，不落库）。规则式、无 LLM 调用、fail-open。
+    - topic: 命中的流程主题（可多个，按词表优先级）
+    - entities: 具体标识实体（订单号/型号等，去泛化商品词）
+    - question: 最近一条用户诉求（限长，客服一眼看到用户这次在问什么）
+    无用户消息或全部为空返回 None（不展示空壳胶囊）。
+    """
+    question = _nearest_user_content(history)
+    if not question:
+        return None
+    summary: dict[str, Any] = {}
+    topics = _extract_topic_names(history)
+    if topics:
+        summary["topic"] = "/".join(topics)
+    entities = _extract_entities(question)
+    concrete = [e for e in entities if not _is_generic(e)]
+    if concrete:
+        summary["entities"] = list(dict.fromkeys(concrete))
+    summary["question"] = question[:max_question]
+    return summary

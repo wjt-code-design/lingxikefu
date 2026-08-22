@@ -44,6 +44,7 @@ _REDIS_PATCH_TARGETS = (
     "app.api.telemetry.get_redis",
     "app.services.quota.get_redis",
     "app.services.user_profile_service.get_redis",  # 2026-08-22 Phase B：画像幂等键查重
+    "app.services.ticket_auto_scheduler.get_redis",  # 2026-08-22 工单扫描锁（互斥测试用 fakeredis）
 )
 
 
@@ -68,3 +69,28 @@ def _fake_redis():
     yield server
     for p in patches:
         p.stop()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _disable_ticket_scheduler():
+    """session 级禁用工单自动化调度器：防止后台线程连接 PG。
+
+    TestClient 触发 lifespan → start_scheduler() → 后台线程 → SessionLocal() → PG 连接失败。
+    直接 patch 模块级函数为 no-op，比设置 _scheduler_started 更可靠（不怕 stop_scheduler 重置）。
+    """
+    import app.services.ticket_auto_scheduler as _sched
+
+    _orig_start = _sched.start_scheduler
+    _orig_stop = _sched.stop_scheduler
+
+    def _noop_start():
+        pass
+
+    def _noop_stop():
+        _sched._stop_event.set()
+
+    _sched.start_scheduler = _noop_start
+    _sched.stop_scheduler = _noop_stop
+    yield
+    _sched.start_scheduler = _orig_start
+    _sched.stop_scheduler = _orig_stop

@@ -90,10 +90,22 @@ async def _warmup_embedding() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    """应用生命周期：启动恢复滞留导入 → 预热 embedding（避免首个用户等冷加载）。"""
+    """应用生命周期：启动恢复滞留导入 → 预热 embedding（避免首个用户等冷加载）→ 启动工单自动化调度。"""
     _recover_stale_imports()
     asyncio.create_task(_warmup_embedding())
+    # 工单自动化：后台定时扫描超时工单
+    try:
+        from app.services.ticket_auto_scheduler import start_scheduler
+        start_scheduler()
+    except Exception:  # noqa: BLE001
+        logger.exception("ticket_auto_scheduler: start failed (non-blocking)")
     yield
+    # 关闭时停止调度器
+    try:
+        from app.services.ticket_auto_scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:  # noqa: BLE001
+        logger.exception("ticket_auto_scheduler: stop failed (non-blocking)")
 
 
 def _recover_stale_imports() -> None:

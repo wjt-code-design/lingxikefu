@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { Button } from 'antd';
 import { SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined, FileAddOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
@@ -11,6 +11,7 @@ import type { MessageSource, SessionDetail } from '@/contracts/api';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
 import { SatisfactionBar } from './SatisfactionBar';
+import { TicketStatusBadge } from './TicketStatusBadge';
 import type { ChatMessage } from './types';
 
 /** 快捷问题单一数据源（2026-08-21 合并原 HOT_SCENARIOS + MORE_GROUPS，消除双数组漂移）。
@@ -100,11 +101,14 @@ function TicketNotice({
             state.error
           ) : kind === 'escalate' ? (
             <>
-              已为{who}转人工，工单号 <b>#{state.id.slice(0, 8)}</b>，客服将尽快跟进{' '}
-              <Link to="/tickets">{isStaff ? '查看工单' : '查看我的工单'}</Link>
+              已为{who}转人工，工单号 <b>#{state.id.slice(0, 8)}</b>，客服将尽快跟进
+              {state.id && <TicketStatusBadge ticketId={state.id} />}
             </>
           ) : (
-            <>已为{who}创建工单 <b>#{state.id.slice(0, 8)}</b>，客服将尽快跟进</>
+            <>
+              已为{who}创建工单 <b>#{state.id.slice(0, 8)}</b>，客服将尽快跟进
+              {state.id && <TicketStatusBadge ticketId={state.id} />}
+            </>
           )}
         </div>
       </div>
@@ -164,6 +168,8 @@ export function ChatContainer({
   const [moreOpen, setMoreOpen] = useState(false);
   // Phase D：用户画像摘要（客服视角 observeMode 时展示；来自 getSessionDetail.profile）
   const [userProfile, setUserProfile] = useState<SessionDetail['profile']>(undefined);
+  // 转人工交接摘要（本次会话上下文压缩打包；来自 getSessionDetail.handoff_summary）
+  const [handoffSummary, setHandoffSummary] = useState<SessionDetail['handoff_summary']>(undefined);
 
   // 三栏工作台：sources 变化时同步给右栏溯源面板（引用稳定，避免重复渲染）
   useEffect(() => {
@@ -184,6 +190,7 @@ export function ChatContainer({
         setSessionId(null);
         setMessages([]);
         setUserProfile(undefined); // Phase D：切会话重置画像
+        setHandoffSummary(undefined); // 切会话重置交接摘要
         streamingUserRef.current = null;
         setTurnCount(0); // P2-2：新会话重置满意度轮次
         setSatisfactionRated(false);
@@ -203,6 +210,7 @@ export function ChatContainer({
       .then((d) => {
         setSessionId(d.id);
         setUserProfile(d.profile); // Phase D：客服视角展示画像
+        setHandoffSummary(d.handoff_summary); // 转人工交接摘要（客服视角展示）
         setMessages(
           d.messages.map((m) => ({
             id: m.id,
@@ -455,6 +463,8 @@ export function ChatContainer({
                       ? '人工客服接待中'
                       : 'AI 自动接待'}
               </div>
+              {/* 转人工交接摘要（本次会话上下文中压缩打包）；仅客服视角 */}
+              {handoffSummary && <HandoffSummary summary={handoffSummary} />}
               {/* Phase D：用户画像摘要（客服视角；后端仅 agent/admin 返回 profile，顾客端无此块） */}
               {userProfile && <UserProfileSummary profile={userProfile} />}
             </div>
@@ -612,6 +622,36 @@ export function ChatContainer({
           centered={chatLayout === 'observe'}
         />
       </div>
+    </div>
+  );
+}
+
+/** 转人工交接摘要胶囊（本次会话上下文压缩打包）：主题 + 关联实体 + 最近用户诉求。
+ * 仅客服视角（observeMode）展示，帮助人工客服在介入前快速掌握本次对话上下文。 */
+function HandoffSummary({ summary }: { summary: SessionDetail['handoff_summary'] }) {
+  if (!summary) return null;
+  const { topic, entities, question } = summary;
+  if (!topic && !entities?.length && !question) return null;
+  return (
+    <div className="chat-handoff" aria-label="转人工交接摘要">
+      {topic && (
+        <div className="chat-handoff__row">
+          <span className="chat-handoff__label">主题</span>
+          <span className="chat-handoff__topic">{topic}</span>
+        </div>
+      )}
+      {entities && entities.length > 0 && (
+        <div className="chat-handoff__row">
+          <span className="chat-handoff__label">关联</span>
+          <span>{entities.join('、')}</span>
+        </div>
+      )}
+      {question && (
+        <div className="chat-handoff__row">
+          <span className="chat-handoff__label">诉求</span>
+          <span className="chat-handoff__question">{question}</span>
+        </div>
+      )}
     </div>
   );
 }

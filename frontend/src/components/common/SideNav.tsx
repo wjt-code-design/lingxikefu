@@ -17,7 +17,7 @@ import { useAuthStore } from '@/store/authStore';
 
 /**
  * 通用侧栏导航：按角色渲染菜单项。
- * - user：我的对话 / 我的工单 / 个人中心 / 意见反馈
+ * - user：我的对话 / 个人中心 / 意见反馈
  * - agent：客服工作台 / 会话列表 / 工单处理 / 客户管理 / 知识快搜（+ 我的对话 / 个人中心）
  * - admin：运营总览 / 知识库 / 用户管理 / 运营统计 / 踩反馈 / 会话审计 / 系统设置 / 审计日志（+ 我的对话 / 个人中心）
  */
@@ -32,7 +32,6 @@ export function SideNav() {
     label: '我的',
     children: [
       { key: '/chat', icon: <MessageOutlined />, label: '我的对话' },
-      { key: '/tickets', icon: <FileTextOutlined />, label: '我的工单' },
       { key: '/profile', icon: <UserOutlined />, label: '个人中心' },
       { key: '/feedback', icon: <DislikeOutlined />, label: '意见反馈' },
     ],

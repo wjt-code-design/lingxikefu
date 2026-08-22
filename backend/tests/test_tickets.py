@@ -9,7 +9,7 @@ from app.core.security import create_access_token
 from app.main import app
 from app.models.base import Base
 from app.models.session import Session
-from app.models.ticket import Ticket, TicketStatus
+from app.models.ticket import Ticket
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -151,19 +151,24 @@ def test_escalate_missing_session_404(client):
     assert r.status_code == 404
 
 
-def test_my_tickets_lists_own_only(client):
-    """P2-1：GET /tickets/my 只返回当前用户会话的工单（user 可调，跨用户隔离）。"""
-    OTHER = uuid.UUID("44444444-4444-4444-4444-444444444444")
-    # 通过 agent 建当前用户会话的工单
+def test_get_ticket_own_only(client):
+    """GET /tickets/{id}：user 只能查自己的工单，agent 可查任意（聊天页角标轮询）。"""
     r = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h())
     assert r.status_code == 201
-    # user 查自己的工单 → 应有 1 条（SID 属于 USER_ID）
-    r2 = client.get(f"{API}/tickets/my", headers=_user_h())
+    tid = r.json()["ticket_id"]
+
+    # user 查自己的工单 → 200（初始状态 open）
+    r2 = client.get(f"{API}/tickets/{tid}", headers=_user_h())
     assert r2.status_code == 200
-    assert r2.json()["total"] == 1
-    assert r2.json()["items"][0]["session_id"] == str(SID)
-    # 另一个用户查 → 0 条（隔离）
-    r3 = client.get(f"{API}/tickets/my", headers={
+    assert r2.json()["status"] == "open" and r2.json()["ticket_id"] == tid
+
+    # 别的 user 查 → 404（越权隔离）
+    OTHER = uuid.UUID("44444444-4444-4444-4444-444444444444")
+    r3 = client.get(f"{API}/tickets/{tid}", headers={
         "Authorization": f"Bearer {create_access_token(str(OTHER), 'user')}"
     })
-    assert r3.status_code == 200 and r3.json()["total"] == 0
+    assert r3.status_code == 404
+
+    # agent 查任意工单 → 200（staff/observe 视角轮询）
+    r4 = client.get(f"{API}/tickets/{tid}", headers=_agent_h())
+    assert r4.status_code == 200

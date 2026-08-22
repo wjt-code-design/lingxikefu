@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -23,8 +22,6 @@ from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
-from app.services.ticket_events import _sse_gen, publish_ticket_event
-from fastapi.responses import StreamingResponse
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +34,6 @@ _ALLOWED_TRANSITIONS: dict[TicketStatus, set[TicketStatus]] = {
     TicketStatus.resolved: {TicketStatus.closed},
     TicketStatus.closed: set(),
 }
-
-
-def _publish_ticket_for_user(db: OrmSession, ticket: Ticket) -> None:
-    """工单状态变更 → 推送给工单所属客户（尽力而为；前端轮询兜底）。"""
-    sess = db.get(Session, ticket.session_id)
-    if sess is not None:
-        publish_ticket_event(str(sess.user_id), str(ticket.id), ticket.status.value)
 
 
 class CreateTicketReq(BaseModel):
@@ -219,55 +209,32 @@ def list_tickets(
     return TicketListResp(items=[_item(t) for t in rows], total=total)
 
 
-@router.get("/my", response_model=TicketListResp)
-def list_my_tickets(
-    status: TicketStatus | None = Query(default=None),
-    page: int = Query(1, ge=1),
-    size: int = Query(20, ge=1, le=100),
+@router.get("/{ticket_id}", response_model=TicketItem)
+def get_ticket(
+    ticket_id: uuid.UUID,
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
-) -> TicketListResp:
-    """我的工单（P2-1，user 可调）：按当前用户会话归属过滤（Ticket→Session.user_id）。"""
-    uid = uuid.UUID(payload["sub"])
-    cond = [
-        Ticket.tenant_id == settings.TENANT_DEFAULT,
-        Session.user_id == uid,
-    ]
-    if status:
-        cond.append(Ticket.status == status)
-    total = (
-        db.scalar(
-            select(func.count(Ticket.id))
-            .join(Session, Ticket.session_id == Session.id)
-            .where(*cond)
-        )
-        or 0
-    )
-    rows = (
-        db.scalars(
-            select(Ticket)
-            .join(Session, Ticket.session_id == Session.id)
-            .where(*cond)
-            .order_by(Ticket.updated_at.desc())
-            .offset((page - 1) * size)
-            .limit(size)
-        )
-        .all()
-    )
-    return TicketListResp(items=[_item(t) for t in rows], total=total)
+) -> TicketItem:
+    """查询单个工单状态（聊天页角标轮询用）。
 
-
-@router.get("/my/stream")
-async def my_ticket_stream(
-    payload: dict = Depends(get_current_user),
-):
-    """用户侧工单状态 SSE（第6组项4）：实时推送本人工单状态变更 + 心跳。
-
-    事件协议：connected（握手，data.user_id）/ ticket_update（data: user_id/ticket_id/status/ts）/ ping（心跳）。
-    尽力而为（单 worker 进程内分发）；前端保留 30s 轮询兜底，保证断线/多 worker 下最终一致。
+    越权防护：
+    - user 仅可查自己会话归属的工单（Ticket→Session.user_id==当前用户）；
+    - agent/admin 放行（客服/管理员可查看任意工单，供 observe 视角轮询）。
     """
-    user_id = str(payload["sub"])
-    return StreamingResponse(_sse_gen(user_id), media_type="text/event-stream")
+    uid = uuid.UUID(payload["sub"])
+    role = payload.get("role")
+    t = db.scalar(
+        select(Ticket)
+        .join(Session, Ticket.session_id == Session.id)
+        .where(
+            Ticket.id == ticket_id,
+            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            *([] if role in ("admin", "agent") else [Session.user_id == uid]),
+        )
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="ticket not found")
+    return _item(t)
 
 
 @router.patch("/{ticket_id}", response_model=TicketItem)
@@ -326,7 +293,6 @@ def update_ticket(
         resource_id=str(ticket_id),
         detail=str(t.status.value),
     )
-    _publish_ticket_for_user(db, t)  # 状态流转 → 实时推送给客户
     return _item(t)
 
 
@@ -375,5 +341,4 @@ def escalate_ticket(
         resource_type="ticket",
         resource_id=str(t.id),
     )
-    _publish_ticket_for_user(db, t)  # 转人工建单 → 实时推送给客户
     return _item(t)

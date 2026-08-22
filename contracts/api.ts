@@ -85,6 +85,12 @@ export interface SessionDetail {
     handoff?: { count?: number; last_at?: string };
     preferences?: { 品类?: string[] };
   };
+  /** 转人工交接摘要（本次会话上下文压缩打包）：仅 agent/admin 视角返回。 */
+  handoff_summary?: {
+    topic?: string; // 命中流程主题（可多个，/ 分隔）
+    entities?: string[]; // 具体实体（订单号/型号）
+    question?: string; // 最近一条用户诉求
+  };
 }
 /** Branch 3：人工客服代发消息请求体（POST /sessions/{id}/messages，仅 admin/agent 可用）。 */
 export interface AgentMessageReq {
@@ -143,14 +149,6 @@ export interface StatusUpdateReq {
   assignee_id?: string; // 可选：分配客服
   version: number; // S2 乐观锁：客户端回传当前版本，与服务端不匹配返回 409
 }
-// 用户侧工单状态 SSE（第6组项4）：/tickets/my/stream 事件协议
-export type MyTicketSSEEvent =
-  | { event: 'connected'; data: { user_id: string } }
-  | {
-      event: 'ticket_update';
-      data: { user_id: string; ticket_id: string; status: TicketStatus; ts: string };
-    }
-  | { event: 'ping'; data: { ts: string } };
 
 // ---------- Customers（T6 客户画像） ----------
 export interface CustomerItem {

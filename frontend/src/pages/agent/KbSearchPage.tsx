@@ -67,7 +67,13 @@ export function KbSearchPage() {
                 {hit.doc_title}
               </span>
               <span className="kbs-hit__kb">{hit.kb_name}</span>
-              <span className="kbs-hit__score">{hit.score.toFixed(2)}</span>
+              {/* dense_score 为余弦相似度（有绝对语义）；RRF 融合分无绝对意义不作展示 */}
+              <span
+                className="kbs-hit__score"
+                title={`语义相似度 ${Math.round(hit.dense_score * 100)}%`}
+              >
+                {Math.round(hit.dense_score * 100)}%
+              </span>
             </header>
             <p className="kbs-hit__snippet">{hit.snippet}</p>
           </article>

@@ -80,6 +80,12 @@ class Settings(BaseSettings):
     # --- 用户画像（长期记忆，2026-08-22 Phase B）：可一键关闭（关闭=不采集不注入，回答不变） ---
     USER_PROFILE_ENABLED: bool = True
 
+    # --- 工单自动化（2026-08-22）：时间阈值配置，<=0 表示关闭对应自动化 ---
+    # 客服回复后 N 分钟无用户新消息 → 自动 resolved（0=关闭）
+    AUTO_TICKET_RESOLVE_TIMEOUT_MIN: int = 30
+    # 工单空闲 N 天 → 自动 closed（0=关闭）
+    AUTO_TICKET_CLOSE_IDLE_DAYS: int = 7
+
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
 

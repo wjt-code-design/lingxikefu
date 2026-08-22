@@ -42,6 +42,14 @@ export const STATUS_COLOR: Record<string, string> = {
   failed: 'red',
 };
 
+/** 工单状态中文文案（单一真源：工单页 / 聊天页角标共用；未知状态回退原值）。 */
+export const TICKET_STATUS_TEXT: Record<string, string> = {
+  open: '待处理',
+  processing: '处理中',
+  resolved: '已解决',
+  closed: '已关闭',
+};
+
 /** 状态标签：色随语义（STATUS_COLOR），文案默认取 status 原值。 */
 export function StatusTag({ status, text }: { status: string; text?: ReactNode }) {
   return <Tag color={STATUS_COLOR[status] ?? 'default'}>{text ?? status}</Tag>;

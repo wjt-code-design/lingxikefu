@@ -5,12 +5,14 @@
 """
 from __future__ import annotations
 
+import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, or_ as sa_or, select
+from sqlalchemy import func, select
+from sqlalchemy import or_ as sa_or
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user
@@ -22,8 +24,11 @@ from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
+from app.services.session_context import build_handoff_summary
+from app.services.ticket_automation import auto_start_processing
 from app.services.user_profile_service import get_profile as get_user_profile
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
@@ -77,6 +82,8 @@ class SessionDetail(BaseModel):
     messages: list[SessionMessage]
     # 2026-08-22 Phase D：用户画像摘要（仅 agent/admin 可见；顾客端为 None 不泄露他人画像）。
     profile: dict | None = None
+    # 2026-08-22：转人工交接摘要（本次会话当前主题/实体/最近诉求；仅 agent/admin 可见）。
+    handoff_summary: dict | None = None
 
 
 class SessionListResp(BaseModel):
@@ -228,15 +235,24 @@ def get_session(
     # 2026-08-22 Phase D：客服侧展示画像——仅 agent/admin 返回（读会话 owner 画像；
     # 顾客端 None 不泄露；fail-open：读取异常 → None，不影响会话详情主流程）。
     profile: dict | None = None
+    # 转人工交接摘要（本次会话上下文压缩打包）：由消息历史规则聚合，仅 agent/admin 展示。
+    handoff_summary: dict | None = None
     if role in ("admin", "agent"):
         try:
             profile = get_user_profile(db, s.user_id)
         except Exception:  # noqa: BLE001 - fail-open
             profile = None
+        try:
+            handoff_summary = build_handoff_summary(
+                [{"role": m.role.value, "content": m.content} for m in msgs]
+            )
+        except Exception:  # noqa: BLE001 - fail-open
+            handoff_summary = None
     return SessionDetail(
         id=str(s.id),
         title=s.title,
         profile=profile,
+        handoff_summary=handoff_summary,
         messages=[
             SessionMessage(
                 id=str(m.id),
@@ -289,7 +305,12 @@ def post_agent_message(
         agent_name=(staff.email or staff.phone or "人工客服") if staff else "人工客服",
     )
     db.add(m)
-    s.updated_at = datetime.now(timezone.utc)  # touch：客服回复后会话排序提前
+    s.updated_at = datetime.now(UTC)  # touch：客服回复后会话排序提前
+    # 自动化：客服首次发言 → open→processing
+    try:
+        auto_start_processing(db, session_id, uuid.UUID(payload["sub"]))
+    except Exception:  # noqa: BLE001 - 自动化失败不阻塞主流程
+        logger.exception("ticket_auto: auto_start_processing failed")
     db.commit()
     db.refresh(m)
     return SessionMessage(

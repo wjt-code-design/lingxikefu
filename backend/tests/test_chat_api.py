@@ -6,9 +6,10 @@
 """
 from __future__ import annotations
 
+import uuid
+
 import app.models.knowledge  # noqa: F401
 import pytest
-import uuid
 from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
@@ -313,7 +314,7 @@ def test_sse_event_whitelist():
     from app.api.chat import _sse
 
     for ev in ("stage", "intent", "token", "sources", "done", "error"):
-        assert '"event": "%s"' % ev in _sse({"event": ev, "data": {}})
+        assert f'"event": "{ev}"' in _sse({"event": ev, "data": {}})
     out = _sse({"event": "typo_event", "data": {}})
     assert '"event": "error"' in out and "SSE_CONTRACT" in out  # fail-open：error 事件而非 raise
 
@@ -321,12 +322,12 @@ def test_sse_event_whitelist():
 def test_sse_events_match_frontend_contract():
     """C2 闭环：后端 chat SSE 事件名须被前端契约声明（SSEEvent 子集）。
 
-    契约现含多个 SSE 类型（chat SSEEvent / 通知 NotifySSEEvent / 工单 MyTicketSSEEvent），
-    故改为**子集**断言：后端每个 chat 事件都须在前端契约中存在（防新增事件前端未声明），
+    契约含多个 SSE 类型（chat SSEEvent / 通知 NotifySSEEvent），
+    故为**子集**断言：后端每个 chat 事件都须在前端契约中存在（防新增事件前端未声明），
     同时允许前端存在其他 SSE 类型的事件字面量。
     """
-    from pathlib import Path
     import re as _re
+    from pathlib import Path
 
     from app.api.chat import _SSE_EVENTS
 

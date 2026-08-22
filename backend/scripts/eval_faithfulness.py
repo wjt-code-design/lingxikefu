@@ -17,6 +17,7 @@ import uuid
 from pathlib import Path
 
 import httpx
+from app.core.config import settings
 from app.core.database import SessionLocal
 from app.llm_clients.chat import get_chat_client
 from app.models.knowledge import KnowledgeBase
@@ -254,7 +255,7 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="仅评测前 N 题（0=全部）")
     ap.add_argument("--offset", type=int, default=0, help="跳过前 N 题（续跑用）")
-    ap.add_argument("--kb-name", default="星河智家冒烟库")
+    ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
     args = ap.parse_args()
 
     questions = parse_questions()
@@ -271,7 +272,18 @@ async def main() -> int:
     )
     db.close()
     if not kb:
-        print(f"[ERR] 知识库不存在：{args.kb_name}")
+        # 兜底：按名找不到时退到租户最新 KB（与 eval_recall/seed_demo_data 同规则）
+        db = SessionLocal()
+        kb = db.scalar(
+            select(KnowledgeBase)
+            .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
+            .order_by(KnowledgeBase.created_at.desc())
+        )
+        db.close()
+        if kb:
+            print(f"[WARN] 未找到 {args.kb_name!r}，回退最新 KB：{kb.name} ({kb.id})")
+    if not kb:
+        print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
         return 2
 
     stats = {"qa": [0, 0], "refuse": [0, 0], "refuse_qa": [0, 0], "handoff": [0, 0], "chitchat": [0, 0]}

@@ -34,8 +34,15 @@ def main() -> int:
     kb_repo = KnowledgeBaseRepository(db)
     doc_repo = DocumentRepository(db)
 
-    kb = kb_repo.create(name="星河智家冒烟库")
-    print(f"[KB] {kb.name} ({kb.id})")
+    # 幂等：按名复用已有同名库，不重复新建（修复"多次运行堆同名冒烟库"）。
+    # 命名去「冒烟库」字眼，改语义化分类名。
+    _KB_NAME = "星河智家·官方政策库"
+    kb = next((k for k in kb_repo.list_all() if k.name == _KB_NAME), None)
+    if kb is None:
+        kb = kb_repo.create(name=_KB_NAME)
+        print(f"[KB] 新建 {kb.name} ({kb.id})")
+    else:
+        print(f"[KB] 复用已有 {kb.name} ({kb.id})")
 
     files = sorted(KB_DIR.iterdir()) + sorted(PDF_DIR.iterdir())
     print(f"[INPUT] {len(files)} files")

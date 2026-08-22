@@ -29,7 +29,7 @@ const AgentSessionsPage = lazy(() => import('@/pages/agent/SessionsPage'));
 const AgentCustomersPage = lazy(() => import('@/pages/agent/CustomersPage'));
 const AgentTicketsPage = lazy(() => import('@/pages/agent/TicketsPage')); // T1：工单流转
 const KnowledgePage = lazy(() => import('@/pages/admin/KnowledgePage'));
-const MyTicketsPage = lazy(() => import('@/pages/MyTicketsPage'));
+
 const UsersPage = lazy(() => import('@/pages/admin/UsersPage'));
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'));
 const FeedbackPage = lazy(() => import('@/pages/admin/FeedbackPage'));
@@ -97,18 +97,6 @@ export function AppRoutes() {
           }
         >
           <Route index element={<ChatPage />} />
-        </Route>
-
-        {/* P2-1：用户「我的工单」（只读，user 可调） */}
-        <Route
-          path="/tickets"
-          element={
-            <RequireAuth>
-              <AdminLayout />
-            </RequireAuth>
-          }
-        >
-          <Route index element={<MyTicketsPage />} />
         </Route>
 
         {/* T4'：个人中心（user/agent/admin 均可；/auth/me 已有） */}

@@ -10,7 +10,7 @@ from __future__ import annotations
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.query_rewrite import rewrite
 from app.services.retrieval_service import RetrievedChunk
-from app.services.session_context import extract_topic
+from app.services.session_context import build_handoff_summary, extract_topic
 
 
 def make_chunk(text: str = "退款原路退回") -> list[RetrievedChunk]:
@@ -58,3 +58,32 @@ def test_build_qa_messages_injects_context_hint():
     msgs2 = build_qa_messages("它怎么退款", make_chunk())
     assert "<<会话上下文>>" not in msgs2[-1]["content"]  # 无 hint 不注入
     assert "<<历史对话>>" in msgs2[-1]["content"] and "<<用户问题>>" in msgs2[-1]["content"]
+
+
+def test_handoff_summary_topic_entity_question():
+    """交接摘要：命中主题 + 具体实体 + 最近诉求；无用户消息返回 None。"""
+    history = [
+        {"role": "user", "content": "我买的空调坏了，订单 SO2026080199 要退货还是换货？"},
+        {"role": "assistant", "content": "已为您查询，可支持 15 天内质量问题退货"},
+    ]
+    s = build_handoff_summary(history)
+    assert s is not None
+    assert "退换货" in s["topic"]
+    assert "SO2026080199" in s["entities"]
+    assert "SO2026080199" in s["question"]
+
+    # 无用户消息 → None（不展示空壳胶囊）
+    assert build_handoff_summary([]) is None
+    assert build_handoff_summary(None) is None
+
+
+def test_handoff_summary_question_limited_and_generic_ignored():
+    """诉求限长；泛化商品词不进实体；超过 120 字截断。"""
+    long = "我" * 200
+    s = build_handoff_summary([{"role": "user", "content": long}])
+    assert s is not None and len(s["question"]) <= 120
+    assert "entities" not in s  # 纯叠字无具体实体
+
+    s2 = build_handoff_summary([{"role": "user", "content": "手机退货"}])
+    assert "退换货" in s2["topic"]
+    assert not s2.get("entities")  # "手机"是泛化商品词，不进实体
