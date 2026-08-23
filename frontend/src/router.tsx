@@ -39,6 +39,7 @@ const SessionsAuditPage = lazy(() => import('@/pages/admin/SessionsAuditPage'));
 const SettingsPage = lazy(() => import('@/pages/admin/SettingsPage'));
 const LogsPage = lazy(() => import('@/pages/admin/LogsPage'));
 const RolesPage = lazy(() => import('@/pages/admin/RolesPage'));
+const EvalPage = lazy(() => import('@/pages/admin/EvalPage'));
 const AgentDashboardPage = lazy(() => import('@/pages/agent/DashboardPage'));
 const KbSearchPage = lazy(() => import('@/pages/agent/KbSearchPage'));
 const FaqPage = lazy(() => import('@/pages/FaqPage'));
@@ -159,6 +160,7 @@ export function AppRoutes() {
           <Route path="sessions" element={<SessionsAuditPage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="logs" element={<LogsPage />} />
+          <Route path="eval" element={<EvalPage />} />
         </Route>
 
         {/* T4'：/403 无权限 */}

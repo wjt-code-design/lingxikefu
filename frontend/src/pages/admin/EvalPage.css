@@ -1,0 +1,43 @@
+/* 评测中心页 */
+.eval-page {
+  padding: 24px;
+}
+
+.eval-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.eval-stat-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  border-color: var(--border);
+}
+
+.eval-actions {
+  margin: 16px 0;
+}
+
+.eval-history-card {
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+}
+
+.eval-alerts {
+  margin: 16px 0;
+}
+
+.eval-empty {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 767px) {
+  .eval-page {
+    padding: 12px;
+  }
+  .eval-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
