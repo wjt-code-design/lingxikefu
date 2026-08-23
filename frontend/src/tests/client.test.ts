@@ -68,7 +68,27 @@ describe('client 401 自动刷新拦截器', () => {
     expect(useAuthStore.getState().token).toBe('new');
   });
 
+  it('仅排除 refresh 本身；相似路径的 401 仍应刷新', async () => {
+    let protectedCalls = 0;
+    mockAdapter((config) => {
+      if (config.url === '/auth/refresh') {
+        return { status: 200, data: { access_token: 'new' } };
+      }
+      if (config.url === '/auth/refresh-status' && protectedCalls++ === 0) {
+        return { status: 401, data: {} };
+      }
+      return { status: 200, data: { ok: true } };
+    });
+
+    await expect(http.get('/auth/refresh-status')).resolves.toMatchObject({
+      data: { ok: true },
+    });
+    expect(useAuthStore.getState().token).toBe('new');
+  });
+
   it('无 refresh_token 时 401 → reject 且清空登录态', async () => {
+    // jsdom 不实现跨页导航；本例只验证清空登录态，置于登录页避免无关噪声。
+    window.history.replaceState(null, '', '/login');
     useAuthStore.setState({ token: 'old', refreshToken: null, user: null, role: 'user' });
     mockAdapter(() => ({ status: 401, data: {} }));
     let err: unknown = null;

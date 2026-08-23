@@ -63,12 +63,13 @@ http.interceptors.response.use(
     const original = (error as { config?: RetriableConfig }).config;
     const status = (error as { response?: { status?: number } }).response?.status;
 
-    // 仅处理 401；排除 refresh 自身请求，防止无限循环
+    // 仅处理 401；排除 refresh 自身请求，防止无限循环。
+    // 精确匹配（外部审查 C3）：includes 会误伤未来出现的 /auth/refresh-xxx 等端点
     if (
       status === 401 &&
       original &&
       !original._retry &&
-      !original.url?.includes('/auth/refresh')
+      original.url !== '/auth/refresh'
     ) {
       original._retry = true;
       const { refreshToken, clear } = useAuthStore.getState();

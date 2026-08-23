@@ -49,3 +49,22 @@ def require_admin(payload: dict = Depends(get_current_user)) -> dict:
             detail="admin role required",
         )
     return payload
+
+
+def require_roles(*roles: str):
+    """角色白名单守卫工厂：收敛散落各 handler 的同构 403 判断（2026-08-23，外部审查 C3）。
+
+    用法：`payload: dict = Depends(require_roles("agent", "admin"))`。
+    语义等价于原内联写法 `if payload.get("role") not in (...): raise 403`；
+    需要 role 参与**业务分支**（如按角色切换过滤条件）的场景不适用本工厂，保持内联。"""
+    allowed = frozenset(roles)
+
+    def _checker(payload: dict = Depends(get_current_user)) -> dict:
+        if payload.get("role") not in allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"role required: {'/'.join(sorted(allowed))}",
+            )
+        return payload
+
+    return _checker

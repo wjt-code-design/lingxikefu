@@ -36,7 +36,6 @@ from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.services.answer_cache import put as cache_put
-from app.services.query_rewrite import rewrite
 from app.services.quick_answers import match_quick
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
@@ -394,22 +393,28 @@ async def chat_stream(
                         )
                     except Exception:  # noqa: BLE001 - 采集兜底（merge_profile 内部已 fail-open，双保险）
                         logger.exception("用户画像采集异常（不影响响应）")
-                    # T10：未命中 → 回填缓存（qa 非拒答且有内容；改写后 query 作 key）
-                    if not cache_hit and intent == "qa" and content:
-                        rewritten, _r = rewrite(req.content, history)
-                        if rewritten and content:
-                            try:
-                                await run_in_threadpool(
-                                    cache_put,
-                                    rewritten,
-                                    content,
-                                    source_payloads,
-                                    [s.get("doc_id", "") for s in source_payloads],
-                                    kb_version,
-                                    str(kb_id) if kb_id else None,
-                                )
-                            except Exception:  # noqa: BLE001 - fail-open
-                                logger.exception("缓存回填失败（不影响响应）")
+                    # T10：未命中 → 回填缓存（qa 非拒答且有内容；复用 RAG 已生成的改写 key）。
+                    # 避免在 done 路径重复调用 rewrite，保证检索与回填的 key 同源。
+                    rewritten_query = data.get("rewritten_query")
+                    if (
+                        not cache_hit
+                        and intent == "qa"
+                        and content
+                        and isinstance(rewritten_query, str)
+                        and rewritten_query
+                    ):
+                        try:
+                            await run_in_threadpool(
+                                cache_put,
+                                rewritten_query,
+                                content,
+                                source_payloads,
+                                [s.get("doc_id", "") for s in source_payloads],
+                                kb_version,
+                                str(kb_id) if kb_id else None,
+                            )
+                        except Exception:  # noqa: BLE001 - fail-open
+                            logger.exception("缓存回填失败（不影响响应）")
                     # T1：done 携带 ticket_id（handoff 场景前端展示工单号）
                     # T10 修复：转发 cache_hit（stream_answer 命中时前端可感知缓存答案）
                     # R2/C4：done 回传 user_message_id（本次提问后端真 id）→ 前端本地消息 id 对齐后端

@@ -13,7 +13,12 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
+
+# 容器内直跑引导（与 seed 脚本同款）：把 backend 根加入 sys.path，否则
+# `python scripts/eval_recall.py` 找不到 app 包（脚本目录而非 cwd 进 sys.path）
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
 from app.core.database import SessionLocal

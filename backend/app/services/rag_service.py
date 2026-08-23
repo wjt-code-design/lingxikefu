@@ -181,7 +181,9 @@ async def stream_answer(
         yield ("sources", {"sources": []})
         for delta in _split_tokens(msg):
             yield ("token", {"delta": delta})
-        yield ("done", {"message_id": ""})
+        # Chat 层回填答案缓存时复用该 key；避免在 done 分支再次执行 rewrite。
+        # 这是内部流事件字段，Chat 只向前端转发自己的 done 数据，因而不扩展 SSE 契约。
+        yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query})
         return
 
     try:
@@ -199,7 +201,9 @@ async def stream_answer(
         async for delta in client.stream(messages):
             yield ("token", {"delta": delta})
         yield ("sources", {"sources": _to_sources(result.chunks)})
-        yield ("done", {"message_id": ""})
+        # Chat 层回填答案缓存时复用该 key；避免在 done 分支再次执行 rewrite。
+        # 这是内部流事件字段，Chat 只向前端转发自己的 done 数据，因而不扩展 SSE 契约。
+        yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query})
     except Exception as e:  # noqa: BLE001
         logger.exception("RAG 生成失败")
         yield ("error", {"code": "RAG_GENERATE", "message": f"生成失败: {e}"})

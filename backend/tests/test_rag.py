@@ -163,6 +163,13 @@ async def test_stream_answer_events_order(patch):
     assert events[0][1]["intent"] == "qa"
 
 
+async def test_stream_answer_done_carries_existing_rewritten_query(patch):
+    """缓存回填必须复用管线已生成的改写文本，不能让 Chat 层再次改写。"""
+    events = [e async for e in stream_answer("碎屏显咋换", uuid4())]
+    done = next(data for event, data in events if event == "done")
+    assert done["rewritten_query"] == "碎屏险怎么换"
+
+
 async def test_stream_answer_handoff_no_llm(patch):
     events = [e async for e in stream_answer("我要投诉找人工", uuid4())]
     types = [t for t, _ in events]

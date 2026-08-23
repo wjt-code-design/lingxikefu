@@ -15,7 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy import or_ as sa_or
 from sqlalchemy.orm import Session as OrmSession
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.message import Message, MessageRole, MessageSource
@@ -277,7 +277,7 @@ class AgentMessageReq(BaseModel):
 def post_agent_message(
     session_id: uuid.UUID,
     body: AgentMessageReq,
-    payload: dict = Depends(get_current_user),
+    payload: dict = Depends(require_roles("admin", "agent")),
     db: OrmSession = Depends(get_db),
 ) -> SessionMessage:
     """人工客服代发消息（Branch 3）：仅 admin/agent 可写。
@@ -287,8 +287,6 @@ def post_agent_message(
     - 写后 touch session.updated_at → 会话在列表/工作台排序提前；
     - 归属：agent_id=操作人 sub，agent_name=操作人 email/phone（无则「人工客服」）。
     """
-    if payload.get("role") not in ("admin", "agent"):
-        raise HTTPException(status_code=403, detail="staff role required")
     s = db.scalar(select(Session).where(Session.id == session_id))
     if not s:
         raise HTTPException(status_code=404, detail="session not found")

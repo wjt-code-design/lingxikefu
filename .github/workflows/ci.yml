@@ -1,5 +1,9 @@
-# Lingxi 后端 CI：lint(ruff) → 单测(pytest) → secret 扫描 → 构建镜像
+# Lingxi CI：后端 lint(ruff) → 单测(pytest) → 前端(tsc+vitest) → secret 扫描 → 构建镜像
 # 红线⑨：day1 必须有 CI + 单测基线；禁止提交真实密钥/endpoint。
+#
+# ⚠️ 2026-08-23 修复"幻影 CI"：本文件此前位于 backend/.github/workflows/——GitHub Actions
+# 只读仓库根的 .github/workflows/，导致全部 4 个 job 从未在远端执行过（硬编码密钥与
+# ruff 违规得以推上远端而"CI 绿线"毫无反应）。移至根目录并补上前端 job。
 name: CI
 
 on:
@@ -156,10 +160,30 @@ jobs:
           print("OK: 未发现真实密钥，.env.example 全为占位符")
           PY
 
+  frontend:
+    name: Frontend (tsc + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+
   build:
     name: Build Docker image
     runs-on: ubuntu-latest
-    needs: [lint, test, secret-scan]
+    needs: [lint, test, frontend, secret-scan]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3

@@ -5,12 +5,12 @@
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
-from app.api.deps import get_current_user
+from app.api.deps import require_roles
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.session import Session
@@ -37,12 +37,10 @@ class CustomerListResp(BaseModel):
 def list_customers(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    payload: dict = Depends(get_current_user),
+    payload: dict = Depends(require_roles("admin", "agent")),
     db: OrmSession = Depends(get_db),
 ) -> CustomerListResp:
     """客户画像列表（agent/admin）：用户 × 会话数 × 活跃度 × 未处理工单。"""
-    if payload.get("role") not in ("admin", "agent"):
-        raise HTTPException(status_code=403, detail="agent/admin role required")
     tenant = settings.TENANT_DEFAULT
 
     # 未处理工单计数（按 user 聚合）：join sessions 拿 user_id

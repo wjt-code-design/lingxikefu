@@ -13,8 +13,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import re
+import sys
 import uuid
 from pathlib import Path
+
+# 容器内直跑引导（与 seed 脚本同款）：把 backend 根加入 sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import httpx
 from app.core.config import settings

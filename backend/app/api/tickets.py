@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session as OrmSession
 
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import get_current_user, require_admin, require_roles
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.session import Session
@@ -135,12 +135,10 @@ def ensure_active_ticket(
 @router.post("", response_model=TicketItem, status_code=201)
 def create_ticket(
     req: CreateTicketReq,
-    payload: dict = Depends(get_current_user),
+    payload: dict = Depends(require_roles("admin", "agent")),
     db: OrmSession = Depends(get_db),
 ) -> TicketItem:
     """建单（agent/admin 手动；AI 建单走 chat.py 内部 helper）。幂等：同 session 有活跃工单不重复建。"""
-    if payload.get("role") not in ("admin", "agent"):
-        raise HTTPException(status_code=403, detail="agent/admin role required")
     # 校验 session 存在
     s = db.scalar(select(Session).where(Session.id == req.session_id))
     if not s:
@@ -191,12 +189,10 @@ def list_tickets(
     status: TicketStatus | None = Query(default=None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
-    payload: dict = Depends(get_current_user),
+    payload: dict = Depends(require_roles("admin", "agent")),
     db: OrmSession = Depends(get_db),
 ) -> TicketListResp:
     """工单列表（agent/admin）。"""
-    if payload.get("role") not in ("admin", "agent"):
-        raise HTTPException(status_code=403, detail="agent/admin role required")
     tenant = settings.TENANT_DEFAULT
     cond = [Ticket.tenant_id == tenant]
     if status:
@@ -241,7 +237,7 @@ def get_ticket(
 def update_ticket(
     ticket_id: uuid.UUID,
     req: StatusUpdateReq,
-    payload: dict = Depends(get_current_user),
+    payload: dict = Depends(require_roles("admin", "agent")),
     db: OrmSession = Depends(get_db),
 ) -> TicketItem:
     """状态流转 + 分配（agent/admin）；校验合法迁移 + S2 乐观锁（version 原子比较，冲突 409）。
@@ -249,8 +245,6 @@ def update_ticket(
     并发双客服操作同一工单时，以 ``UPDATE ... WHERE version=req.version`` 原子比较：
     后提交方 rowcount=0 → 409（已被人更新），杜绝「后者静默覆盖」的审计与实况不一致。
     """
-    if payload.get("role") not in ("admin", "agent"):
-        raise HTTPException(status_code=403, detail="agent/admin role required")
     t = db.scalar(select(Ticket).where(Ticket.id == ticket_id, Ticket.tenant_id == settings.TENANT_DEFAULT))
     if not t:
         raise HTTPException(status_code=404, detail="ticket not found")

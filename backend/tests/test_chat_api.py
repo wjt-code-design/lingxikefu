@@ -83,6 +83,10 @@ def client(monkeypatch):
             calls["consumed"] += n
             return (True, 0)
 
+        def refund(self, _uid, n=1, idem_key=None):
+            calls["consumed"] -= n
+            return 0
+
     monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())
     monkeypatch.setattr(
         "app.api.chat._latest_kb_id",
@@ -153,6 +157,34 @@ def test_chat_stream_events_and_persist(client, monkeypatch):
         assert len(srcs) == 1
         assert srcs[0].doc_id == __import__("uuid").UUID("55555555-5555-5555-5555-555555555555")
     assert calls["consumed"] == 1
+
+
+def test_chat_cache_write_reuses_stream_rewritten_query(client, monkeypatch):
+    """缓存回填采用 RAG 流提供的改写 key，不在 Chat 层重复调用 rewrite。"""
+    tc, _, _ = client
+    writes = []
+
+    async def _fake(*_a, **_k):
+        yield ("intent", {"intent": "qa"})
+        yield ("token", {"delta": "保修12个月"})
+        yield ("sources", {"sources": []})
+        yield ("done", {"message_id": "", "rewritten_query": "规范化后的问题"})
+
+    def _unexpected_rewrite(*_a, **_k):
+        raise AssertionError("Chat 层不应重复 rewrite")
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
+    monkeypatch.setattr("app.api.chat.rewrite", _unexpected_rewrite, raising=False)
+    monkeypatch.setattr("app.api.chat.cache_put", lambda *args: writes.append(args))
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "碎屏显咋换", "stream": True},
+        headers=_headers(),
+    )
+
+    assert r.status_code == 200
+    assert writes and writes[0][0] == "规范化后的问题"
 
 
 def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
