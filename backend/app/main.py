@@ -156,6 +156,34 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     return response
 
 
+@app.middleware("http")
+async def tenant_middleware(request: Request, call_next) -> Response:
+    """多租户：从子域名或 header 解析租户，注入 ContextVar 全链路穿透。
+
+    优先级：
+    1. X-Tenant-ID header（测试/服务间调用）
+    2. 子域名（生产环境：{tenant}.lingxi.example.com）
+    3. 回退 settings.TENANT_DEFAULT
+    """
+    from app.core.tenant import set_current_tenant
+
+    tenant = request.headers.get("X-Tenant-ID")
+    if not tenant:
+        # 子域名解析（简化版，生产可接域名配置表）
+        host = request.headers.get("host", "")
+        if host and "." in host:
+            subdomain = host.split(".")[0]
+            if subdomain not in ("www", "api", "admin", "app"):
+                tenant = subdomain
+    if not tenant:
+        tenant = settings.TENANT_DEFAULT
+
+    set_current_tenant(tenant)
+    response = await call_next(request)
+    response.headers["X-Tenant-ID"] = tenant
+    return response
+
+
 # BUG-02（安全）：credentials 模式下禁用通配符方法/头——浏览器对 allow_credentials=True 的
 # 通配符展开为反射模式，等于信任任意 Origin 的凭证请求。收窄到实际使用的白名单。
 app.add_middleware(

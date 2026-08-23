@@ -24,6 +24,7 @@ from sqlalchemy import update
 from sqlalchemy.orm import Session as OrmSession
 
 from app.core.config import settings
+from app.core.tenant import get_current_tenant
 from app.models.ticket import Ticket, TicketStatus
 
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ def transition(
     t = db.get(Ticket, ticket_id)
     if t is None:
         return None
-    if t.tenant_id != settings.TENANT_DEFAULT:
+    if t.tenant_id != get_current_tenant():
         return None
 
     from_status = t.status
@@ -91,7 +92,7 @@ def transition(
             Ticket.id == ticket_id,
             Ticket.status == from_status,
             Ticket.version == t.version,
-            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            Ticket.tenant_id == get_current_tenant(),
         )
         .values(
             status=to_status,

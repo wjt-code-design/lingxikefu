@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import aliased
 
 from app.core.config import settings
+from app.core.tenant import get_current_tenant
 from app.models.message import Message, MessageRole
 from app.models.ticket import Ticket, TicketStatus
 from app.services.ticket_state_machine import transition
@@ -39,7 +40,7 @@ def auto_start_processing(
         select(Ticket).where(
             Ticket.session_id == session_id,
             Ticket.status == TicketStatus.open,
-            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            Ticket.tenant_id == get_current_tenant(),
         )
     )
     if not t:
@@ -59,7 +60,7 @@ def auto_resolve_on_positive_feedback(
         select(Ticket).where(
             Ticket.session_id == session_id,
             Ticket.status == TicketStatus.processing,
-            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            Ticket.tenant_id == get_current_tenant(),
         )
     )
     if not t:
@@ -92,7 +93,7 @@ def auto_resolve_after_timeout(
         .join(Message, Message.session_id == Ticket.session_id)
         .where(
             Ticket.status == TicketStatus.processing,
-            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            Ticket.tenant_id == get_current_tenant(),
             Message.role == MessageRole.agent,
             Message.created_at < cutoff,
             ~exists(
@@ -137,7 +138,7 @@ def auto_close_stale(
         select(Ticket).where(
             Ticket.status.in_([TicketStatus.open, TicketStatus.processing]),
             Ticket.updated_at < cutoff,
-            Ticket.tenant_id == settings.TENANT_DEFAULT,
+            Ticket.tenant_id == get_current_tenant(),
         )
     ).all()
 
