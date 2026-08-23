@@ -55,7 +55,6 @@ export function RolesPage() {
               title={
                 <div className="role-card-head">
                   <Tag color={role.color}>{role.text}</Tag>
-                  <span className="role-key">{r.role}</span>
                 </div>
               }
             >
