@@ -12,6 +12,7 @@ from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.core.security import JWTError, decode_token
 from app.core.token_revocation import revoke_token
+from app.api.roles import ROLE_DEFS
 from app.schemas.auth import (
     AuthResp,
     LoginReq,
@@ -21,6 +22,7 @@ from app.schemas.auth import (
     RegisterReq,
 )
 from app.schemas.knowledge import OkResp
+from app.schemas.roles import RoleListResp
 from app.services.auth import AuthError, AuthService
 from app.services.quota import get_quota_service
 from app.services.user_profile_service import reset_profile
@@ -113,7 +115,7 @@ def me(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
     quota_left = get_quota_service().left_today(str(user.id))
-    quota_total = get_quota_service().daily_limit()  # 方法是属性访问会传 bound method，导致 pydantic 校验失败
+    quota_total = get_quota_service().daily_limit()
     return MeResp(
         user_id=str(user.id),
         email=user.email,
@@ -122,6 +124,23 @@ def me(
         quota_left=quota_left,
         quota_total=quota_total,
     )
+
+
+@router.get("/me/permissions", response_model=RoleListResp)
+def me_permissions(
+    payload: dict = Depends(get_current_user),
+) -> RoleListResp:
+    """返回当前用户的角色权限定义（菜单级可见性 + 数据范围）。
+
+    前端 SideNav 据此动态渲染菜单，不再硬编码三套菜单。
+    """
+    role = payload.get("role", "user")
+    # 只返回当前用户角色的权限定义
+    roles = [r for r in ROLE_DEFS if r.role == role]
+    if not roles:
+        # fallback: 返回 user 角色
+        roles = [r for r in ROLE_DEFS if r.role == "user"]
+    return RoleListResp(roles=roles)
 
 
 @router.post("/me/profile/reset", response_model=OkResp)

@@ -15,15 +15,60 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
+import { getMyPermissions } from '@/api/admin';
+import { ROUTE_META } from '@/routes.config';
+import type { RoleDef } from '@/contracts/api';
 
 type MenuItem = Required<MenuProps>['items'][number];
 
 /**
- * 通用侧栏导航：按角色渲染菜单项。
- * - user：我的对话 / 个人中心 / 意见反馈
- * - agent：客服工作台 / 会话列表 / 工单处理 / 客户管理 / 知识快搜（+ 我的对话 / 个人中心）
- * - admin：运营总览 / 知识库 / 用户管理 / 运营统计 / 踩反馈 / 会话审计 / 系统设置 / 审计日志（+ 我的对话 / 个人中心）
+ * 路径 → 图标映射（集中管理，避免散落在 JSX 里）
+ */
+const ICON_MAP: Record<string, React.ReactNode> = {
+  '/chat': <MessageOutlined />,
+  '/profile': <UserOutlined />,
+  '/feedback': <DislikeOutlined />,
+  '/tickets': <FileTextOutlined />,
+  '/faq': <BookOutlined />,
+  '/help': <BookOutlined />,
+  '/agent/dashboard': <CustomerServiceOutlined />,
+  '/agent/sessions': <MessageOutlined />,
+  '/agent/tickets': <FileTextOutlined />,
+  '/agent/customers': <TeamOutlined />,
+  '/agent/kb-search': <FileSearchOutlined />,
+  '/admin/dashboard': <BarChartOutlined />,
+  '/admin/knowledge': <BookOutlined />,
+  '/admin/users': <TeamOutlined />,
+  '/admin/roles': <SafetyOutlined />,
+  '/admin/stats': <BarChartOutlined />,
+  '/admin/feedback': <DislikeOutlined />,
+  '/admin/sessions': <MessageOutlined />,
+  '/admin/settings': <SettingOutlined />,
+  '/admin/logs': <FileTextOutlined />,
+};
+
+/**
+ * 路径 → 分组映射（按路由前缀自动归类）
+ */
+function getGroupKey(path: string): string {
+  if (path.startsWith('/admin')) return 'grp-admin';
+  if (path.startsWith('/agent')) return 'grp-agent';
+  return 'grp-personal';
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  'grp-personal': '我的',
+  'grp-agent': '客服工作台',
+  'grp-admin': '运营后台',
+};
+
+const GROUP_ORDER = ['grp-personal', 'grp-agent', 'grp-admin'];
+
+/**
+ * 通用侧栏导航：基于后端 /auth/me/permissions 动态渲染菜单。
+ * 后端 ROLE_DEFS 定义每个角色可见的路径，前端只渲染有权限的菜单项。
  */
 export function SideNav() {
   const role = useAuthStore((s) => s.role);
@@ -31,76 +76,50 @@ export function SideNav() {
   const location = useLocation();
   const [openKeys, setOpenKeys] = useState<string[]>([]);
 
-  // 所有已登录用户都有的"个人"菜单
-  const personalGroupKey = 'grp-personal';
-  const agentGroupKey = 'grp-agent';
-  const adminGroupKey = 'grp-admin';
+  // 从后端拉取当前用户可见菜单
+  const { data: permissions, isLoading } = useQuery({
+    queryKey: ['my-permissions', role],
+    queryFn: getMyPermissions,
+    placeholderData: (prev) => prev,
+  });
 
-  const personalMenu: MenuItem = {
-    key: personalGroupKey,
-    type: 'group' as const,
-    label: '我的',
-    children: [
-      { key: '/chat', icon: <MessageOutlined />, label: '我的对话' },
-      { key: '/profile', icon: <UserOutlined />, label: '个人中心' },
-      { key: '/feedback', icon: <DislikeOutlined />, label: '意见反馈' },
-    ],
-  };
+  // 提取所有可见路径
+  const visiblePaths = permissions?.roles?.flatMap((r: RoleDef) => r.menus) ?? [];
 
-  const items: MenuItem[] = [
-    // 个人菜单（所有角色可见）
-    personalMenu,
-    // 客服工作台（agent 或 admin 可见）
-    ...(role === 'admin' || role === 'agent'
-      ? [
-          {
-            key: agentGroupKey,
-            type: 'group' as const,
-            label: '客服工作台',
-            children: [
-              { key: '/agent/dashboard', icon: <CustomerServiceOutlined />, label: '工作台首页' },
-              { key: '/agent/sessions', icon: <MessageOutlined />, label: '会话列表' },
-              { key: '/agent/tickets', icon: <FileTextOutlined />, label: '工单处理' },
-              { key: '/agent/customers', icon: <TeamOutlined />, label: '客户管理' },
-              { key: '/agent/kb-search', icon: <FileSearchOutlined />, label: '知识快搜' },
-            ],
-          },
-        ]
-      : []),
-    // 运营后台（仅 admin 可见）
-    ...(role === 'admin'
-      ? [
-          {
-            key: adminGroupKey,
-            type: 'group' as const,
-            label: '运营后台',
-            children: [
-              { key: '/admin/dashboard', icon: <BarChartOutlined />, label: '运营总览' },
-              { key: '/admin/knowledge', icon: <BookOutlined />, label: '知识库' },
-              { key: '/admin/users', icon: <TeamOutlined />, label: '用户管理' },
-              { key: '/admin/roles', icon: <SafetyOutlined />, label: '角色权限' },
-              { key: '/admin/stats', icon: <BarChartOutlined />, label: '数据统计' },
-              { key: '/admin/feedback', icon: <DislikeOutlined />, label: '评价反馈' },
-              { key: '/admin/sessions', icon: <MessageOutlined />, label: '会话审计' },
-              { key: '/admin/settings', icon: <SettingOutlined />, label: '系统设置' },
-              { key: '/admin/logs', icon: <FileTextOutlined />, label: '操作日志' },
-            ],
-          },
-        ]
-      : []),
-  ];
+  // 按分组归类
+  const groupMap = new Map<string, MenuItem[]>();
+  for (const path of visiblePaths) {
+    const groupKey = getGroupKey(path);
+    if (!groupMap.has(groupKey)) {
+      groupMap.set(groupKey, []);
+    }
+    const meta = ROUTE_META[path];
+    groupMap.get(groupKey)!.push({
+      key: path,
+      icon: ICON_MAP[path] ?? <MessageOutlined />,
+      label: meta?.title ?? path,
+    });
+  }
 
-  // 根据当前路径自动展开对应分组（受控模式）
+  // 按固定顺序组装分组
+  const items: MenuItem[] = GROUP_ORDER
+    .filter((gk) => groupMap.has(gk))
+    .map((gk) => ({
+      key: gk,
+      type: 'group' as const,
+      label: GROUP_LABELS[gk],
+      children: groupMap.get(gk)!,
+    }));
+
+  // 根据当前路径自动展开对应分组
   useEffect(() => {
     const path = location.pathname;
-    if (path.startsWith('/admin')) {
-      setOpenKeys([adminGroupKey]);
-    } else if (path.startsWith('/agent')) {
-      setOpenKeys([agentGroupKey]);
-    } else {
-      setOpenKeys([personalGroupKey]);
-    }
-  }, [location.pathname, role, adminGroupKey, agentGroupKey, personalGroupKey]);
+    setOpenKeys([getGroupKey(path)]);
+  }, [location.pathname]);
+
+  if (isLoading) {
+    return <div className="side-nav-loading" style={{ padding: 24 }} />;
+  }
 
   return (
     <Menu

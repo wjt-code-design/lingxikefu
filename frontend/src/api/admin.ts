@@ -66,3 +66,9 @@ export async function getRoles(): Promise<RoleListResp> {
   const r = await http.get<RoleListResp>('/admin/roles');
   return r.data;
 }
+
+/** GET /auth/me/permissions → 当前用户角色权限（菜单级可见性 + 数据范围） */
+export async function getMyPermissions(): Promise<RoleListResp> {
+  const r = await http.get<RoleListResp>('/auth/me/permissions');
+  return r.data;
+}
