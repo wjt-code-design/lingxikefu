@@ -21,6 +21,9 @@ export interface RouteMeta {
 export const ROUTE_META: Record<string, RouteMeta> = {
   // —— 用户侧（WidgetShell）——
   '/chat': { title: '智能对话', group: 'user', breadcrumb: ['对话', '智能对话'] },
+  '/tickets': { title: '我的工单', group: 'user', breadcrumb: ['服务', '我的工单'] },
+  '/faq': { title: '帮助中心', group: 'user', breadcrumb: ['服务', '帮助中心'] },
+  '/help': { title: '帮助中心', group: 'user', breadcrumb: ['服务', '帮助中心'] },
   '/profile': { title: '个人中心', group: 'user', breadcrumb: ['账户', '个人中心'] },
 
   // —— 客服工作台（/agent/*）——

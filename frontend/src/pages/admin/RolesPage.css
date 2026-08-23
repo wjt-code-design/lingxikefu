@@ -54,8 +54,20 @@
 
 .menu-tag {
   margin-bottom: 6px;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.menu-tag-title {
+  font-weight: 500;
+}
+
+.menu-tag-path {
   font-family: ui-monospace, 'SFMono-Regular', Consolas, monospace;
-  font-size: 12px;
+  font-size: 11px;
+  color: var(--text-3);
 }
 
 @media (max-width: 767px) {

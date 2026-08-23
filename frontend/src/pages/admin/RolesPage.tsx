@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Card, Descriptions, Tag, Typography } from 'antd';
 import { getRoles } from '@/api/admin';
+import { ROUTE_META } from '@/routes.config';
 import type { RoleDef } from '@/contracts/api';
 import './RolesPage.css';
 
@@ -69,11 +70,15 @@ export function RolesPage() {
               <div className="menus-block">
                 <div className="menus-title">可见菜单（{r.menus.length}）</div>
                 <div className="menus-tags">
-                  {r.menus.map((m) => (
-                    <Tag key={m} className="menu-tag">
-                      {m}
-                    </Tag>
-                  ))}
+                  {r.menus.map((m) => {
+                    const meta = ROUTE_META[m];
+                    return (
+                      <Tag key={m} className="menu-tag" title={meta ? `${meta.title} · ${m}` : m}>
+                        <span className="menu-tag-title">{meta?.title ?? m}</span>
+                        {meta && <span className="menu-tag-path">{m}</span>}
+                      </Tag>
+                    );
+                  })}
                 </div>
               </div>
             </Card>
