@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import { Menu } from 'antd';
+import type { MenuProps } from 'antd';
 import {
   BarChartOutlined,
   BookOutlined,
@@ -15,6 +17,8 @@ import {
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
+type MenuItem = Required<MenuProps>['items'][number];
+
 /**
  * 通用侧栏导航：按角色渲染菜单项。
  * - user：我的对话 / 个人中心 / 意见反馈
@@ -25,9 +29,15 @@ export function SideNav() {
   const role = useAuthStore((s) => s.role);
   const navigate = useNavigate();
   const location = useLocation();
+  const [openKeys, setOpenKeys] = useState<string[]>([]);
 
   // 所有已登录用户都有的"个人"菜单
-  const personalMenu = {
+  const personalGroupKey = 'grp-personal';
+  const agentGroupKey = 'grp-agent';
+  const adminGroupKey = 'grp-admin';
+
+  const personalMenu: MenuItem = {
+    key: personalGroupKey,
     type: 'group' as const,
     label: '我的',
     children: [
@@ -37,13 +47,14 @@ export function SideNav() {
     ],
   };
 
-  const items = [
+  const items: MenuItem[] = [
     // 个人菜单（所有角色可见）
     personalMenu,
     // 客服工作台（agent 或 admin 可见）
     ...(role === 'admin' || role === 'agent'
       ? [
           {
+            key: agentGroupKey,
             type: 'group' as const,
             label: '客服工作台',
             children: [
@@ -60,6 +71,7 @@ export function SideNav() {
     ...(role === 'admin'
       ? [
           {
+            key: adminGroupKey,
             type: 'group' as const,
             label: '运营后台',
             children: [
@@ -78,20 +90,25 @@ export function SideNav() {
       : []),
   ];
 
-  // 计算默认展开的分组：当前路由所在分组
-  const getDefaultOpenKeys = () => {
+  // 根据当前路径自动展开对应分组（受控模式）
+  useEffect(() => {
     const path = location.pathname;
-    if (path.startsWith('/admin')) return ['admin-group'];
-    if (path.startsWith('/agent')) return ['agent-group'];
-    return ['personal-group'];
-  };
+    if (path.startsWith('/admin')) {
+      setOpenKeys([adminGroupKey]);
+    } else if (path.startsWith('/agent')) {
+      setOpenKeys([agentGroupKey]);
+    } else {
+      setOpenKeys([personalGroupKey]);
+    }
+  }, [location.pathname, role, adminGroupKey, agentGroupKey, personalGroupKey]);
 
   return (
     <Menu
       className="side-nav"
       mode="inline"
       selectedKeys={[location.pathname]}
-      defaultOpenKeys={getDefaultOpenKeys()}
+      openKeys={openKeys}
+      onOpenChange={setOpenKeys}
       items={items}
       onClick={({ key }) => navigate(key)}
       style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}

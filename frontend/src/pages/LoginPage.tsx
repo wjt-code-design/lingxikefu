@@ -32,7 +32,13 @@ export function LoginPage() {
       useAuthStore.getState().setUser(meResp);
       message.success('登录成功');
       const from = (location.state as { from?: string } | null)?.from;
-      navigate(from && from !== '/login' ? from : '/chat');
+      // 有来源页且非登录页 → 回到来源页；否则按角色分流到对应首页
+      if (from && from !== '/login') {
+        navigate(from);
+      } else {
+        const home = meResp.role === 'admin' ? '/admin/dashboard' : meResp.role === 'agent' ? '/agent/dashboard' : '/chat';
+        navigate(home);
+      }
     } catch (e) {
       message.error((e as ApiError).message || '登录失败');
     } finally {
