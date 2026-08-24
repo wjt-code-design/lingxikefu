@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { Link, MemoryRouter } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import { ChatContainer } from '@/components/chat/ChatContainer';
 import { useAuthStore } from '@/store/authStore';
@@ -19,12 +19,16 @@ vi.mock('@/hooks/useChatStream', () => ({
 
 vi.mock('@/api/sessions', () => ({
   createSession: vi.fn(),
-  getSessionDetail: vi.fn().mockResolvedValue({
-    id: 'sess-1',
-    messages: [
-      { id: 'm-1', role: 'user', content: '退款多久到账？', created_at: '2026-08-24T10:00:00Z' },
-    ],
-  }),
+  // 按入参回显会话 id：同一渲染树内 session 参数变化（sess-1 → sess-2）时，
+  // 详情能返回新会话 id，避免 sessionId 永远停在旧值导致切换用例失真。
+  getSessionDetail: vi.fn((sid: string) =>
+    Promise.resolve({
+      id: sid,
+      messages: [
+        { id: `m-${sid}`, role: 'user', content: '退款多久到账？', created_at: '2026-08-24T10:00:00Z' },
+      ],
+    }),
+  ),
   sendAgentMessage: vi.fn(),
   rateSatisfaction: vi.fn(),
   suggestReply: (...args: unknown[]) => suggestMock(...args),
@@ -92,5 +96,48 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
     await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByRole('region', { name: 'AI 建议回复' })).not.toBeInTheDocument();
+  });
+
+  it('切换会话（→另一会话 / →无参）→ AI 建议卡片重置，旧会话建议不残留', async () => {
+    useAuthStore.setState({
+      token: 't', refreshToken: 't', role: 'agent',
+      user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+    });
+    // 渲染树内挂两个站内导航链接：点击即改 searchParams，模拟客服在会话间切换
+    // （rerender 换 initialEntries 不会生效——MemoryRouter 位置仅在首挂载初始化）
+    render(
+      <ConfigProvider>
+        <MemoryRouter initialEntries={['/chat?session=sess-1']}>
+          <ChatContainer />
+          <Link to="/chat?session=sess-2">切换到会话2</Link>
+          <Link to="/chat">切换到无参</Link>
+        </MemoryRouter>
+      </ConfigProvider>,
+    );
+
+    // sess-1 就绪 + 点 AI 推荐 → 卡片出现
+    await waitFor(() => expect(screen.getByRole('button', { name: /转人工/ })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'AI 建议回复' })).toBeInTheDocument(),
+    );
+
+    // 切到另一会话（sess-1 → sess-2）：新会话详情加载后，旧建议卡片必须消失
+    await userEvent.click(screen.getByRole('link', { name: '切换到会话2' }));
+    await waitFor(() => expect(screen.getByText('会话 sess-2')).toBeInTheDocument());
+    expect(screen.queryByRole('region', { name: 'AI 建议回复' })).not.toBeInTheDocument();
+
+    // sess-2 再次点 AI 推荐 → 卡片出现，且请求发往新会话
+    await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'AI 建议回复' })).toBeInTheDocument(),
+    );
+    expect(suggestMock).toHaveBeenLastCalledWith('sess-2');
+
+    // 有参切到无参（sess-2 → /chat）：卡片同样重置
+    await userEvent.click(screen.getByRole('link', { name: '切换到无参' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('region', { name: 'AI 建议回复' })).not.toBeInTheDocument(),
+    );
   });
 });

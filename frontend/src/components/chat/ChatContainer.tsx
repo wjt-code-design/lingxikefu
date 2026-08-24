@@ -212,6 +212,7 @@ export function ChatContainer({
         setIntervened(false); // W5：切会话重置介入视角
         setTicketCreated(null);
         setManualTicket(null);
+        setAiSuggest(null); // 批次A：切会话重置 AI 建议卡片（防旧会话建议残留/填入新会话输入框）
         reset(); // C1：切到新会话 → abort 旧流
       }
       return;
@@ -221,6 +222,7 @@ export function ChatContainer({
     setIntervened(false); // W5：切会话重置介入视角
     setTicketCreated(null);
     setManualTicket(null);
+    setAiSuggest(null); // 批次A：切会话重置 AI 建议卡片（防旧会话建议残留/填入新会话输入框）
     getSessionDetail(sessionParam)
       .then((d) => {
         setSessionId(d.id);
