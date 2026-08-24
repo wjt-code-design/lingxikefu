@@ -1,5 +1,5 @@
 import { http } from '@/api/client';
-import type { Message, Session, SessionDetail, SessionListReq, SessionListResp } from '@/contracts/api';
+import type { Message, Session, SessionDetail, SessionListReq, SessionListResp, SuggestResp } from '@/contracts/api';
 
 /**
  * 会话接口。
@@ -85,4 +85,10 @@ export async function rateSatisfaction(
 export async function sendAgentMessage(id: string, content: string): Promise<Message> {
   const r = await http.post<Omit<Message, 'session_id'>>(`/sessions/${id}/messages`, { content });
   return { ...r.data, session_id: id };
+}
+
+/** 坐席辅助（批次A）：获取 AI 推荐回复；question 缺省取会话最近一条顾客消息。仅 admin/agent。 */
+export async function suggestReply(id: string, question?: string): Promise<SuggestResp> {
+  const r = await http.post<SuggestResp>(`/sessions/${id}/suggest`, question ? { question } : {});
+  return r.data;
 }

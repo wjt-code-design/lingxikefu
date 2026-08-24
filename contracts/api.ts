@@ -72,29 +72,41 @@ export interface SessionListResp {
   items: Session[];
   total: number;
 }
+/** 用户画像摘要（Phase D，长期记忆）：仅 agent/admin 视角返回；顾客端为 undefined。 */
+export interface SessionProfile {
+  schema_version?: number;
+  topics?: Record<string, number>; // 常问主题 -> 次数
+  entities?: string[]; // 历史订单号/型号
+  satisfaction?: { up?: number; down?: number };
+  handoff?: { count?: number; last_at?: string };
+  preferences?: { 品类?: string[] };
+}
+/** 转人工交接摘要（本次会话上下文压缩打包）：仅 agent/admin 视角返回。 */
+export interface SessionHandoffSummary {
+  topic?: string; // 命中流程主题（可多个，/ 分隔）
+  entities?: string[]; // 具体实体（订单号/型号）
+  question?: string; // 最近一条用户诉求
+}
 export interface SessionDetail {
   id: string;
   title?: string;
   messages: Message[];
-  /** 用户画像摘要（Phase D，长期记忆）：仅 agent/admin 视角返回；顾客端为 undefined。 */
-  profile?: {
-    schema_version?: number;
-    topics?: Record<string, number>; // 常问主题 -> 次数
-    entities?: string[]; // 历史订单号/型号
-    satisfaction?: { up?: number; down?: number };
-    handoff?: { count?: number; last_at?: string };
-    preferences?: { 品类?: string[] };
-  };
-  /** 转人工交接摘要（本次会话上下文压缩打包）：仅 agent/admin 视角返回。 */
-  handoff_summary?: {
-    topic?: string; // 命中流程主题（可多个，/ 分隔）
-    entities?: string[]; // 具体实体（订单号/型号）
-    question?: string; // 最近一条用户诉求
-  };
+  profile?: SessionProfile;
+  handoff_summary?: SessionHandoffSummary;
 }
 /** Branch 3：人工客服代发消息请求体（POST /sessions/{id}/messages，仅 admin/agent 可用）。 */
 export interface AgentMessageReq {
   content: string;
+}
+/** 批次A 坐席辅助：AI 推荐回复请求体（POST /sessions/{id}/suggest，仅 admin/agent）。 */
+export interface SuggestReq {
+  /** 需要建议的问题；缺省取会话最近一条顾客消息 */
+  question?: string;
+}
+/** 批次A 坐席辅助响应：草拟回复 + 引用来源（fail-open：失败返回空 text）。 */
+export interface SuggestResp {
+  text: string;
+  sources: MessageSource[];
 }
 
 // ---------- Messages ----------
@@ -179,6 +191,7 @@ export interface ChatStreamReq {
   content: string;
   stream: true;
   client_msg_id?: string; // R2：客户端提问幂等键（前端生成、重试复用，配额幂等扣费）
+  image_paths?: string[]; // v1.3 图片理解：前端上传后的图片路径列表（后端 default_factory=list，缺省空）
 }
 
 // ---------- Knowledge ----------

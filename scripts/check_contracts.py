@@ -26,11 +26,13 @@ BASELINE = ROOT / 'contracts' / '.check-baseline.json'
 AUTO_MODELS = {'HTTPValidationError', 'ValidationError'}
 # OpenAPI schema 名（非自动生成、契约无对应类型）按此列表忽略：
 # - 契约已有对应（命名差异）：AdminSettingsResp↔AdminSettings、KnowledgeSearchHit↔KnowledgeHit、
-#   FaqDocItem↔FaqDoc、FaqKbItem↔FaqKBItem、FaqListResp↔PublicFaqResp、UserRole↔Role
+#   FaqDocItem↔FaqDoc、FaqKbItem↔FaqKBItem、FaqListResp↔PublicFaqResp、UserRole↔Role、
+#   SessionMessageSource↔MessageSource（Task2/2026-08-24 坐席辅助引用来源，后端 docstring 自证对齐）
 # - 后端模型未回填契约（KNOWN_GAP，见 contracts/README.md，待后续轮次回填）：CreateSessionReq、
 #   CreateTicketReq、SatisfactionReq、AgentReplyReq、FrontendErrorReq、SessionItem、
 #   SessionMessage、FeedbackItem、FeedbackListResp、FeedbackResp、ModelSettings、QuotaSettings、
-#   RagSettings、RateLimitSettings、FeedbackRating
+#   RagSettings、RateLimitSettings、FeedbackRating、EvalResultItem、EvalHistoryResp、
+#   EvalTriggerReq、EvalTriggerResp（评测中心，/admin/eval，待后续轮次回填）
 # - R3：StatusUpdateReq 已回填契约（S2 乐观锁），移出本列表按 A 类正常比对
 IGNORE_EXTRA = {
     'ModelSettings', 'QuotaSettings', 'RagSettings', 'RateLimitSettings',
@@ -38,6 +40,8 @@ IGNORE_EXTRA = {
     'AdminSettingsResp', 'KnowledgeSearchHit', 'FaqDocItem', 'FaqKbItem', 'FaqListResp',
     'CreateSessionReq', 'CreateTicketReq', 'SatisfactionReq',
     'FrontendErrorReq', 'SessionItem', 'SessionMessage', 'FeedbackItem', 'FeedbackListResp', 'FeedbackResp',
+    'SessionMessageSource',
+    'EvalResultItem', 'EvalHistoryResp', 'EvalTriggerReq', 'EvalTriggerResp',
 }
 
 INTERFACE_RE = re.compile(r'^export\s+interface\s+(\w+)\s*\{', re.M)

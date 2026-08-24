@@ -225,6 +225,60 @@
         ]
       }
     },
+    "/api/v1/auth/me/permissions": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Me Permissions",
+        "description": "返回当前用户的角色权限定义（菜单级可见性 + 数据范围）。\n\n前端 SideNav 据此动态渲染菜单，不再硬编码三套菜单。",
+        "operationId": "me_permissions_api_v1_auth_me_permissions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleListResp"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/auth/me/profile/reset": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Reset My Profile",
+        "description": "隐私自主控制（2026-08-22 Phase E）：清空当前用户的画像（长期记忆）。\n\n- 任何登录用户可清自己的画像（画像来源全为本人历史会话/反馈，隐私合规最小化）；\n- 清空后画像归零，后续不再注入（重新对话会重新采集）；\n- fail-open：无画像时返回 ok（幂等，重复调无副作用）。",
+        "operationId": "reset_my_profile_api_v1_auth_me_profile_reset_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResp"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/sessions": {
       "post": {
         "tags": [
@@ -590,6 +644,65 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OkResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sessions/{session_id}/suggest": {
+      "post": {
+        "tags": [
+          "sessions"
+        ],
+        "summary": "Suggest Reply",
+        "description": "坐席辅助（批次A）：为人工客服草拟回复建议。手动触发、fail-open、60s 结果缓存。\n\n- 不走完整 RAG 管线：直接检索 top3（拒答场景更要给「需确认什么」的建议）；\n- 不扣用户配额（内部工具）；\n- LLM 用非流式 complete（客服点按钮等 1-2s 可接受，无逐字上屏需求）。",
+        "operationId": "suggest_reply_api_v1_sessions__session_id__suggest_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SuggestReq"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuggestResp"
                 }
               }
             }
@@ -1440,6 +1553,109 @@
         }
       }
     },
+    "/api/v1/admin/eval/history": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Eval History",
+        "description": "评测历史（最近 30 次运行，按 run_id 聚合）。",
+        "operationId": "eval_history_api_v1_admin_eval_history_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalHistoryResp"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/eval/latest": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Eval Latest",
+        "description": "最近一次评测结果 + 退化告警。\n\n返回最新一次运行的分数，以及与历史均值的对比。",
+        "operationId": "eval_latest_api_v1_admin_eval_latest_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Eval Latest Api V1 Admin Eval Latest Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/eval/run": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Run Eval",
+        "description": "后台异步触发评测。\n\n评测逻辑复用 scripts/eval_faithfulness.py 和 scripts/eval_recall.py 的函数，\n结果落 EvalResult 表，前端 GET /eval/history 查看。",
+        "operationId": "run_eval_api_v1_admin_eval_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EvalTriggerReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalTriggerResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/faq": {
       "get": {
         "tags": [
@@ -1849,14 +2065,14 @@
         }
       }
     },
-    "/api/v1/tickets/my": {
+    "/api/v1/tickets/{ticket_id}": {
       "get": {
         "tags": [
           "tickets"
         ],
-        "summary": "List My Tickets",
-        "description": "我的工单（P2-1，user 可调）：按当前用户会话归属过滤（Ticket→Session.user_id）。",
-        "operationId": "list_my_tickets_api_v1_tickets_my_get",
+        "summary": "Get Ticket",
+        "description": "查询单个工单状态（聊天页角标轮询用）。\n\n越权防护：\n- user 仅可查自己会话归属的工单（Ticket→Session.user_id==当前用户）；\n- agent/admin 放行（客服/管理员可查看任意工单，供 observe 视角轮询）。",
+        "operationId": "get_ticket_api_v1_tickets__ticket_id__get",
         "security": [
           {
             "HTTPBearer": []
@@ -1864,42 +2080,13 @@
         ],
         "parameters": [
           {
-            "name": "status",
-            "in": "query",
-            "required": false,
+            "name": "ticket_id",
+            "in": "path",
+            "required": true,
             "schema": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/TicketStatus"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Status"
-            }
-          },
-          {
-            "name": "page",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "default": 1,
-              "title": "Page"
-            }
-          },
-          {
-            "name": "size",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 100,
-              "minimum": 1,
-              "default": 20,
-              "title": "Size"
+              "type": "string",
+              "format": "uuid",
+              "title": "Ticket Id"
             }
           }
         ],
@@ -1909,7 +2096,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TicketListResp"
+                  "$ref": "#/components/schemas/TicketItem"
                 }
               }
             }
@@ -1925,34 +2112,7 @@
             }
           }
         }
-      }
-    },
-    "/api/v1/tickets/my/stream": {
-      "get": {
-        "tags": [
-          "tickets"
-        ],
-        "summary": "My Ticket Stream",
-        "description": "用户侧工单状态 SSE（第6组项4）：实时推送本人工单状态变更 + 心跳。\n\n事件协议：connected（握手，data.user_id）/ ticket_update（data: user_id/ticket_id/status/ts）/ ping（心跳）。\n尽力而为（单 worker 进程内分发）；前端保留 30s 轮询兜底，保证断线/多 worker 下最终一致。",
-        "operationId": "my_ticket_stream_api_v1_tickets_my_stream_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/tickets/{ticket_id}": {
+      },
       "patch": {
         "tags": [
           "tickets"
@@ -2574,6 +2734,13 @@
               }
             ],
             "title": "Client Msg Id"
+          },
+          "image_paths": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Image Paths"
           }
         },
         "type": "object",
@@ -2786,6 +2953,117 @@
           "items"
         ],
         "title": "DocumentListResp"
+      },
+      "EvalHistoryResp": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EvalResultItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "EvalHistoryResp"
+      },
+      "EvalResultItem": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "passed": {
+            "type": "integer",
+            "title": "Passed"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "metric",
+          "score",
+          "total",
+          "passed",
+          "status",
+          "source",
+          "created_at"
+        ],
+        "title": "EvalResultItem"
+      },
+      "EvalTriggerReq": {
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "default": 0
+          },
+          "kb_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Name"
+          }
+        },
+        "type": "object",
+        "title": "EvalTriggerReq",
+        "description": "触发评测请求体。"
+      },
+      "EvalTriggerResp": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "status",
+          "message"
+        ],
+        "title": "EvalTriggerResp"
       },
       "FaqDocItem": {
         "properties": {
@@ -3042,7 +3320,7 @@
           "count"
         ],
         "title": "HotGap",
-        "description": "F1：待补录问题（handoff/refuse 高频问句，运营补 KB 信号）。"
+        "description": "F1：待补录问题（refuse 意图高频问句——QA 检索无依据被拒答，运营补 KB 信号）。\nhandoff（转人工/情绪）是正常分流，不属于知识缺口，不计入。"
       },
       "KBItem": {
         "properties": {
@@ -3674,6 +3952,30 @@
             },
             "type": "array",
             "title": "Messages"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "handoff_summary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Handoff Summary"
           }
         },
         "type": "object",
@@ -3824,6 +4126,13 @@
               }
             ],
             "title": "Agent Name"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SessionMessageSource"
+            },
+            "type": "array",
+            "title": "Sources"
           }
         },
         "type": "object",
@@ -3834,6 +4143,46 @@
           "created_at"
         ],
         "title": "SessionMessage"
+      },
+      "SessionMessageSource": {
+        "properties": {
+          "chunk_id": {
+            "type": "string",
+            "title": "Chunk Id"
+          },
+          "doc_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Doc Id"
+          },
+          "doc_title": {
+            "type": "string",
+            "title": "Doc Title"
+          },
+          "snippet": {
+            "type": "string",
+            "title": "Snippet"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "chunk_id",
+          "doc_title",
+          "snippet",
+          "score"
+        ],
+        "title": "SessionMessageSource",
+        "description": "消息引用来源（对齐契约 MessageSource：chunk_id/doc_id/doc_title/snippet/score）。\n2026-08-21：会话详情补曝光引用来源，修复历史消息无溯源（此前详情接口不含 sources）。"
       },
       "StatsTrendResp": {
         "properties": {
@@ -3879,6 +4228,44 @@
           "version"
         ],
         "title": "StatusUpdateReq"
+      },
+      "SuggestReq": {
+        "properties": {
+          "question": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Question"
+          }
+        },
+        "type": "object",
+        "title": "SuggestReq",
+        "description": "坐席辅助请求：question 缺省取会话最近一条顾客消息。"
+      },
+      "SuggestResp": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "default": ""
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/SessionMessageSource"
+            },
+            "type": "array",
+            "title": "Sources"
+          }
+        },
+        "type": "object",
+        "title": "SuggestResp",
+        "description": "坐席辅助响应：草拟回复 + 引用来源。fail-open：失败返回空 text（不 5xx）。"
       },
       "SuggestionItem": {
         "properties": {
