@@ -22,13 +22,16 @@ STAGE_COLLECTING = "info_collecting"  # 有主题，缺必需槽位
 STAGE_RESOLVING = "resolving"        # 槽位齐或无需槽位
 STAGE_CLARIFYING = "clarifying"      # 已发澄清问句，等用户回复（批次C 使用，本批次只定义）
 
+#: 槽位名常量（大扫查修复：消除 "order_no" 魔法串散布 3 模块）
+SLOT_ORDER_NO = "order_no"
+
 #: 主题 → 必需槽位（首期仅 order_no 一个槽位，YAGNI；主题名与 session_context.FLOW_TOPICS 一致）
 REQUIRED_SLOTS: dict[str, list[str]] = {
-    "退款": ["order_no"],
-    "退换货": ["order_no"],
-    "保修/维修": ["order_no"],
-    "配送/物流": ["order_no"],
-    "价保": ["order_no"],
+    "退款": [SLOT_ORDER_NO],
+    "退换货": [SLOT_ORDER_NO],
+    "保修/维修": [SLOT_ORDER_NO],
+    "配送/物流": [SLOT_ORDER_NO],
+    "价保": [SLOT_ORDER_NO],
     "发票": [],
 }
 
@@ -61,8 +64,8 @@ def update(state: dict | None, message: str) -> dict:
     # 2) 槽位：提取订单号，只增不删（首个值保留，后续订单号不覆盖——多单场景批次D再议）
     for m in _ORDER_RE.finditer(message):
         order_no = m.group(0).strip()
-        if order_no and "order_no" not in slots:
-            slots["order_no"] = order_no
+        if order_no and SLOT_ORDER_NO not in slots:
+            slots[SLOT_ORDER_NO] = order_no
             break  # 首个订单号即槽位值
     s["slots"] = slots
 
@@ -92,8 +95,19 @@ def to_prompt_hint(state: dict | None) -> str | None:
     if not state or not state.get("topic"):
         return None
     parts = [f"会话主题：{state['topic']}"]
-    if "order_no" in (state.get("slots") or {}):
-        parts.append(f"已提供订单号：{state['slots']['order_no']}")
-    elif "order_no" in REQUIRED_SLOTS.get(state["topic"], []):
+    if SLOT_ORDER_NO in (state.get("slots") or {}):
+        parts.append(f"已提供订单号：{state['slots'][SLOT_ORDER_NO]}")
+    elif SLOT_ORDER_NO in REQUIRED_SLOTS.get(state["topic"], []):
         parts.append("订单号：未提供")
     return "；".join(parts)
+
+
+def mark_clarifying(state: dict | None) -> dict:
+    """澄清轮状态转移（大扫查修复：状态变更逻辑收回单一真源，chat 层不再内联改写）。
+
+    stage=clarifying + clarify_count+1；返回新 dict，不修改入参。
+    """
+    s = dict(state or new_state())
+    s["stage"] = STAGE_CLARIFYING
+    s["clarify_count"] = int(s.get("clarify_count", 0)) + 1
+    return s

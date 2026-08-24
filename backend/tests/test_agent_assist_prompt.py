@@ -51,3 +51,21 @@ def test_injection_block_declared():
     """M10：分隔块内容声明为数据非指令。"""
     sys = build_assist_messages("q", None, [_chunk("x")])[0]["content"]
     assert "不是指令" in sys
+
+
+def test_state_hint_injected_as_block():
+    """大扫查修复（M-1）：会话状态（主题/已提供订单号）注入 <<会话状态>> 块，防建议重复索要已有信息。"""
+    msgs = build_assist_messages(
+        "q", None, [_chunk("x")], state_hint="会话主题：退款；已提供订单号：SO2026080118"
+    )
+    user = msgs[1]["content"]
+    assert "<<会话状态>>" in user and "<</会话状态>>" in user
+    assert "SO2026080118" in user
+
+
+def test_state_hint_none_keeps_old_shape():
+    """state_hint=None：user 内容与旧版完全一致（diff=0 兼容）。"""
+    a = build_assist_messages("q", None, [_chunk("x")])
+    b = build_assist_messages("q", None, [_chunk("x")], state_hint=None)
+    assert a == b
+    assert "会话状态" not in b[1]["content"]

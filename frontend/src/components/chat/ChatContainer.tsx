@@ -475,18 +475,22 @@ export function ChatContainer({
   // 已切会话）则丢弃。闭包里的 sessionId 与捕获值同源恒等（deps 含 sessionId），故用 ref 读最新值。
   const sessionIdRef = useRef<string | null>(null);
   sessionIdRef.current = sessionId;
-  const onAskSuggest = useCallback(async () => {
-    if (!sessionId) return;
-    const reqSid = sessionId; // 请求发起时的会话
-    setAiSuggest({ text: '', sources: [], loading: true });
-    try {
-      const r = await suggestReply(reqSid);
-      if (reqSid !== sessionIdRef.current) return; // 会话已切换 → 丢弃旧建议
-      setAiSuggest({ text: r.text, sources: r.sources, loading: false });
-    } catch {
-      if (reqSid === sessionIdRef.current) setAiSuggest(null);
-    }
-  }, [sessionId]);
+  const onAskSuggest = useCallback(
+    async (refresh = false) => {
+      if (!sessionId) return;
+      const reqSid = sessionId; // 请求发起时的会话
+      setAiSuggest({ text: '', sources: [], loading: true });
+      try {
+        // 大扫查修复：「重新生成」传 refresh=true 绕过 60s 结果缓存，否则 TTL 内返回同一文本
+        const r = await suggestReply(reqSid, undefined, refresh);
+        if (reqSid !== sessionIdRef.current) return; // 会话已切换 → 丢弃旧建议
+        setAiSuggest({ text: r.text, sources: r.sources, loading: false });
+      } catch {
+        if (reqSid === sessionIdRef.current) setAiSuggest(null);
+      }
+    },
+    [sessionId],
+  );
 
   const onRate = useCallback(
     async (id: string, rating: 'up' | 'down') => {
@@ -682,7 +686,7 @@ export function ChatContainer({
             >
               填入输入框
             </Button>
-            <Button size="small" onClick={onAskSuggest}>
+            <Button size="small" onClick={() => onAskSuggest(true)}>
               重新生成
             </Button>
           </div>
@@ -718,7 +722,7 @@ export function ChatContainer({
                 icon={<BulbOutlined />}
                 loading={aiSuggest?.loading}
                 disabled={streaming || creating}
-                onClick={onAskSuggest}
+                onClick={() => onAskSuggest()}
               >
                 AI 推荐
               </Button>

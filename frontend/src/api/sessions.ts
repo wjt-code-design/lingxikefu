@@ -89,8 +89,12 @@ export async function sendAgentMessage(id: string, content: string): Promise<Mes
   return { ...r.data, session_id: id };
 }
 
-/** 坐席辅助（批次A）：获取 AI 推荐回复；question 缺省取会话最近一条顾客消息。仅 admin/agent。 */
-export async function suggestReply(id: string, question?: string): Promise<SuggestResp> {
-  const r = await http.post<SuggestResp>(`/sessions/${id}/suggest`, question ? { question } : {});
+/** 坐席辅助（批次A）：获取 AI 推荐回复；question 缺省取会话最近一条顾客消息。仅 admin/agent。
+ *  refresh=true 绕过 60s 结果缓存强制重新生成（「重新生成」按钮用）。 */
+export async function suggestReply(id: string, question?: string, refresh = false): Promise<SuggestResp> {
+  const body: Record<string, unknown> = {};
+  if (question) body.question = question;
+  if (refresh) body.refresh = true;
+  const r = await http.post<SuggestResp>(`/sessions/${id}/suggest`, body);
   return r.data;
 }

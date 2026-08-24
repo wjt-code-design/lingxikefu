@@ -29,6 +29,7 @@ from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
 from app.prompts.agent_assist_prompt import build_assist_messages
+from app.services import conversation_state
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
 from app.services.retrieval_service import search_kb
@@ -496,7 +497,13 @@ async def suggest_reply(
             return [{"role": m.role.value, "content": m.content} for m in reversed(rows)]
 
         history = await run_in_threadpool(_history)
-        messages = build_assist_messages(question=question, history=history, chunks=chunks)
+        # 大扫查修复（M-1）：建议 prompt 并入会话状态——顾客已提供订单号时不再重复索要
+        messages = build_assist_messages(
+            question=question,
+            history=history,
+            chunks=chunks,
+            state_hint=conversation_state.to_prompt_hint(s.conv_state),
+        )
         text = (await get_chat_client().complete(messages)).strip()
 
         titles = await run_in_threadpool(

@@ -345,14 +345,10 @@ async def chat_stream(
         # 批次D：订单工具分支——槽位有订单号 + 订单类主题 → 查单模板回答（零 LLM，
         # 事实型查询不冒幻觉）；查不到/异常回落 RAG（fail-open，不阻断）
         order_info = None
-        if (
-            (conv_state or {}).get("slots", {}).get("order_no")
-            and (conv_state or {}).get("topic") in order_tool.ORDER_TOPICS
-        ):
+        _order_slot = (conv_state or {}).get("slots", {}).get(conversation_state.SLOT_ORDER_NO)
+        if _order_slot and (conv_state or {}).get("topic") in order_tool.ORDER_TOPICS:
             try:
-                order_info = await run_in_threadpool(
-                    order_tool.query_order, conv_state["slots"]["order_no"]
-                )
+                order_info = await run_in_threadpool(order_tool.query_order, _order_slot)
             except Exception:  # noqa: BLE001 - 工具异常回落 RAG
                 logger.exception("订单工具查询失败（回落 RAG）")
                 order_info = None
@@ -464,12 +460,10 @@ async def chat_stream(
                     yield _sse({"event": "sources", "data": data})
                 elif event == "done":
                     # 批次C：澄清轮 → 会话状态置 clarifying + 计数+1（fail-open，写库异常不影响响应）
+                    # 大扫查修复：转移逻辑收归 conversation_state.mark_clarifying（单一真源）
                     if data.get("clarify"):
                         try:
-                            cs = dict(session_obj.conv_state or conversation_state.new_state())
-                            cs["stage"] = conversation_state.STAGE_CLARIFYING
-                            cs["clarify_count"] = cs.get("clarify_count", 0) + 1
-                            session_obj.conv_state = cs
+                            session_obj.conv_state = conversation_state.mark_clarifying(session_obj.conv_state)
                             await run_in_threadpool(db.commit)
                         except Exception:  # noqa: BLE001 - fail-open
                             logger.exception("clarify 状态写回失败（不影响响应）")

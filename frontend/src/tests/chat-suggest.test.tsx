@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest';
+﻿import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Link, MemoryRouter } from 'react-router-dom';
@@ -82,7 +82,7 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
     await userEvent.click(screen.getByRole('button', { name: '填入输入框' }));
     const input = screen.getByRole('textbox', { name: '问题输入' }) as HTMLTextAreaElement;
     expect(input.value).toContain('退款一般 1-3 个工作日');
-    expect(suggestMock).toHaveBeenCalledWith('sess-1');
+    expect(suggestMock).toHaveBeenCalledWith('sess-1', undefined, false);
   });
 
   it('建议失败（接口异常）→ 静默降级：无卡片、不打断界面', async () => {
@@ -132,7 +132,7 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
     await waitFor(() =>
       expect(screen.getByRole('region', { name: 'AI 建议回复' })).toBeInTheDocument(),
     );
-    expect(suggestMock).toHaveBeenLastCalledWith('sess-2');
+    expect(suggestMock).toHaveBeenLastCalledWith('sess-2', undefined, false);
 
     // 有参切到无参（sess-2 → /chat）：卡片同样重置
     await userEvent.click(screen.getByRole('link', { name: '切换到无参' }));
@@ -165,7 +165,7 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
     // sess-1 就绪 + 点 AI 推荐（请求在途）
     await waitFor(() => expect(screen.getByRole('button', { name: /转人工/ })).toBeInTheDocument());
     await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
-    expect(suggestMock).toHaveBeenCalledWith('sess-1');
+    expect(suggestMock).toHaveBeenCalledWith('sess-1', undefined, false);
 
     // 在途时切到 sess-2，等新会话就绪（头部标题出现 = sessionId 已切到 sess-2）
     await userEvent.click(screen.getByRole('link', { name: '切换到会话2' }));
@@ -176,5 +176,31 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByRole('region', { name: 'AI 建议回复' })).not.toBeInTheDocument();
     expect(screen.queryByText(/旧会话滞留的建议/)).not.toBeInTheDocument();
+  });
+
+  it('「重新生成」绕过结果缓存：请求携带 refresh=true；「AI 推荐」不携带（大扫查修复）', async () => {
+    useAuthStore.setState({
+      token: 't', refreshToken: 't', role: 'agent',
+      user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+    });
+    render(
+      <ConfigProvider>
+        <MemoryRouter initialEntries={['/chat?session=sess-1']}>
+          <ChatContainer />
+        </MemoryRouter>
+      </ConfigProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /转人工/ })).toBeInTheDocument());
+
+    // 首次 AI 推荐：不携带 refresh（可吃缓存）
+    await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'AI 建议回复' })).toBeInTheDocument(),
+    );
+    expect(suggestMock).toHaveBeenLastCalledWith('sess-1', undefined, false);
+
+    // 重新生成：必须绕缓存强制重算（60s TTL 内否则返回同一文本，按钮语义失效）
+    await userEvent.click(screen.getByRole('button', { name: '重新生成' }));
+    await waitFor(() => expect(suggestMock).toHaveBeenLastCalledWith('sess-1', undefined, true));
   });
 });

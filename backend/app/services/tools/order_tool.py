@@ -3,7 +3,7 @@
 - 数据源 scripts/demo_orders.json 懒加载单例（缺文件/损坏 → 空，fail-open）；
 - query_order 同步纯读（chat 层搬线程池）——未来接真实订单 API 只换本函数内部；
 - format_order_reply 模板拼接，零 LLM：事实型查询不冒幻觉风险；
-- ORDER_TOPICS：订单类主题门控集合（与 conversation_state.REQUIRED_SLOTS 键对齐）。
+- ORDER_TOPICS：派生自 conversation_state.REQUIRED_SLOTS（大扫查修复：消除手工双源同步）。
 """
 from __future__ import annotations
 
@@ -12,10 +12,15 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.services.conversation_state import REQUIRED_SLOTS, SLOT_ORDER_NO
+
 logger = logging.getLogger(__name__)
 
-#: 订单类主题（chat 层门控：槽位有订单号 + 主题属于此集合才走工具分支）
-ORDER_TOPICS: frozenset[str] = frozenset({"退款", "退换货", "保修/维修", "配送/物流", "价保"})
+#: 订单类主题（chat 层门控：槽位有订单号 + 主题属于此集合才走工具分支）。
+#: 大扫查修复：从 REQUIRED_SLOTS 派生（要求含订单号槽位的主题），不再手工维护第二份。
+ORDER_TOPICS: frozenset[str] = frozenset(
+    t for t, slots in REQUIRED_SLOTS.items() if SLOT_ORDER_NO in slots
+)
 
 #: 状态 → 中文文案（模板唯一真源）
 STATUS_TEXT: dict[str, str] = {
