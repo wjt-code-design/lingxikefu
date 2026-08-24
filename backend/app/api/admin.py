@@ -316,6 +316,27 @@ def get_stats_trend(
         select(Ticket.created_at).where(Ticket.tenant_id == tenant, Ticket.created_at >= since)
     ).all()
 
+    # T1.3：工具回答 (created_at, tool) 对 + 澄清轮日期（口径与 stats 聚合一致：
+    # 仅 assistant、tool 非空串；clarify 为 meta.clarify=True）
+    tool_col = Message.meta["tool"].as_string()
+    tool_rows = db.execute(
+        select(Message.created_at, tool_col).where(
+            Message.tenant_id == tenant,
+            Message.role == MessageRole.assistant,
+            Message.created_at >= since,
+            tool_col.isnot(None),
+        )
+    ).all()
+    clarify_col = Message.meta["clarify"].as_boolean()
+    c_dates = db.scalars(
+        select(Message.created_at).where(
+            Message.tenant_id == tenant,
+            Message.role == MessageRole.assistant,
+            Message.created_at >= since,
+            clarify_col.is_(True),
+        )
+    ).all()
+
     def bucket(rows) -> dict[str, int]:
         c: dict[str, int] = {}
         for r in rows:
@@ -324,6 +345,17 @@ def get_stats_trend(
         return c
 
     sb, mb, tb = bucket(s_dates), bucket(m_dates), bucket(t_dates)
+
+    # 按日聚合工具分布：{date: {tool: count}}，空串工具名不计
+    tool_by_day: dict[str, dict[str, int]] = {}
+    for dt, tool in tool_rows:
+        if not tool:
+            continue
+        k = _day_key(dt)
+        tool_by_day.setdefault(k, {})
+        tool_by_day[k][tool] = tool_by_day[k].get(tool, 0) + 1
+    cb = bucket(c_dates)
+
     return StatsTrendResp(
         days=[
             TrendPoint(
@@ -331,6 +363,8 @@ def get_stats_trend(
                 sessions=sb.get(d, 0),
                 messages=mb.get(d, 0),
                 tickets=tb.get(d, 0),
+                tool_dist=tool_by_day.get(d, {}),
+                clarify_rounds=cb.get(d, 0),
             )
             for d in axis
         ]

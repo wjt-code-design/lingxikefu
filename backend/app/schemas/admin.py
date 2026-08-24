@@ -55,6 +55,9 @@ class TrendPoint(BaseModel):
     sessions: int
     messages: int
     tickets: int
+    # T1.3 时序扩展（默认值保证旧调用方兼容；口径与 stats 同名字段一致）：
+    tool_dist: dict[str, int] = {}  # 当日 assistant 工具回答分布
+    clarify_rounds: int = 0  # 当日澄清轮数（meta.clarify=True 的 assistant 消息）
 
 
 class StatsTrendResp(BaseModel):

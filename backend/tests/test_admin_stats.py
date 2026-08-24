@@ -255,3 +255,71 @@ def test_stats_tool_clarify_topic_refuse(client):
     assert data["clarify_rounds"] == 2
     assert data["topic_dist"] == {"退换货": 2, "保修": 1}
     assert data["refuse_count"] == 4
+
+
+def test_stats_trend_tool_clarify_series(client):
+    """T1.3：trend 时序扩展——tool_dist / clarify_rounds 按日分桶。
+
+    种子（不含 fixture 预置数据；fixture 老消息无 meta 不影响新字段）：
+    - 今天（UTC）：assistant tool=order_query×2 + kb_lookup×1、clarify×2
+      → 当日 tool_dist == {"order_query": 2, "kb_lookup": 1}，clarify_rounds == 2
+    - 2 天前：assistant tool=order_query×1 → 该日 tool_dist == {"order_query": 1}，clarify_rounds == 0
+    - 干扰：user 消息带 tool meta、空串 tool、无 meta 消息一律不计
+    - 无数据日：tool_dist == {} 且 clarify_rounds == 0（补零语义）
+    RED 预期：响应无 tool_dist/clarify_rounds 键 → KeyError（功能缺失）。"""
+    from datetime import UTC, datetime, timedelta
+
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        old = now - timedelta(days=2)
+        db.add_all([
+            # 今天
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d1",
+                    meta={"tool": "order_query"}, created_at=now),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d2",
+                    meta={"tool": "order_query"}, created_at=now),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d3",
+                    meta={"tool": "kb_lookup"}, created_at=now),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d4",
+                    meta={"clarify": True}, created_at=now),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d5",
+                    meta={"clarify": True}, created_at=now),
+            # 2 天前
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d6",
+                    meta={"tool": "order_query"}, created_at=old),
+            # 干扰项（今天，均不应计入）
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.user, content="d7",
+                    meta={"tool": "order_query"}, created_at=now),  # 非 assistant
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d8",
+                    meta={"tool": ""}, created_at=now),  # 空串工具名
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="d9",
+                    meta={}, created_at=now),  # 无标记
+        ])
+        db.commit()
+    finally:
+        gen.close()
+
+    r = client.get(f"{API}/admin/stats/trend?days=7", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    days = r.json()["days"]
+    by_date = {d["date"]: d for d in days}
+    today_key = days[-1]["date"]
+    old_key = days[-3]["date"]
+    mid_key = days[-2]["date"]  # 中间日无新字段数据
+    assert by_date[today_key]["tool_dist"] == {"order_query": 2, "kb_lookup": 1}
+    assert by_date[today_key]["clarify_rounds"] == 2
+    assert by_date[old_key]["tool_dist"] == {"order_query": 1}
+    assert by_date[old_key]["clarify_rounds"] == 0
+    assert by_date[mid_key]["tool_dist"] == {}
+    assert by_date[mid_key]["clarify_rounds"] == 0

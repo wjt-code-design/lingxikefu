@@ -170,7 +170,9 @@ def main() -> int:
         if not items:
             print(f'[OK] {title}: 0')
         else:
-            print(f'[{'WARN' if key == "opt_diff" else 'DIFF'}] {title}: {len(items)}')
+            # 2026-08-25 修：嵌套引号 f-string 需 Py3.12+，venv 是 3.11 → 提前计算标签
+            tag = 'WARN' if key == "opt_diff" else 'DIFF'
+            print(f'[{tag}] {title}: {len(items)}')
             for it in items[:15]:
                 print(f'    - {it}')
             if len(items) > 15:

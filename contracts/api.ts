@@ -426,6 +426,10 @@ export interface TrendPoint {
   sessions: number;
   messages: number;
   tickets: number;
+  /** T1.3 时序扩展：当日 assistant 工具回答分布（如 {order_query: 3}）；旧后端无此字段 */
+  tool_dist?: Record<string, number>;
+  /** T1.3：当日澄清轮数（meta.clarify=true 的 assistant 消息数）；旧后端无此字段 */
+  clarify_rounds?: number;
 }
 
 export interface StatsTrendResp {

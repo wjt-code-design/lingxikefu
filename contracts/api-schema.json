@@ -4538,6 +4538,19 @@
           "tickets": {
             "type": "integer",
             "title": "Tickets"
+          },
+          "tool_dist": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Tool Dist",
+            "default": {}
+          },
+          "clarify_rounds": {
+            "type": "integer",
+            "title": "Clarify Rounds",
+            "default": 0
           }
         },
         "type": "object",
