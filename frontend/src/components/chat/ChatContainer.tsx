@@ -471,14 +471,20 @@ export function ChatContainer({
   }, [sessionId]);
 
   // 批次A：请求 AI 建议。失败静默（建议是辅助能力，不打断客服主流程）
+  // 终审②在途竞态守卫：请求发起时捕获 sessionId，await 返回后与最新会话比对，不一致（客服
+  // 已切会话）则丢弃。闭包里的 sessionId 与捕获值同源恒等（deps 含 sessionId），故用 ref 读最新值。
+  const sessionIdRef = useRef<string | null>(null);
+  sessionIdRef.current = sessionId;
   const onAskSuggest = useCallback(async () => {
     if (!sessionId) return;
+    const reqSid = sessionId; // 请求发起时的会话
     setAiSuggest({ text: '', sources: [], loading: true });
     try {
-      const r = await suggestReply(sessionId);
+      const r = await suggestReply(reqSid);
+      if (reqSid !== sessionIdRef.current) return; // 会话已切换 → 丢弃旧建议
       setAiSuggest({ text: r.text, sources: r.sources, loading: false });
     } catch {
-      setAiSuggest(null);
+      if (reqSid === sessionIdRef.current) setAiSuggest(null);
     }
   }, [sessionId]);
 

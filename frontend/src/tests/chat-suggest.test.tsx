@@ -140,4 +140,41 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
       expect(screen.queryByRole('region', { name: 'AI 建议回复' })).not.toBeInTheDocument(),
     );
   });
+
+  it('在途请求竞态：点推荐后立刻切会话，旧请求返回不落入新会话（卡片不出现）', async () => {
+    useAuthStore.setState({
+      token: 't', refreshToken: 't', role: 'agent',
+      user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+    });
+    // 受控 promise：点「AI 推荐」时挂起，等切换到新会话后才放行，模拟在途请求晚归
+    let resolveSuggest!: (v: { text: string; sources: unknown[] }) => void;
+    suggestMock.mockReturnValue(
+      new Promise((res) => {
+        resolveSuggest = res;
+      }),
+    );
+    render(
+      <ConfigProvider>
+        <MemoryRouter initialEntries={['/chat?session=sess-1']}>
+          <ChatContainer />
+          <Link to="/chat?session=sess-2">切换到会话2</Link>
+        </MemoryRouter>
+      </ConfigProvider>,
+    );
+
+    // sess-1 就绪 + 点 AI 推荐（请求在途）
+    await waitFor(() => expect(screen.getByRole('button', { name: /转人工/ })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
+    expect(suggestMock).toHaveBeenCalledWith('sess-1');
+
+    // 在途时切到 sess-2，等新会话就绪（头部标题出现 = sessionId 已切到 sess-2）
+    await userEvent.click(screen.getByRole('link', { name: '切换到会话2' }));
+    await waitFor(() => expect(screen.getByText('会话 sess-2')).toBeInTheDocument());
+
+    // 旧请求此刻才返回 → 建议卡片不得出现在新会话
+    resolveSuggest({ text: '旧会话滞留的建议', sources: [] });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByRole('region', { name: 'AI 建议回复' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/旧会话滞留的建议/)).not.toBeInTheDocument();
+  });
 });

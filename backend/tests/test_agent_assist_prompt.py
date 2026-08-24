@@ -42,7 +42,7 @@ def test_history_role_mapping():
     assert "客服: 客服答" in user
 
 
-def test_empty_history_rendens_placeholder():
+def test_empty_history_renders_placeholder():
     user = build_assist_messages("q", [], [])[1]["content"]
     assert "（无）" in user
 
