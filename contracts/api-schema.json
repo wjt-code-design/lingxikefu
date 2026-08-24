@@ -3976,6 +3976,18 @@
               }
             ],
             "title": "Handoff Summary"
+          },
+          "conv_state": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conv State"
           }
         },
         "type": "object",

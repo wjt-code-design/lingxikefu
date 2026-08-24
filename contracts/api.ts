@@ -87,12 +87,20 @@ export interface SessionHandoffSummary {
   entities?: string[]; // 具体实体（订单号/型号）
   question?: string; // 最近一条用户诉求
 }
+/** 批次B：会话状态机（阶段+槽位跨轮记忆）。旧会话为 null。 */
+export interface SessionConvState {
+  stage?: string; // greeting / info_collecting / resolving / clarifying
+  topic?: string; // 当前流程主题（退款/退换货/保修维修…）
+  slots?: Record<string, string>; // 已收集槽位（如 order_no）
+  clarify_count?: number; // 澄清追问次数（批次C 用）
+}
 export interface SessionDetail {
   id: string;
   title?: string;
   messages: Message[];
   profile?: SessionProfile;
   handoff_summary?: SessionHandoffSummary;
+  conv_state?: SessionConvState | null; // 批次B：会话状态机（客服观察用）
 }
 /** Branch 3：人工客服代发消息请求体（POST /sessions/{id}/messages，仅 admin/agent 可用）。 */
 export interface AgentMessageReq {

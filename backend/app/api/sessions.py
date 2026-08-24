@@ -92,6 +92,9 @@ class SessionDetail(BaseModel):
     profile: dict | None = None
     # 2026-08-22：转人工交接摘要（本次会话当前主题/实体/最近诉求；仅 agent/admin 可见）。
     handoff_summary: dict | None = None
+    # 批次B：会话状态机（阶段+槽位；agent/admin 观察用，user 视角同返回——内容仅含
+    # 用户自己会话的主题/订单号，无越权数据面，与 profile 的仅-staff 可见不同类）。
+    conv_state: dict | None = None
 
 
 class SessionListResp(BaseModel):
@@ -261,6 +264,7 @@ def get_session(
         title=s.title,
         profile=profile,
         handoff_summary=handoff_summary,
+        conv_state=s.conv_state,
         messages=[
             SessionMessage(
                 id=str(m.id),
