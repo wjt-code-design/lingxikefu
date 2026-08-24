@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     ZHIPU_API_KEY: str | None = None
     ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
     ZHIPU_CHAT_MODEL: str = "glm-5.1"
+    # 火山引擎（视觉模型）：Image Agent 图片理解
+    VOLCENGINE_API_KEY: str | None = None
+    VOLCENGINE_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
+    VOLCENGINE_CHAT_MODEL: str = "ep-m-20260811130634-mnpgq"
     # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境）；bailian=百炼 text-embedding
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"

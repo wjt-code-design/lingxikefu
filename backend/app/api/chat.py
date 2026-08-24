@@ -29,17 +29,20 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user
-from app.api.tickets import ensure_active_ticket
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
+from app.services.agents.router import TICKET_AGENT
+from app.services.agents.router import router as agent_router
+from app.services.agents.ticket_agent import TicketAgent
 from app.services.answer_cache import put as cache_put
 from app.services.quick_answers import match_quick
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
 from app.services.rag_service import stream_answer
+from app.services.shared_context import SharedContext
 from app.services.user_profile_service import (
     get_profile,
     merge_profile,
@@ -49,6 +52,9 @@ from app.services.user_profile_service import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# v1.1 多 Agent 编排（方案书 §2）：Agent 均为无状态实例，模块级共享
+ticket_agent = TicketAgent()
 
 
 class ChatStreamReq(BaseModel):
@@ -283,6 +289,20 @@ async def chat_stream(
         # 组装历史（最近 6 条，供 RAG 上下文；不含当前问题）
         history = await _fetch_history(db, session_id, user_msg.id)
 
+        # v1.1 Router 前置编排（方案书 §2.1）：前置意图分类（单一真源，规则式零 LLM）
+        # + 决定执行计划（agents_invoked）。非阻塞关键词匹配，无需搬线程池。
+        ctx = SharedContext(
+            query=req.content,
+            kb_id=kb_id,
+            kb_version=kb_version,
+            user_id=str(user_id),
+            session_id=session_id,
+            message_id=user_msg.id,
+            history=history,
+            db=db,  # 请求级会话：Ticket Agent 建单复用（同事务语义）
+        )
+        ctx = agent_router.route(ctx)
+
         assistant_parts: list[str] = []
         source_payloads: list[dict] = []
         intent = "qa"  # R-2：默认 qa，收到 intent 事件后用真实判定
@@ -347,13 +367,16 @@ async def chat_stream(
                         user_msg.intent = intent
                         await run_in_threadpool(db.commit)
                     yield _sse({"event": "intent", "data": data})
-                    # T1：handoff → AI 建单（幂等 + fail-open，独立于流，不阻断）
+                    # T1 + v1.1：handoff → Ticket Agent 建单（幂等 + fail-open，独立于流，不阻断）。
+                    # Router 已前置判定（与管线内 intent 节点同源，必然一致）；
+                    # 兜底：若 ctx.ticket_id 为空（Router 未排入或建单失败降级），补建一次，
+                    # 与既有行为对齐——任何情况下 handoff 都保证尝试过建单。
                     if intent == "handoff":
-                        ticket = await run_in_threadpool(
-                            ensure_active_ticket, db, session_id, user_msg.id
-                        )
-                        if ticket is not None:
-                            ticket_id = str(ticket.id)
+                        if ctx.ticket_id is None and TICKET_AGENT in ctx.agents_invoked:
+                            ctx = await run_in_threadpool(ticket_agent.run, ctx)
+                        if ctx.ticket_id is None:
+                            logger.warning("handoff 建单降级（degraded=%s）", ctx.degraded)
+                        ticket_id = ctx.ticket_id
                 elif event == "stage":
                     yield _sse({"event": "stage", "data": data})
                 elif event == "token":
