@@ -40,6 +40,12 @@ class AdminStats(BaseModel):
     feedback_down: int
     avg_first_token_ms: float
     hot_gaps: list[HotGap] = []
+    # T1.2 运营观测扩展（默认值保证旧调用方兼容）：
+    # 真拒答轮数 = refuse_count - clarify_rounds（不变式：每澄清轮恰对应一个 refuse 用户消息）
+    tool_dist: dict[str, int] = {}
+    clarify_rounds: int = 0
+    topic_dist: dict[str, int] = {}
+    refuse_count: int = 0
 
 
 class TrendPoint(BaseModel):

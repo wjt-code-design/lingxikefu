@@ -180,6 +180,49 @@ def get_stats(
         # 展示组内出现最多的原始问句；次数平局取较短（更简洁、利于一眼看懂）
         question = max(g["variants"], key=lambda k: (g["variants"][k], -len(k)))
         hot_gaps.append(HotGap(question=question, count=sum(g["variants"].values())))
+
+    # T1.2：运营观测聚合——工具分布 / 澄清轮数 / 会话主题分布 + 拒答口径。
+    # JSON 索引由 SQLAlchemy 按方言编译（PG: ->>，SQLite: json_extract），同 R-3 latency 先例；
+    # 不变式：每澄清轮恰对应一个 refuse 用户消息 → 真拒答轮数 = refuse_count - clarify_rounds，
+    # 两口径分开暴露、由消费端推导（澄清问句本身也是知识缺口信号，hot_gaps 口径保持不变）。
+    tool_col = Message.meta["tool"].as_string()
+    tool_rows = db.execute(
+        select(tool_col, func.count(Message.id)).where(
+            Message.tenant_id == tenant,
+            Message.role == MessageRole.assistant,
+            tool_col.isnot(None),
+        ).group_by(tool_col)
+    ).all()
+    tool_dist = {tool: cnt for tool, cnt in tool_rows if tool}
+    clarify_col = Message.meta["clarify"].as_boolean()
+    clarify_rounds = (
+        db.scalar(
+            select(func.count(Message.id)).where(
+                Message.tenant_id == tenant,
+                Message.role == MessageRole.assistant,
+                clarify_col.is_(True),
+            )
+        )
+        or 0
+    )
+    topic_col = Session.conv_state["topic"].as_string()
+    topic_rows = db.execute(
+        select(topic_col, func.count(Session.id)).where(
+            Session.tenant_id == tenant,
+            topic_col.isnot(None),
+        ).group_by(topic_col)
+    ).all()
+    topic_dist = {topic: cnt for topic, cnt in topic_rows if topic}
+    refuse_count = (
+        db.scalar(
+            select(func.count(Message.id)).where(
+                Message.tenant_id == tenant,
+                Message.role == MessageRole.user,
+                Message.intent == "refuse",
+            )
+        )
+        or 0
+    )
     return AdminStats(
         sessions=sessions,
         messages=messages,
@@ -188,6 +231,10 @@ def get_stats(
         feedback_down=feedback_down,
         avg_first_token_ms=avg_first_token_ms,
         hot_gaps=hot_gaps,
+        tool_dist=tool_dist,
+        clarify_rounds=clarify_rounds,
+        topic_dist=topic_dist,
+        refuse_count=refuse_count,
     )
 
 

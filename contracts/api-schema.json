@@ -2536,6 +2536,32 @@
             "type": "array",
             "title": "Hot Gaps",
             "default": []
+          },
+          "tool_dist": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Tool Dist",
+            "default": {}
+          },
+          "clarify_rounds": {
+            "type": "integer",
+            "title": "Clarify Rounds",
+            "default": 0
+          },
+          "topic_dist": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Topic Dist",
+            "default": {}
+          },
+          "refuse_count": {
+            "type": "integer",
+            "title": "Refuse Count",
+            "default": 0
           }
         },
         "type": "object",

@@ -321,6 +321,14 @@ export interface AdminStats {
   feedback_down: number;
   avg_first_token_ms: number;
   hot_gaps: HotGap[];
+  /** T1.2 运营观测：工具回答分布（如 order_query→45），空对象=无数据 */
+  tool_dist?: Record<string, number>;
+  /** T1.2：澄清轮 assistant 消息数（meta.clarify=true）；真拒答轮 = refuse_count - 本字段 */
+  clarify_rounds?: number;
+  /** T1.2：会话主题分布（conv_state.topic 聚合，仅含已进入流程的会话） */
+  topic_dist?: Record<string, number>;
+  /** T1.2：refuse 用户消息总数（含澄清轮对应问句） */
+  refuse_count?: number;
 }
 export interface UserItem {
   user_id: string;

@@ -195,3 +195,63 @@ def test_stats_trend_aggregates_days(client):
     # 权限：user → 403
     r2 = client.get(f"{API}/admin/stats/trend", headers=_h(USER, "user"))
     assert r2.status_code == 403
+
+
+def test_stats_tool_clarify_topic_refuse(client):
+    """T1.2：tool_dist / clarify_rounds / topic_dist / refuse_count 精确聚合（期望独立手算）。
+
+    种子（不含 fixture 预置的 5 user 消息）：
+    - assistant 工具回答：order_query×3 + kb_lookup×1；无工具/meta 空/非 assistant 一律不计
+      → tool_dist == {"order_query": 3, "kb_lookup": 1}
+    - assistant 澄清轮 meta.clarify=True ×2 → clarify_rounds == 2
+    - 会话 conv_state.topic：退换货×2 + 保修×1 + 无 conv_state 不计 → topic_dist == {"退换货": 2, "保修": 1}
+    - refuse 用户消息：fixture 已有 ×2 + 新增 ×2（其中澄清轮那问也属 refuse）
+      → refuse_count == 4
+    不变式：每个澄清轮恰对应一个 refuse 用户消息（rag_service 仅在拒答且额度>0 时澄清），
+    真拒答轮数 = refuse_count - clarify_rounds = 2，两口径分开暴露、由消费端推导。
+    """
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        db.add_all([
+            Session(id=uuid.uuid4(), user_id=USER, tenant_id="default",
+                    conv_state={"topic": "退换货"}),
+            Session(id=uuid.uuid4(), user_id=USER, tenant_id="default",
+                    conv_state={"topic": "退换货", "stage": "clarifying"}),
+            Session(id=uuid.uuid4(), user_id=USER, tenant_id="default",
+                    conv_state={"topic": "保修"}),
+            Session(id=uuid.uuid4(), user_id=USER, tenant_id="default"),  # 无 conv_state → 不计
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t1", meta={"tool": "order_query"}),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t2", meta={"tool": "order_query"}),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t3",
+                    meta={"tool": "order_query", "first_token_ms": 42.0}),  # 同行多埋点互不干扰
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t4", meta={"tool": "kb_lookup"}),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t5", meta={"clarify": True}),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t7", meta={"clarify": True}),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="t6", meta={}),  # 无任何标记
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.user, content="u-tool",
+                    meta={"tool": "order_query"}),  # 非 assistant 干扰 → 不计工具
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.user, content="查不到物流", intent="refuse"),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.user, content="发票怎么开", intent="refuse"),
+        ])
+        db.commit()
+    finally:
+        gen.close()
+
+    r = client.get(f"{API}/admin/stats", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    data = r.json()
+    assert data["tool_dist"] == {"order_query": 3, "kb_lookup": 1}
+    assert data["clarify_rounds"] == 2
+    assert data["topic_dist"] == {"退换货": 2, "保修": 1}
+    assert data["refuse_count"] == 4
