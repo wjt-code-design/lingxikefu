@@ -255,7 +255,8 @@ def get_session(
             profile = None
         try:
             handoff_summary = build_handoff_summary(
-                [{"role": m.role.value, "content": m.content} for m in msgs]
+                [{"role": m.role.value, "content": m.content} for m in msgs],
+                conv_state=s.conv_state,
             )
         except Exception:  # noqa: BLE001 - fail-open
             handoff_summary = None

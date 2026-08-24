@@ -75,20 +75,27 @@ def _extract_topic_names(history: list[dict] | None) -> list[str]:
 
 
 def build_handoff_summary(
-    history: list[dict] | None, max_question: int = 120
+    history: list[dict] | None,
+    conv_state: dict | None = None,
+    max_question: int = 120,
 ) -> dict[str, Any] | None:
     """转人工交接摘要：本次会话的「当前主题 + 具体实体 + 最近用户诉求」。
 
-    供客服 observe 视角会话头部展示（动态生成，不落库）。规则式、无 LLM 调用、fail-open。
-    - topic: 命中的流程主题（可多个，按词表优先级）
-    - entities: 具体标识实体（订单号/型号等，去泛化商品词）
-    - question: 最近一条用户诉求（限长，客服一眼看到用户这次在问什么）
-    无用户消息或全部为空返回 None（不展示空壳胶囊）。
+    批次B：conv_state 非空时并入状态机信息（stage/slots/clarify_count）——客服一眼
+    看到「退款主题、已提供订单号、AI 已追问 N 轮」，交接不再从零开始。
+    其余行为与旧版一致（不传 conv_state 输出结构不变，兼容既有测试/前端）。
     """
     question = _nearest_user_content(history)
     if not question:
         return None
     summary: dict[str, Any] = {}
+    if conv_state:
+        if conv_state.get("stage"):
+            summary["stage"] = conv_state["stage"]
+        if conv_state.get("slots"):
+            summary["slots"] = conv_state["slots"]
+        if conv_state.get("clarify_count"):
+            summary["clarify_count"] = conv_state["clarify_count"]
     topics = _extract_topic_names(history)
     if topics:
         summary["topic"] = "/".join(topics)

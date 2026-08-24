@@ -87,3 +87,25 @@ def test_handoff_summary_question_limited_and_generic_ignored():
     s2 = build_handoff_summary([{"role": "user", "content": "手机退货"}])
     assert "退换货" in s2["topic"]
     assert not s2.get("entities")  # "手机"是泛化商品词，不进实体
+
+
+def test_handoff_summary_with_conv_state():
+    """批次B：交接摘要并入状态机——客服看到阶段/槽位/澄清次数。"""
+    from app.services.session_context import build_handoff_summary
+
+    history = [{"role": "user", "content": "我要退款 SO2026080118"}]
+    conv_state = {"stage": "resolving", "topic": "退款", "slots": {"order_no": "SO2026080118"}, "clarify_count": 1}
+    s = build_handoff_summary(history, conv_state=conv_state)
+    assert s["stage"] == "resolving"
+    assert s["slots"] == {"order_no": "SO2026080118"}
+    assert s["clarify_count"] == 1
+
+
+def test_handoff_summary_without_conv_state_unchanged():
+    """不传 conv_state：输出结构与旧版完全一致（兼容契约）。"""
+    from app.services.session_context import build_handoff_summary
+
+    history = [{"role": "user", "content": "我要退款"}]
+    s = build_handoff_summary(history)
+    assert "stage" not in s
+    assert s["topic"] == "退款"
