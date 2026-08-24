@@ -39,3 +39,10 @@ class Session(Base):
         default=None,
         comment="会话级满意度（P2-2）：satisfied / neutral / unsatisfied",
     )
+    # 批次B（2026-08-24）：会话状态机——阶段+槽位跨轮持久化（conversation_state.py 管结构）
+    conv_state: Mapped[dict | None] = mapped_column(
+        sa.JSON,
+        nullable=True,
+        default=None,
+        comment="会话状态机：{stage, topic, slots, clarify_count}（app/services/conversation_state.py）",
+    )
