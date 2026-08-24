@@ -138,6 +138,8 @@ export interface Message {
   /** 仅 agent 角色携带：客服标识（工号 / 昵称），用于气泡身份标签 */
   agent_id?: string;
   agent_name?: string;
+  /** 大扫查 F-major：工具回答标记（meta.tool，如 order_query）→ 历史加载/observe 徽章；普通回答无 */
+  tool?: string;
   /** 2026-08-21：AI 回复的引用来源（message_sources，session 详情透出）。user/agent 通常为空 */
   sources?: MessageSource[];
 }
@@ -323,11 +325,11 @@ export interface AdminStats {
   hot_gaps: HotGap[];
   /** T1.2 运营观测：工具回答分布（如 order_query→45），空对象=无数据 */
   tool_dist?: Record<string, number>;
-  /** T1.2：澄清轮 assistant 消息数（meta.clarify=true）；真拒答轮 = refuse_count - 本字段 */
+  /** T1.2：澄清轮 assistant 消息数（meta.clarify=true）；独立观测口径，与 refuse_count 无推导关系 */
   clarify_rounds?: number;
   /** T1.2：会话主题分布（conv_state.topic 聚合，仅含已进入流程的会话） */
   topic_dist?: Record<string, number>;
-  /** T1.2：refuse 用户消息总数（含澄清轮对应问句） */
+  /** T1.2：refuse 用户消息总数 = 真拒答轮数（澄清轮 intent 落 qa 不计入，勿再减 clarify_rounds） */
   refuse_count?: number;
 }
 export interface UserItem {

@@ -500,11 +500,15 @@ def test_chat_clarify_flow_updates_state(client, monkeypatch):
     c, Local, _ = client
 
     class _RefuseThenClarifyStream:
-        """替身 stream_answer：模拟拒答且触发澄清（done 带 clarify=True）。"""
+        """替身 stream_answer：模拟拒答且触发澄清（done 带 clarify=True）。
+
+        大扫查修正（2026-08-25）：事件序列对齐 rag_service.py:182 真实分支——
+        澄清轮 emit refuse=False（intent 不标拒答，批次C 有意设计）。旧写法
+        refuse=True 在真实流中不可达，曾使下方面向「澄清轮计拒答」的错误假设假绿。"""
 
         @staticmethod
         async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
-            yield ("intent", {"intent": "qa", "refuse": True})
+            yield ("intent", {"intent": "qa", "refuse": False})
             yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
             yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
             yield ("token", {"delta": "您是想咨询退货流程还是退款到账？"})
@@ -526,8 +530,17 @@ def test_chat_clarify_flow_updates_state(client, monkeypatch):
         assert s.conv_state is not None
         assert s.conv_state["stage"] == "clarifying"
         assert s.conv_state["clarify_count"] == 1
-        # T1.1：澄清轮 assistant 落库必须带 meta.clarify=True——
-        # 运营区分「澄清追问」与「真拒答」的唯一原料（否则 admin refuse 口径被澄清轮污染）
+        # 大扫查口径锁定（2026-08-25）：澄清轮 refuse=False → user intent 落 'qa'，
+        # 不计入 admin refuse_count——refuse_count 即真拒答轮数，无需再减 clarify_rounds。
+        u_msg = db.scalars(
+            select(Message).where(
+                Message.role == MessageRole.user,
+                Message.session_id == uuid.UUID(sid),
+            )
+        ).first()
+        assert u_msg is not None
+        assert u_msg.intent == "qa"
+        # T1.1：澄清轮 assistant 落库必须带 meta.clarify=True——运营观测澄清轮数的唯一原料
         a_msg = db.scalars(
             select(Message).where(
                 Message.role == MessageRole.assistant,

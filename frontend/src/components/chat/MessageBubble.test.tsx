@@ -6,7 +6,7 @@ import type { ChatMessage } from './types';
 
 /** T3.3：工具来源徽章——TOOL_LABEL_MAP 映射渲染，顾客可感知回答来源。 */
 
-function renderBubble(msg: Partial<ChatMessage>) {
+function renderBubble(msg: Partial<ChatMessage>, layout: 'self' | 'observe' = 'self') {
   useAuthStore.setState({
     token: 't', refreshToken: 't', role: 'user',
     user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
@@ -15,6 +15,7 @@ function renderBubble(msg: Partial<ChatMessage>) {
     <MessageBubble
       msg={{ id: 'a1', role: 'assistant', content: '这是回答内容', ...msg }}
       onRate={vi.fn()}
+      layout={layout}
     />
   );
 }
@@ -61,5 +62,11 @@ describe('MessageBubble 工具来源徽章（T3.3）', () => {
       />
     );
     expect(document.querySelector(BADGE_SEL)).toBeNull();
+  });
+
+  it('observe 视角（客服监控）下 AI 气泡徽章照常显示（设计意图锚点）', () => {
+    renderBubble({ tool: 'order_query' }, 'observe');
+    expect(screen.getByText('订单查询')).toBeInTheDocument();
+    expect(document.querySelector(BADGE_SEL)).not.toBeNull();
   });
 });

@@ -183,8 +183,9 @@ def get_stats(
 
     # T1.2：运营观测聚合——工具分布 / 澄清轮数 / 会话主题分布 + 拒答口径。
     # JSON 索引由 SQLAlchemy 按方言编译（PG: ->>，SQLite: json_extract），同 R-3 latency 先例；
-    # 不变式：每澄清轮恰对应一个 refuse 用户消息 → 真拒答轮数 = refuse_count - clarify_rounds，
-    # 两口径分开暴露、由消费端推导（澄清问句本身也是知识缺口信号，hot_gaps 口径保持不变）。
+    # 拒答口径（大扫查 2026-08-25 修正）：澄清轮 rag_service emit refuse=False → intent 落 'qa'，
+    # 天然不进 refuse_count——**refuse_count 即真拒答轮数**，勿再减 clarify_rounds（会双重扣减）；
+    # clarify_rounds 是独立的澄清观测口径，两者无推导关系（hot_gaps 口径不受影响）。
     tool_col = Message.meta["tool"].as_string()
     tool_rows = db.execute(
         select(tool_col, func.count(Message.id)).where(

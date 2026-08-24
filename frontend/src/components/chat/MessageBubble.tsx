@@ -10,7 +10,9 @@ import { OrderCards } from './OrderCards';
 import { detectOrderTrack } from './orderTrack';
 import { TicketStatusBadge } from './TicketStatusBadge';
 
-/** T3.3：工具回答来源标签映射——新增工具只加配置不改组件；未知值兜底显示原始 key。 */
+/** T3.3：工具回答来源标签映射——新增工具只加配置不改组件；未知值兜底显示原始 key。
+ * 注（大扫查 2026-08-25）：当前后端仅产出 order_query（chat.py 订单直答分支）；
+ * kb_lookup / llm 为预置映射，后端暂未在 done.tool 下发。 */
 const TOOL_LABEL_MAP: Record<string, string> = {
   order_query: '订单查询',
   kb_lookup: '知识库',

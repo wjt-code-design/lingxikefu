@@ -362,6 +362,8 @@ async def chat_stream(
                     # 跨事件（SSE 逐 delta JSON 编码，前端无法重组为可复制整号）
                     yield ("token", {"delta": reply_text})
                     yield ("sources", {"sources": []})
+                    # message_id 为内部占位（勿消费）：外层循环恒用 _persist_answer 的真 id
+                    # 重建 done_data 再下发客户端，此空串永不出网——防未来直接转发 data 泄漏假 id
                     yield ("done", {"message_id": "", "tool": "order_query"})
                     return
                 # v1.3 图片理解：如果有融合查询（Image Agent 成功处理），使用融合查询

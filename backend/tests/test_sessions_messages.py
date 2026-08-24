@@ -18,7 +18,7 @@ from app.core.database import get_db
 from app.core.security import create_access_token
 from app.main import app
 from app.models.base import Base
-from app.models.message import Message, MessageSource
+from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.user import User, UserRole
 from fastapi.testclient import TestClient
@@ -140,3 +140,34 @@ def test_agent_message_missing_session_404(client):
         headers=_agent_h(),
     )
     assert r.status_code == 404
+
+
+def test_session_detail_exposes_tool_marker(client):
+    """大扫查 F-major（2026-08-25）：历史加载透出 meta.tool——工具徽章读路径。
+
+    写路径已落库（chat.py _persist_answer 写 meta["tool"]），但详情接口此前不透出 →
+    刷新后气泡徽章消失、客服 observe 永不显示（数据在、读路断）。
+    断言：assistant 带 tool 的消息透出 tool；无 tool 消息该字段为 None。"""
+    from app.core.database import get_db
+
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        db.add_all([
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="订单已发货",
+                    meta={"tool": "order_query"}),
+            Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                    role=MessageRole.assistant, content="普通回答", meta={}),
+        ])
+        db.commit()
+    finally:
+        gen.close()
+
+    d = client.get(f"{API}/sessions/{SID}", headers=_user_h())
+    assert d.status_code == 200
+    msgs = d.json()["messages"]
+    with_tool = [m for m in msgs if m["content"] == "订单已发货"]
+    without_tool = [m for m in msgs if m["content"] == "普通回答"]
+    assert with_tool and with_tool[0]["tool"] == "order_query"
+    assert without_tool and without_tool[0].get("tool") is None

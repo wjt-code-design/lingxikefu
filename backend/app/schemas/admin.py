@@ -41,7 +41,7 @@ class AdminStats(BaseModel):
     avg_first_token_ms: float
     hot_gaps: list[HotGap] = []
     # T1.2 运营观测扩展（默认值保证旧调用方兼容）：
-    # 真拒答轮数 = refuse_count - clarify_rounds（不变式：每澄清轮恰对应一个 refuse 用户消息）
+    # 拒答口径：refuse_count 即真拒答轮数（澄清轮 intent 落 'qa' 不计入，勿再减 clarify_rounds）
     tool_dist: dict[str, int] = {}
     clarify_rounds: int = 0
     topic_dist: dict[str, int] = {}

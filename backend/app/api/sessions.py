@@ -80,6 +80,9 @@ class SessionMessage(BaseModel):
     # Branch 3：人工客服归属（契约 Message.agent_id / agent_name，仅 role=agent 携带）
     agent_id: str | None = None
     agent_name: str | None = None
+    # 大扫查 F-major（2026-08-25）：工具回答标记透出（meta.tool）——历史加载/observe
+    # 视角气泡徽章的读路径（写路径 chat.py 落库、直播态走 SSE done.tool）
+    tool: str | None = None
     # 2026-08-21：AI 回复的引用来源（assistant 角色）；user/agent 通常为空
     sources: list[SessionMessageSource] = Field(default_factory=list)
 
@@ -276,6 +279,7 @@ def get_session(
                 intent=m.intent,  # BUG-07：返回真实意图供客服判断转人工
                 agent_id=m.agent_id,  # Branch 3：人工客服归属透出
                 agent_name=m.agent_name,
+                tool=(m.meta or {}).get("tool"),  # 大扫查 F-major：工具标记读路径
                 sources=src_by_msg.get(str(m.id), []),
             )
             for m in msgs

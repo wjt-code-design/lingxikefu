@@ -239,6 +239,8 @@ export function ChatContainer({
             sources: m.sources ?? [], // 2026-08-21：历史消息带来源，修复无溯源
             ...(m.role === 'assistant' ? { messageId: m.id } : {}),
             ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
+            // 大扫查 F-major：工具徽章读路径（刷新/历史加载不丢徽章）
+            ...(m.tool ? { tool: m.tool } : {}),
           }))
         );
       })
@@ -308,6 +310,8 @@ export function ChatContainer({
                 sources: m.sources ?? [],
                 ...(m.role === 'assistant' ? { messageId: m.id } : {}),
                 ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
+                // 大扫查 F-major：轮询追加的历史消息同样带工具徽章（observe/顾客端人工介入后）
+                ...(m.tool ? { tool: m.tool } : {}),
               }));
             return fresh.length ? [...prev, ...fresh] : prev;
           });

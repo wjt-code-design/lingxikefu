@@ -13,20 +13,27 @@ let mockStage: ChatStage = 'idle';
 let mockTokens = '';
 let mockSources: { chunk_id: string; doc_title: string; snippet: string; score: number }[] = [];
 let mockMessageId: string | null = null;
+let mockUserMessageId: string | null = null;
 let mockError: { code: string; message: string } | null = null;
 let mockTool: string | undefined = undefined;
 const streamFn = vi.fn();
+const resetFn = vi.fn();
+const stopFn = vi.fn();
 
 vi.mock('@/hooks/useChatStream', () => ({
+  // 大扫查（2026-08-25）：mock 展开完整 ChatStreamState 形状（含 userMessageId/stop），
+  // 防止「比生产少字段的假象下变绿」的 mock-fidelity 陷阱
   useChatStream: () => ({
     stage: mockStage,
     tokens: mockTokens,
     sources: mockSources,
     messageId: mockMessageId,
+    userMessageId: mockUserMessageId,
     ticketId: null,
     tool: mockTool,
     error: mockError,
-    reset: vi.fn(),
+    reset: resetFn,
+    stop: stopFn,
     stream: streamFn,
   }),
 }));
@@ -64,10 +71,13 @@ beforeEach(() => {
   mockTokens = '';
   mockSources = [];
   mockMessageId = null;
+  mockUserMessageId = null;
   mockError = null;
   mockTool = undefined;
   streamFn.mockReset();
   streamFn.mockImplementation(() => new Promise((r) => setTimeout(r, 0)));
+  resetFn.mockReset();
+  stopFn.mockReset();
 });
 
 describe('P0-1 消息生命周期', () => {
@@ -124,5 +134,50 @@ describe('P0-1 消息生命周期', () => {
       </Wrapper>
     );
     await waitFor(() => expect(screen.getByText('订单查询')).toBeInTheDocument());
+  });
+
+  it('连续两轮：第一轮带 tool，第二轮普通 RAG → 第二轮气泡不残留徽章', async () => {
+    const { rerender } = renderContainer();
+    const input = screen.getByRole('textbox', { name: '问题输入' });
+    // 第一轮：工具回答（带徽章）
+    await userEvent.type(input, '帮我查订单 8823');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    mockStage = 'done';
+    mockTokens = '订单已发货。';
+    mockMessageId = 'm-1';
+    mockTool = 'order_query';
+    rerender(
+      <Wrapper>
+        <ChatContainer />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('订单查询')).toBeInTheDocument());
+    // 第二轮：普通 RAG 回答（done 无 tool 字段）——最高危回归路径：
+    // 若 tool 态跨轮残留，第二枚「订单查询」徽章会错挂到普通回答气泡上
+    await userEvent.type(input, '退货政策是什么');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    mockStage = 'generating';
+    mockTokens = '';
+    mockMessageId = null;
+    mockTool = undefined;
+    rerender(
+      <Wrapper>
+        <ChatContainer />
+      </Wrapper>
+    );
+    mockStage = 'done';
+    mockTokens = '七天无理由退货，商品需保持完好。';
+    mockMessageId = 'm-2';
+    mockTool = undefined;
+    rerender(
+      <Wrapper>
+        <ChatContainer />
+      </Wrapper>
+    );
+    await waitFor(() =>
+      expect(screen.getAllByText((t) => t.includes('七天无理由退货')).length).toBeGreaterThan(0)
+    );
+    // 全屏仅第一轮那一枚徽章——第二轮气泡未残留
+    expect(screen.getAllByText('订单查询')).toHaveLength(1);
   });
 });

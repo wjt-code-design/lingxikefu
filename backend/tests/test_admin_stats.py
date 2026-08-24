@@ -205,10 +205,9 @@ def test_stats_tool_clarify_topic_refuse(client):
       → tool_dist == {"order_query": 3, "kb_lookup": 1}
     - assistant 澄清轮 meta.clarify=True ×2 → clarify_rounds == 2
     - 会话 conv_state.topic：退换货×2 + 保修×1 + 无 conv_state 不计 → topic_dist == {"退换货": 2, "保修": 1}
-    - refuse 用户消息：fixture 已有 ×2 + 新增 ×2（其中澄清轮那问也属 refuse）
-      → refuse_count == 4
-    不变式：每个澄清轮恰对应一个 refuse 用户消息（rag_service 仅在拒答且额度>0 时澄清），
-    真拒答轮数 = refuse_count - clarify_rounds = 2，两口径分开暴露、由消费端推导。
+    - refuse 用户消息：fixture 已有 ×2 + 新增 ×2 → refuse_count == 4
+    口径（大扫查 2026-08-25 修正）：澄清轮 intent 落 'qa'（rag_service emit refuse=False），
+    天然不进 refuse_count——refuse_count 即真拒答轮数，与 clarify_rounds 无推导关系。
     """
     gen = app.dependency_overrides[get_db]()
     db = next(gen)

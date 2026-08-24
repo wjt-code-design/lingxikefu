@@ -4165,6 +4165,17 @@
             ],
             "title": "Agent Name"
           },
+          "tool": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool"
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/SessionMessageSource"
