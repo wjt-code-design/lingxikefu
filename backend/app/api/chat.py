@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import json
 import logging
-import threading
 import time
 import uuid
 from datetime import UTC, datetime
@@ -31,8 +30,7 @@ from sqlalchemy.orm import Session as OrmSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
-from app.core.tenant import get_current_tenant
-from app.models.knowledge import Document, KnowledgeBase
+from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.services import conversation_state
@@ -41,6 +39,11 @@ from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
 from app.services.agents.router import router as agent_router
 from app.services.agents.ticket_agent import TicketAgent
 from app.services.answer_cache import put as cache_put
+
+# 大扫查 O1：KB 定位/标题查询下沉服务层；别名导入保持既有测试 mock 目标
+# （app.api.chat._latest_kb_id 重绑定本命名空间仍生效）。
+from app.services.kb_lookup import doc_titles as _kb_doc_titles_sync
+from app.services.kb_lookup import get_latest_kb_id as _latest_kb_id
 from app.services.quick_answers import match_quick
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
@@ -85,14 +88,6 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-#: 最新 KB id 缓存（L7 + R-5 + B4）：按租户分桶，60s TTL 内复用避免每请求查 DB。
-#: B4 修复：原全局单值缓存所有租户共享 → 租户 A 的 kb_id 会在 TTL 内被租户 B 使用（跨租户串库）。
-#: R-5 修正：不缓存 None（新建 KB 立即可感知）+ 线程锁保护（run_in_threadpool 并发读写）。
-_kb_cache: dict[str, tuple[float, uuid.UUID]] = {}
-_kb_lock = threading.Lock()
-_KB_CACHE_TTL = 60.0
-
-
 def _kb_version_str(db: OrmSession, kb_id: uuid.UUID) -> str | None:
     """KB 版本指纹：就绪文档数 + 最新文档 created_at（T10 缓存失效锚点，文档增删均变化）。
 
@@ -114,32 +109,6 @@ def _kb_version_str(db: OrmSession, kb_id: uuid.UUID) -> str | None:
     return f"{cnt}:{latest.isoformat() if latest else ''}"
 
 
-def _latest_kb_id(db: OrmSession) -> uuid.UUID | None:
-    """MVP 单知识库：当前租户最新创建的 KB（按租户分桶短 TTL 缓存，L7/R-5/B4）。"""
-    tenant = get_current_tenant()
-    with _kb_lock:
-        now = time.time()
-        hit = _kb_cache.get(tenant)
-        if hit and now - hit[0] < _KB_CACHE_TTL:
-            return hit[1]
-        kb = db.scalar(
-            select(KnowledgeBase)
-            .where(KnowledgeBase.tenant_id == tenant)
-            .order_by(KnowledgeBase.created_at.desc())
-            .limit(1)
-        )
-        kb_id = kb.id if kb else None
-        # SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 缓存（生产 PG 本就是 uuid）
-        if kb_id is not None and not isinstance(kb_id, uuid.UUID):
-            kb_id = uuid.UUID(str(kb_id))
-        # 仅在确有 KB 时缓存；无 KB 不缓存 → 新建后立即生效
-        if kb_id is not None:
-            _kb_cache[tenant] = (now, kb_id)
-        else:
-            _kb_cache.pop(tenant, None)
-        return kb_id
-
-
 # ---- H2 修复：同步 DB / 阻塞调用统一搬出事件循环（run_in_threadpool） ----
 
 
@@ -159,17 +128,11 @@ async def _fetch_history(db: OrmSession, session_id: uuid.UUID, exclude_msg_id: 
 
 
 async def _fetch_doc_titles(db: OrmSession, doc_ids: set[uuid.UUID]) -> dict[str, str]:
-    """批量查文档标题（消息来源唯一真源），worker 线程跑同步查询。"""
-    if not doc_ids:
-        return {}
+    """批量查文档标题（消息来源唯一真源），worker 线程跑同步查询。
 
-    def _work() -> dict[str, str]:
-        return {
-            str(d.id): d.name
-            for d in db.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
-        }
-
-    return await run_in_threadpool(_work)
+    大扫查 O1：实现收敛 kb_lookup.doc_titles（三份同形拷贝 → 一份）。
+    """
+    return await run_in_threadpool(_kb_doc_titles_sync, db, doc_ids)
 
 
 async def _persist_answer(
@@ -527,6 +490,8 @@ async def chat_stream(
                         done_data["cache_hit"] = True
                     if data.get("clarify"):
                         done_data["clarify"] = True  # 批次C：澄清轮前端可感知（引导补充信息）
+                    if data.get("tool"):
+                        done_data["tool"] = data["tool"]  # 大扫查O2：工具回答透传（与 meta 同源）
                     yield _sse({"event": "done", "data": done_data})
                 elif event == "error":
                     yield _sse({"event": "error", "data": data})

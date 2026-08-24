@@ -18,12 +18,10 @@ from sqlalchemy import func, select
 from sqlalchemy import or_ as sa_or
 from sqlalchemy.orm import Session as OrmSession
 
-from app.api.chat import _latest_kb_id
 from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.core.database import get_db
 from app.llm_clients.chat import get_chat_client
-from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
@@ -31,6 +29,8 @@ from app.models.user import User
 from app.prompts.agent_assist_prompt import build_assist_messages
 from app.services import conversation_state
 from app.services.audit_service import audit_log
+from app.services.kb_lookup import doc_titles as _doc_titles_sync
+from app.services.kb_lookup import get_latest_kb_id as _latest_kb_id
 from app.services.notification_service import create_notification
 from app.services.retrieval_service import search_kb
 from app.services.session_context import build_handoff_summary
@@ -428,11 +428,10 @@ _SUGGEST_CACHE_TTL = 60.0
 
 
 def _doc_titles(db: OrmSession, doc_ids: set[str]) -> dict[str, str]:
-    """文档标题查询（消息来源唯一真源；与 chat.py sources 事件同构）。"""
+    """文档标题查询（大扫查 O1：收敛 kb_lookup.doc_titles；str id 适配层保留给 suggest 调用）。"""
     if not doc_ids:
         return {}
-    ids = [uuid.UUID(d) for d in doc_ids]
-    return {str(d.id): d.name for d in db.scalars(select(Document).where(Document.id.in_(ids))).all()}
+    return _doc_titles_sync(db, {uuid.UUID(d) for d in doc_ids})
 
 
 def _latest_user_message(db: OrmSession, session_id: uuid.UUID) -> str | None:

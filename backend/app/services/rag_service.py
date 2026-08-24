@@ -182,8 +182,9 @@ async def stream_answer(
             yield ("intent", {"intent": "qa", "refuse": False})
             yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
             yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
-            for delta in _split_tokens(question):
-                yield ("token", {"delta": delta})
+            # 大扫查O3：整段单 token 下发（与订单工具分支同构）——8 字分片会把
+            # 「订单号」等实体词拆散到相邻 SSE 事件，前端逐帧渲染出现断裂观感。
+            yield ("token", {"delta": question})
             yield ("sources", {"sources": []})
             yield ("done", {"message_id": "", "clarify": True})
             return

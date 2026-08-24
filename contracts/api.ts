@@ -192,7 +192,7 @@ export type SSEEvent =
   | { event: 'intent'; data: { intent: string; refuse?: boolean } } // R-2：真实意图（qa/handoff/chitchat）
   | { event: 'token'; data: { delta: string } }
   | { event: 'sources'; data: { sources: MessageSource[] } }
-  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean; clarify?: boolean } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存；批次C 澄清轮标记
+  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean; clarify?: boolean; tool?: string } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存；批次C 澄清轮标记；批次D 工具回答标记（如 order_query，与落库 meta 同源）
   | { event: 'error'; data: { code: string; message: string } };
 
 // ---------- Chat · Stream Request ----------
