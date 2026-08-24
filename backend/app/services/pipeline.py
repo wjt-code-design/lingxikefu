@@ -40,3 +40,18 @@ class Pipeline:
         self.stages.append(
             {"name": name, "at": datetime.now().isoformat(), "error": error}
         )
+
+    def to_dict(self) -> dict:
+        """序列化为日志/排障用字典（不含 chunks 大数组，避免日志膨胀）。"""
+        return {
+            "query": self.query,
+            "intent": self.intent,
+            "rewritten_query": self.rewritten_query,
+            "from_cache": self.from_cache,
+            "refuse": self.refuse,
+            "refuse_reason": self.refuse_reason,
+            "retrieved_chunks": len(self.chunks),
+            "dense_scores": [round(s, 4) for s in self.dense_scores[:5]],
+            "stages": self.stages,
+            "errors": self.errors,
+        }

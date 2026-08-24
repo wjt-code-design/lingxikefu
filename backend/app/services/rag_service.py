@@ -88,21 +88,25 @@ def classify_intent(query: str) -> str:
 
 
 def _build_pipeline(pipeline: Pipeline) -> Pipeline:
-    """内部：用可组合节点构建管线（向后兼容 run_pipeline）"""
+    """内部：用 PipelineRunner 编排可组合节点（条件短路 + 节点重试）"""
+    from app.orchestrator import PipelineRunner
     from app.services.steps.intent import classify_intent as _classify_intent
     from app.services.steps.rewrite import rewrite_query
     from app.services.steps.cache_check import check_cache
     from app.services.steps.retrieve import retrieve_chunks
     from app.services.steps.refuse import check_refuse
 
-    pipeline = _classify_intent(pipeline)
-    if pipeline.intent == "qa":
-        pipeline = rewrite_query(pipeline)
-        pipeline = check_cache(pipeline)
-        if not pipeline.from_cache:
-            pipeline = retrieve_chunks(pipeline)
-            pipeline = check_refuse(pipeline)
-    return pipeline
+    runner = PipelineRunner(retry=1)
+    return runner.run(
+        pipeline,
+        nodes=[
+            _classify_intent,
+            rewrite_query,
+            check_cache,
+            retrieve_chunks,
+            check_refuse,
+        ],
+    )
 
 
 def run_pipeline(query: str, kb_id: UUID, top_k: int | None = None, history: list[dict] | None = None, kb_version: str | None = None) -> RagResult:
