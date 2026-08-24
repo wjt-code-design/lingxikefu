@@ -6,24 +6,32 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy import or_ as sa_or
 from sqlalchemy.orm import Session as OrmSession
 
+from app.api.chat import _latest_kb_id
 from app.api.deps import get_current_user, require_roles
 from app.core.config import settings
 from app.core.database import get_db
+from app.llm_clients.chat import get_chat_client
+from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
+from app.prompts.agent_assist_prompt import build_assist_messages
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
+from app.services.retrieval_service import search_kb
 from app.services.session_context import build_handoff_summary
 from app.services.ticket_automation import auto_start_processing
 from app.services.user_profile_service import get_profile as get_user_profile
@@ -388,3 +396,120 @@ def rate_satisfaction(
         resource_id=str(session_id),
     )
     return OkResp()
+
+
+# ===================== 坐席辅助（批次A，2026-08-24） =====================
+
+class SuggestReq(BaseModel):
+    """坐席辅助请求：question 缺省取会话最近一条顾客消息。"""
+
+    question: str | None = Field(default=None, max_length=500)
+
+
+class SuggestResp(BaseModel):
+    """坐席辅助响应：草拟回复 + 引用来源。fail-open：失败返回空 text（不 5xx）。"""
+
+    text: str = ""
+    sources: list[SessionMessageSource] = Field(default_factory=list)
+
+
+#: 60s 结果缓存：连点/重开不重复调 LLM（key=(session_id, question)；仅缓存成功结果，
+#: 瞬时失败不粘滞）。线程锁 + 按值分桶，对齐 chat._kb_cache 模式（B4 同款纪律）。
+_suggest_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+_suggest_lock = threading.Lock()
+_SUGGEST_CACHE_TTL = 60.0
+
+
+def _doc_titles(db: OrmSession, doc_ids: set[str]) -> dict[str, str]:
+    """文档标题查询（消息来源唯一真源；与 chat.py sources 事件同构）。"""
+    if not doc_ids:
+        return {}
+    ids = [uuid.UUID(d) for d in doc_ids]
+    return {str(d.id): d.name for d in db.scalars(select(Document).where(Document.id.in_(ids))).all()}
+
+
+def _latest_user_message(db: OrmSession, session_id: uuid.UUID) -> str | None:
+    """最近一条顾客消息（建议的默认对象）。"""
+    m = db.scalar(
+        select(Message)
+        .where(Message.session_id == session_id, Message.role == MessageRole.user)
+        .order_by(Message.created_at.desc())
+        .limit(1)
+    )
+    return m.content if m else None
+
+
+@router.post("/{session_id}/suggest", response_model=SuggestResp)
+async def suggest_reply(
+    session_id: uuid.UUID,
+    body: SuggestReq,
+    payload: dict = Depends(require_roles("admin", "agent")),
+    db: OrmSession = Depends(get_db),
+) -> SuggestResp:
+    """坐席辅助（批次A）：为人工客服草拟回复建议。手动触发、fail-open、60s 结果缓存。
+
+    - 不走完整 RAG 管线：直接检索 top3（拒答场景更要给「需确认什么」的建议）；
+    - 不扣用户配额（内部工具）；
+    - LLM 用非流式 complete（客服点按钮等 1-2s 可接受，无逐字上屏需求）。
+    """
+    s = db.scalar(select(Session).where(Session.id == session_id))
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+
+    question = (body.question or "").strip()
+    if not question:
+        question = (await run_in_threadpool(_latest_user_message, db, session_id) or "").strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="no user message to suggest for")
+
+    # 结果缓存命中直接返回（成功结果才有缓存条目）
+    cache_key = (str(session_id), question)
+    with _suggest_lock:
+        hit = _suggest_cache.get(cache_key)
+        if hit and time.time() - hit[0] < _SUGGEST_CACHE_TTL:
+            return SuggestResp(**hit[1])
+
+    try:
+        kb_id = await run_in_threadpool(_latest_kb_id, db)
+        if kb_id is None:
+            return SuggestResp()  # 无知识库：空建议（fail-open，不缓存）
+
+        chunks = await run_in_threadpool(search_kb, question, kb_id, 3)
+
+        def _history() -> list[dict]:
+            rows = (
+                db.scalars(
+                    select(Message)
+                    .where(Message.session_id == session_id)
+                    .order_by(Message.created_at.desc())
+                    .limit(6)
+                )
+                .all()
+            )
+            return [{"role": m.role.value, "content": m.content} for m in reversed(rows)]
+
+        history = await run_in_threadpool(_history)
+        messages = build_assist_messages(question=question, history=history, chunks=chunks)
+        text = (await get_chat_client().complete(messages)).strip()
+
+        titles = await run_in_threadpool(
+            _doc_titles, db, {c.doc_id for c in chunks if c.doc_id}
+        )
+        sources = [
+            SessionMessageSource(
+                chunk_id=c.chunk_id,
+                doc_id=c.doc_id or None,
+                doc_title=titles.get(c.doc_id, ""),
+                snippet=c.text[:200],
+                score=round(c.score, 4),
+            )
+            for c in chunks
+        ]
+        resp = SuggestResp(text=text, sources=sources)
+        if text:
+            with _suggest_lock:
+                _suggest_cache[cache_key] = (time.time(), resp.model_dump())
+        return resp
+    except Exception:  # noqa: BLE001 - fail-open：建议失败绝不打断客服工作
+        logger.exception("agent assist suggest failed (session=%s)", session_id)
+        return SuggestResp()
