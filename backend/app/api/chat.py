@@ -46,6 +46,7 @@ from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
 from app.services.rag_service import stream_answer
 from app.services.shared_context import SharedContext
+from app.services.tools import order_tool
 from app.services.user_profile_service import (
     get_profile,
     merge_profile,
@@ -341,6 +342,21 @@ async def chat_stream(
         if IMAGE_AGENT in ctx.agents_invoked and ctx.image_paths:
             ctx = await image_agent.run(ctx)
 
+        # 批次D：订单工具分支——槽位有订单号 + 订单类主题 → 查单模板回答（零 LLM，
+        # 事实型查询不冒幻觉）；查不到/异常回落 RAG（fail-open，不阻断）
+        order_info = None
+        if (
+            (conv_state or {}).get("slots", {}).get("order_no")
+            and (conv_state or {}).get("topic") in order_tool.ORDER_TOPICS
+        ):
+            try:
+                order_info = await run_in_threadpool(
+                    order_tool.query_order, conv_state["slots"]["order_no"]
+                )
+            except Exception:  # noqa: BLE001 - 工具异常回落 RAG
+                logger.exception("订单工具查询失败（回落 RAG）")
+                order_info = None
+
         assistant_parts: list[str] = []
         source_payloads: list[dict] = []
         intent = "qa"  # R-2：默认 qa，收到 intent 事件后用真实判定
@@ -376,6 +392,18 @@ async def chat_stream(
                         yield ("token", {"delta": delta})
                     yield ("sources", {"sources": []})
                     yield ("done", {"message_id": ""})
+                    return
+                # 批次D：订单工具短路——零 LLM 模板回答（quick_ans 同构事件形态）
+                if order_info is not None:
+                    reply_text = order_tool.format_order_reply(order_info)
+                    yield ("intent", {"intent": "qa", "refuse": False})
+                    yield ("stage", {"stage": "retrieving", "msg": "已查询订单"})
+                    yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
+                    # 整段单 token 下发：_split_answer 8 字分片会把订单号/物流单号截断
+                    # 跨事件（SSE 逐 delta JSON 编码，前端无法重组为可复制整号）
+                    yield ("token", {"delta": reply_text})
+                    yield ("sources", {"sources": []})
+                    yield ("done", {"message_id": "", "tool": "order_query"})
                     return
                 # v1.3 图片理解：如果有融合查询（Image Agent 成功处理），使用融合查询
                 search_query = ctx.fused_query if ctx.fused_query else req.content
@@ -449,6 +477,8 @@ async def chat_stream(
                     # 落库 assistant 消息 + 来源真源 + 真实 intent + 首字时延埋点
                     content = "".join(assistant_parts)
                     meta = {"first_token_ms": first_token_ms} if first_token_ms is not None else {}
+                    if data.get("tool"):
+                        meta["tool"] = data["tool"]  # 批次D：工具回答可观测
                     if data.get("cache_hit"):
                         cache_hit = True
                         meta["cache_hit"] = True  # T10：缓存命中可溯源

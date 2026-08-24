@@ -427,6 +427,11 @@ def test_session_satisfaction(client):
 def test_chat_updates_conv_state(client, monkeypatch):
     """批次B：两轮对话驱动 conv_state——首轮退款主题→collecting，次轮补订单号→resolving。"""
     c, Local, _ = client
+    # 批次D 起订单工具会截胡「订单主题+订单号」消息（查单命中即短路）——置空缓存
+    # 让查单 miss 回落 RAG，本用例专注批次B state_hint 透传（工具分支由 order_tool 系列用例覆盖）
+    import app.services.tools.order_tool as _ot
+
+    monkeypatch.setattr(_ot, "_ORDERS_CACHE", {})
     captured_kwargs: dict = {}
 
     class _CaptureStream(_FakeStream):
@@ -552,3 +557,81 @@ def test_chat_clarify_left_decrements_across_rounds(client, monkeypatch):
     )
     assert r.status_code == 200
     assert captured.get("clarify_left") == 0  # 额度耗尽，禁止澄清
+
+
+def test_chat_order_tool_branch(client, monkeypatch, tmp_path):
+    """批次D：槽位订单号+订单主题 → 工具分支零 LLM 回答（meta 带 tool 标记）。"""
+    import json as _json
+
+    c, Local, _ = client
+    data_file = tmp_path / "orders.json"
+    data_file.write_text(
+        _json.dumps({
+            "orders": [{
+                "order_no": "SO2026080118", "status": "shipped", "items": "空气净化器 K1",
+                "logistics_no": "SF1384429007712", "eta": "2026-08-26 前送达", "updated_at": "x",
+            }]
+        }, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    import app.services.tools.order_tool as ot
+    monkeypatch.setattr(ot, "_DATA_FILE", data_file)
+    monkeypatch.setattr(ot, "_ORDERS_CACHE", None)
+    monkeypatch.setattr("app.api.chat.order_tool._DATA_FILE", data_file)
+    monkeypatch.setattr("app.api.chat.order_tool._ORDERS_CACHE", None)
+
+    sid = "11111111-1111-1111-1111-111111111111"
+    # 一条消息同时含主题与订单号 → 槽位即时填充 → 工具分支
+    r = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "订单 SO2026080118 物流到哪了", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert "已发货" in r.text
+    assert "SO2026080118" in r.text
+    assert "SF1384429007712" in r.text
+
+    # 落库 meta 带 tool 标记
+    with Local() as db:
+        from app.models.message import Message as M
+        msgs = db.scalars(select(M).where(M.session_id == uuid.UUID(sid), M.role == "assistant")).all()
+        assert msgs
+        assert msgs[-1].meta and msgs[-1].meta.get("tool") == "order_query"
+
+
+def test_chat_order_tool_miss_falls_back_rag(client, monkeypatch):
+    """批次D：订单号查不到 → 回落 RAG 正常流（不阻断）。"""
+    c, _, _ = client
+    import app.services.tools.order_tool as ot
+    monkeypatch.setattr(ot, "_ORDERS_CACHE", {})
+    monkeypatch.setattr("app.api.chat.order_tool._ORDERS_CACHE", {})
+
+    sid = "11111111-1111-1111-1111-111111111111"
+    r = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "订单 SO9999999999 退款到哪一步了", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200  # 回落 RAG（mock 的 _FakeStream 事件流照常）
+
+
+def test_chat_order_tool_no_slot_skips(client, monkeypatch):
+    """批次D：无订单号槽位（纯主题消息）→ 不走工具分支（走 RAG）。"""
+    c, _, _ = client
+    called = {"n": 0}
+
+    import app.api.chat as chat_mod
+    orig = chat_mod.order_tool.query_order
+    monkeypatch.setattr(
+        "app.api.chat.order_tool.query_order",
+        lambda no: (called.__setitem__("n", called["n"] + 1), orig(no))[1],
+    )
+    sid = "11111111-1111-1111-1111-111111111111"
+    r = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "退款多久到账", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert called["n"] == 0  # 工具未被调用
