@@ -436,6 +436,8 @@ async def chat_stream(
                     meta = {"first_token_ms": first_token_ms} if first_token_ms is not None else {}
                     if data.get("tool"):
                         meta["tool"] = data["tool"]  # 批次D：工具回答可观测
+                    if data.get("clarify"):
+                        meta["clarify"] = True  # T1.1：澄清轮落库可辨（运营区分澄清与真拒答）
                     if data.get("cache_hit"):
                         cache_hit = True
                         meta["cache_hit"] = True  # T10：缓存命中可溯源

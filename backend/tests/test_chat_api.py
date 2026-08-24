@@ -526,6 +526,16 @@ def test_chat_clarify_flow_updates_state(client, monkeypatch):
         assert s.conv_state is not None
         assert s.conv_state["stage"] == "clarifying"
         assert s.conv_state["clarify_count"] == 1
+        # T1.1：澄清轮 assistant 落库必须带 meta.clarify=True——
+        # 运营区分「澄清追问」与「真拒答」的唯一原料（否则 admin refuse 口径被澄清轮污染）
+        a_msg = db.scalars(
+            select(Message).where(
+                Message.role == MessageRole.assistant,
+                Message.session_id == uuid.UUID(sid),
+            )
+        ).first()
+        assert a_msg is not None
+        assert a_msg.meta is not None and a_msg.meta.get("clarify") is True
 
 
 def test_chat_clarify_left_decrements_across_rounds(client, monkeypatch):
