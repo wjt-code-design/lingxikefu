@@ -163,3 +163,60 @@ describe('useChatStream 服务端中途断连兜底（B3）', () => {
     expect(result.current.tokens).toBe('部分回答'); // 已收内容保留
   });
 });
+
+/** 可复用的单帧 fetch 替身：吐完 frames 后正常关闭流 */
+function installOneShotFetch(frames: string[]) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        body: {
+          getReader: () => ({
+            read: () => {
+              const text = frames.length > 0 ? frames.shift()! : null;
+              return Promise.resolve(
+                text === null
+                  ? { done: true, value: undefined }
+                  : { done: false, value: new TextEncoder().encode(text) }
+              );
+            },
+          }),
+        },
+      })
+    )
+  );
+}
+
+describe('useChatStream 工具回答标记（T3.1）', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('done 带 tool=order_query → 写入 state.tool', async () => {
+    installOneShotFetch([
+      'data: {"event":"token","data":{"delta":"您的订单已发货"}}\n\n',
+      'data: {"event":"done","data":{"message_id":"m9","tool":"order_query"}}\n\n',
+    ]);
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '查订单' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.stage).toBe('done');
+    // T3.1：旧实现 state 无 tool 字段 → undefined → 红
+    expect(result.current.tool).toBe('order_query');
+  });
+
+  it('done 不带 tool（普通 LLM/RAG 回答）→ state.tool 保持 undefined', async () => {
+    installOneShotFetch([
+      'data: {"event":"done","data":{"message_id":"m10"}}\n\n',
+    ]);
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '退货政策' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.stage).toBe('done');
+    expect(result.current.tool).toBeUndefined();
+  });
+});

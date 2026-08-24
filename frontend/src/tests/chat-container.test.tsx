@@ -14,6 +14,7 @@ let mockTokens = '';
 let mockSources: { chunk_id: string; doc_title: string; snippet: string; score: number }[] = [];
 let mockMessageId: string | null = null;
 let mockError: { code: string; message: string } | null = null;
+let mockTool: string | undefined = undefined;
 const streamFn = vi.fn();
 
 vi.mock('@/hooks/useChatStream', () => ({
@@ -23,6 +24,7 @@ vi.mock('@/hooks/useChatStream', () => ({
     sources: mockSources,
     messageId: mockMessageId,
     ticketId: null,
+    tool: mockTool,
     error: mockError,
     reset: vi.fn(),
     stream: streamFn,
@@ -63,6 +65,7 @@ beforeEach(() => {
   mockSources = [];
   mockMessageId = null;
   mockError = null;
+  mockTool = undefined;
   streamFn.mockReset();
   streamFn.mockImplementation(() => new Promise((r) => setTimeout(r, 0)));
 });
@@ -103,5 +106,23 @@ describe('P0-1 消息生命周期', () => {
     );
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.getAllByText((t) => t.includes('保修一年')).length).toBe(1);
+  });
+
+  it('done 带 tool → finalize 后气泡显示工具徽章（T3.2/T3.3 链路）', async () => {
+    const { rerender } = renderContainer();
+    const input = screen.getByRole('textbox', { name: '问题输入' });
+    await userEvent.type(input, '帮我查订单 8823');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    // 流式完成且 done 携带工具标记
+    mockStage = 'done';
+    mockTokens = '订单已发货，物流单号 8823。';
+    mockMessageId = 'm-2';
+    mockTool = 'order_query';
+    rerender(
+      <Wrapper>
+        <ChatContainer />
+      </Wrapper>
+    );
+    await waitFor(() => expect(screen.getByText('订单查询')).toBeInTheDocument());
   });
 });

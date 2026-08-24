@@ -136,7 +136,7 @@ export function ChatContainer({
   /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel） */
   onRegisterFill?: (fill: (text: string) => void) => void;
 }) {
-  const { stage, tokens, sources, messageId, userMessageId, ticketId, error, reset, stop, stream } = useChatStream();
+  const { stage, tokens, sources, messageId, userMessageId, ticketId, tool, error, reset, stop, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -339,6 +339,7 @@ export function ChatContainer({
       status: stage === 'done' ? 'done' : 'failed',
       ...(stage === 'done' && messageId ? { messageId } : {}),
       ...(ticketId ? { ticketId } : {}), // T1：handoff 建单工单号 → 气泡提示
+      ...(tool ? { tool } : {}), // 批次D/T3：工具回答标记 → 气泡来源徽章
     };
     setMessages((prev) => {
       const next = prev.map((m) =>
@@ -359,7 +360,7 @@ export function ChatContainer({
     if (stage === 'done') setTurnCount((n) => n + 1);
     reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 不参与依赖（防 done 后点赞等触发重复 finalize）
-  }, [stage, tokens, sources, messageId, userMessageId, ticketId, error, reset, sessionId]);
+  }, [stage, tokens, sources, messageId, userMessageId, ticketId, tool, error, reset, sessionId]);
 
   const onSend = useCallback(
     async (text: string, clientMsgId?: string): Promise<boolean> => {

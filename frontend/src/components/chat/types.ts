@@ -11,6 +11,8 @@ export interface ChatMessage {
   sources?: MessageSource[];
   messageId?: string;
   ticketId?: string; // T1：handoff 建单后携带工单号（用户侧提示）
+  /** 批次D/T3：工具回答标记（如 order_query）→ 气泡「订单查询」徽章；普通 RAG/LLM 回答无此字段 */
+  tool?: string;
   /** P0-1：消息生命周期（sending=发送中 / done=完成 / failed=失败可重试）。历史加载默认 done。 */
   status?: 'sending' | 'done' | 'failed';
   feedback?: 'up' | 'down' | null;

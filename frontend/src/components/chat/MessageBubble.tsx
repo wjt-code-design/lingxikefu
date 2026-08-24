@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '@/store/authStore';
-import { Button, Typography, message } from 'antd';
+import { Button, Tag, Typography, message } from 'antd';
 import { CopyOutlined, CustomerServiceOutlined } from '@ant-design/icons';
 import type { ChatMessage } from './types';
 import { MarkdownContent } from '@/components/common/MarkdownContent';
@@ -9,6 +9,13 @@ import { ThumbsBar } from './ThumbsBar';
 import { OrderCards } from './OrderCards';
 import { detectOrderTrack } from './orderTrack';
 import { TicketStatusBadge } from './TicketStatusBadge';
+
+/** T3.3：工具回答来源标签映射——新增工具只加配置不改组件；未知值兜底显示原始 key。 */
+const TOOL_LABEL_MAP: Record<string, string> = {
+  order_query: '订单查询',
+  kb_lookup: '知识库',
+  llm: 'AI 生成',
+};
 
 /** 单条消息气泡（角色 + 视角双维度 · 2026-08-19）
  *
@@ -167,6 +174,11 @@ export function MessageBubble({
             >
               {copied ? '已复制' : '复制'}
             </Button>
+            {msg.tool && (
+              <Tag className="chat-msg__tool-badge" color="blue" bordered>
+                {TOOL_LABEL_MAP[msg.tool] ?? msg.tool}
+              </Tag>
+            )}
             {(() => {
               // 订单轨迹识别：流式渐进输出时也能即时切换为卡片视图，绕过 Markdown 纯文本。
               // detectOrderTrack 契约：detected ⇒ items ≥ 1（preamble/footer 已剔除来源标记）；
