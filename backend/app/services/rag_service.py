@@ -21,8 +21,7 @@ from app.core.config import settings
 from app.llm_clients.chat import get_chat_client
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.pipeline import Pipeline
-from app.services.query_rewrite import rewrite
-from app.services.retrieval_service import RetrievalError, RetrievedChunk, search_kb
+from app.services.retrieval_service import RetrievalError, RetrievedChunk
 from app.services.session_context import extract_topic
 
 logger = logging.getLogger(__name__)
@@ -90,11 +89,11 @@ def classify_intent(query: str) -> str:
 def _build_pipeline(pipeline: Pipeline) -> Pipeline:
     """内部：用 PipelineRunner 编排可组合节点（条件短路 + 节点重试）"""
     from app.orchestrator import PipelineRunner
-    from app.services.steps.intent import classify_intent as _classify_intent
-    from app.services.steps.rewrite import rewrite_query
     from app.services.steps.cache_check import check_cache
-    from app.services.steps.retrieve import retrieve_chunks
+    from app.services.steps.intent import classify_intent as _classify_intent
     from app.services.steps.refuse import check_refuse
+    from app.services.steps.retrieve import retrieve_chunks
+    from app.services.steps.rewrite import rewrite_query
 
     runner = PipelineRunner(retry=1)
     return runner.run(
@@ -143,6 +142,7 @@ async def stream_answer(
     top_k: int | None = None,
     kb_version: str | None = None,
     user_profile: str | None = None,
+    state_hint: str | None = None,
 ):
     """流式回答：yield (event_type, data)。
 
@@ -153,6 +153,8 @@ async def stream_answer(
     - 任一异常 → error（fail-closed，不静默）
     - user_profile（可选，2026-08-22 Phase C）：画像文本，透传 build_qa_messages 注入
       <<用户画像>> 块；None 不注入（输出与旧版一致）。仅影响 prompt，不影响缓存 key。
+    - state_hint（可选，批次B）：会话状态机提示（主题+槽位），优先级高于 extract_topic
+      兜底；None 时回退 extract_topic（旧行为），且不进缓存 key（仅影响 prompt）。
     """
     result = RagResult(intent="qa")
     top_k = settings.RETRIEVAL_TOP_K if top_k is None else top_k
@@ -191,13 +193,13 @@ async def stream_answer(
         return
 
     try:
-        topic = extract_topic(history)  # 2026-08-21：会话主题注入（轻量状态），跨轮保持主题
+        topic = extract_topic(history)  # 兜底：无状态提示时维持旧行为
         messages = build_qa_messages(
             query=query,
             chunks=result.chunks,
             history=history or [],
-            context_hint=topic,
-            profile=user_profile,  # 2026-08-22 Phase C：用户画像注入（None=不注入，兼容旧输出）
+            context_hint=state_hint or topic,  # 批次B：状态机提示优先
+            profile=user_profile,
         )
         client = get_chat_client()
         # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（provider-aware），

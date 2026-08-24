@@ -35,6 +35,7 @@ from app.core.tenant import get_current_tenant
 from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
+from app.services import conversation_state
 from app.services.agents.image_agent import ImageAgent
 from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
 from app.services.agents.router import router as agent_router
@@ -284,6 +285,8 @@ async def chat_stream(
     # 画像归属：会话 owner（在 gen 外捕获——gen 内 sources 事件把 `s` 用作迭代变量，
     # 使 `s` 在 gen 作用域内变成局部名，闭包内引用会 UnboundLocalError——测试亲眼红过此 bug）
     session_owner_id = s.user_id
+    # 批次B：conv_state 读写同样走别名（`s` 在 gen 内被遮蔽，不能直接引用）
+    session_obj = s
 
     async def gen():
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
@@ -298,6 +301,20 @@ async def chat_stream(
 
         # 组装历史（最近 6 条，供 RAG 上下文；不含当前问题）
         history = await _fetch_history(db, session_id, user_msg.id)
+
+        # 批次B：会话状态机——读旧状态 → 消息推进 → 写回 + 生成 prompt 提示（fail-open：
+        # 任何异常降级为无状态，问答照常；conv_state=None 的旧会话按 new_state 处理）
+        try:
+            conv_state = await run_in_threadpool(
+                lambda: conversation_state.update(session_obj.conv_state, req.content)
+            )
+            session_obj.conv_state = conv_state
+            await run_in_threadpool(db.commit)
+            state_hint = conversation_state.to_prompt_hint(conv_state)
+        except Exception:  # noqa: BLE001 - fail-open
+            logger.exception("conv_state 更新失败（降级无状态，问答照常）")
+            db.rollback()
+            state_hint = None
 
         # v1.1 Router 前置编排（方案书 §2.1）：前置意图分类（单一真源，规则式零 LLM）
         # + 决定执行计划（agents_invoked）。非阻塞关键词匹配，无需搬线程池。
@@ -362,6 +379,7 @@ async def chat_stream(
                     history=history,
                     kb_version=kb_version,
                     user_profile=user_profile,
+                    state_hint=state_hint,
                 ):
                     yield (e, d)
 

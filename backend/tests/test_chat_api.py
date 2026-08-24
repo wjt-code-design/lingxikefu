@@ -422,3 +422,69 @@ def test_session_satisfaction(client):
         "Authorization": f"Bearer {create_access_token('99999999-9999-9999-9999-999999999999', 'user')}"
     }).json()["session_id"]
     assert tc.post(f"{API}/sessions/{other_sid}/satisfaction", json={"rating": "neutral"}, headers=_headers()).status_code == 404
+
+
+def test_chat_updates_conv_state(client, monkeypatch):
+    """批次B：两轮对话驱动 conv_state——首轮退款主题→collecting，次轮补订单号→resolving。"""
+    c, Local, _ = client
+    captured_kwargs: dict = {}
+
+    class _CaptureStream(_FakeStream):
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            captured_kwargs.update(kwargs)
+            async for ev in _FakeStream.__call__(query, kb_id, history=history, top_k=top_k, **kwargs):
+                yield ev
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _CaptureStream())
+    sid = "11111111-1111-1111-1111-111111111111"
+
+    # 第一轮：退款主题，无订单号
+    r1 = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "我要退款", "stream": True},
+        headers=_headers(),
+    )
+    assert r1.status_code == 200
+
+    with Local() as db:
+        s = db.scalar(select(Session).where(Session.id == uuid.UUID(sid)))
+        assert s.conv_state is not None
+        assert s.conv_state["topic"] == "退款"
+        assert s.conv_state["stage"] == "info_collecting"
+
+    # 第二轮：补订单号
+    r2 = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "订单号 SO2026080118", "stream": True},
+        headers=_headers(),
+    )
+    assert r2.status_code == 200
+
+    with Local() as db:
+        s = db.scalar(select(Session).where(Session.id == uuid.UUID(sid)))
+        assert s.conv_state["slots"]["order_no"] == "SO2026080118"
+        assert s.conv_state["stage"] == "resolving"
+
+    # state_hint 已透传给 stream_answer（第二轮含订单号）
+    assert "state_hint" in captured_kwargs
+    assert captured_kwargs["state_hint"] is not None
+    assert "SO2026080118" in captured_kwargs["state_hint"]
+
+
+def test_chat_conv_state_fail_open(client, monkeypatch):
+    """批次B：状态写库异常不阻断问答（fail-open）——mock update 抛错，流照常完成。"""
+    c, _, _ = client
+    monkeypatch.setattr(
+        "app.api.chat.conversation_state.update",
+        lambda state, message: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    sid = "11111111-1111-1111-1111-111111111111"
+    r = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "我要退款", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200  # fail-open：异常不 5xx
+    body = r.text
+    assert "SYS_ERROR" not in body or "token" in body  # 流正常产出（token 事件存在）
