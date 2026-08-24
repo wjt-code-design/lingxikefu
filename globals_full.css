@@ -1,0 +1,2002 @@
+Read "C:\Users\33393\WorkBuddy\2026-08-15-00-39-34\frontend\src\styles\globals.css":
+
+     1	/* ============================================================
+     2	   全局基础样式（海盐蓝治愈系 · 2026-08-17）
+     3	   只改样式、不动 DOM 结构；修正历史幽灵 CSS 变量（--color-ink 等）
+     4	   ============================================================ */
+     5	* {
+     6	  box-sizing: border-box;
+     7	}
+     8	
+     9	/* Skip link - 键盘无障碍：Tab 聚焦时可见，跳过导航直达内容 */
+    10	.skip-link {
+    11	  position: absolute;
+    12	  top: -40px;
+    13	  left: 0;
+    14	  background: var(--color-brand);
+    15	  color: white;
+    16	  padding: 8px 16px;
+    17	  text-decoration: none;
+    18	  z-index: 9999;
+    19	  border-radius: 0 0 4px 0;
+    20	  transition: top 0.2s;
+    21	}
+    22	.skip-link:focus {
+    23	  top: 0;
+    24	}
+    25	
+    26	html,
+    27	body,
+    28	#root {
+    29	  height: 100%;
+    30	  margin: 0;
+    31	  padding: 0;
+    32	}
+    33	
+    34	body {
+    35	  font-family:
+    36	    'Sora', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, 'PingFang SC',
+    37	    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    38	  /* 冷灰画布 + 品牌色光晕纵深 */
+    39	  background: var(--bg-page);
+    40	  color: var(--text-2);
+    41	  transition:
+    42	    background-color 0.2s ease,
+    43	    color 0.2s ease;
+    44	  -webkit-font-smoothing: antialiased;
+    45	  /* 禁止双击缩放，提升触摸响应 */
+    46	  touch-action: manipulation;
+    47	  /* 安全区适配（iPhone 刘海屏等） */
+    48	  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    49	}
+    50	
+    51	/* ---------- 通用动效（轻量化，不花哨） ---------- */
+    52	
+    53	/* 消息弹出：淡入 + 轻微向上位移 */
+    54	.chat-msg {
+    55	  animation: msg-in var(--dur-base) var(--ease-out);
+    56	}
+    57	@keyframes msg-in {
+    58	  from {
+    59	    opacity: 0;
+    60	    transform: translateY(6px);
+    61	  }
+    62	  to {
+    63	    opacity: 1;
+    64	    transform: none;
+    65	  }
+    66	}
+    67	
+    68	/* 卡片入场：淡入 + 向上位移（Landing/Profile/Help 等页面卡片） */
+    69	@keyframes card-in {
+    70	  from {
+    71	    opacity: 0;
+    72	    transform: translateY(12px);
+    73	  }
+    74	  to {
+    75	    opacity: 1;
+    76	    transform: none;
+    77	  }
+    78	}
+    79	
+    80	/* 页面入场：柔和淡入 */
+    81	.page,
+    82	.widget-shell__body {
+    83	  animation: page-in var(--dur-page) var(--ease-out);
+    84	}
+    85	@keyframes page-in {
+    86	  from {
+    87	    opacity: 0;
+    88	  }
+    89	  to {
+    90	    opacity: 1;
+    91	  }
+    92	}
+    93	
+    94	/* 卡片交错入场（Landing features） */
+    95	.landing__feature {
+    96	  animation: card-in var(--dur-page) var(--ease-out) both;
+    97	}
+    98	.landing__feature:nth-child(1) { animation-delay: 0ms; }
+    99	.landing__feature:nth-child(2) { animation-delay: 80ms; }
+   100	.landing__feature:nth-child(3) { animation-delay: 160ms; }
+   101	
+   102	/* Profile 卡片入场 */
+   103	.profile > .ant-card {
+   104	  animation: card-in var(--dur-page) var(--ease-out) both;
+   105	}
+   106	.profile > .ant-card:nth-child(1) { animation-delay: 0ms; }
+   107	.profile > .ant-card:nth-child(2) { animation-delay: 60ms; }
+   108	.profile > .ant-card:nth-child(3) { animation-delay: 120ms; }
+   109	
+   110	/* FAQ 条目 hover 微交互增强 */
+   111	.faq-item {
+   112	  transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+   113	}
+   114	.faq-item:hover {
+   115	  transform: translateY(-1px);
+   116	  box-shadow: var(--shadow-sm);
+   117	}
+   118	.faq-item.is-open {
+   119	  transform: none;
+   120	  box-shadow: var(--shadow-card);
+   121	}
+   122	
+   123	/* Help 卡片 hover 增强 */
+   124	.help__card {
+   125	  transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+   126	}
+   127	.help__card:hover {
+   128	  transform: translateY(-2px);
+   129	  box-shadow: var(--shadow-elevated);
+   130	}
+   131	
+   132	/* 按钮 hover：缓慢提亮 + 轻微放大 1.02 倍（轻量化）。
+   133	   I3 修复：scale 仅主操作按钮（primary / 热问胶囊），
+   134	   排除 Space.Compact 内小按钮（重试/转人工/发送）与纯图标按钮（赞踩/复制）——避免组内跳动 */
+   135	.ant-btn {
+   136	  transition:
+   137	    background-color var(--dur-base) var(--ease-out),
+   138	    border-color var(--dur-base) var(--ease-out),
+   139	    color var(--dur-base) var(--ease-out);
+   140	}
+   141	.ant-btn:not(:disabled):hover {
+   142	  background-color: rgba(150, 200, 232, 0.1);
+   143	}
+   144	.ant-btn-primary:not(:disabled):hover,
+   145	.chat-container__hot-btn:not(:disabled):hover {
+   146	  transform: scale(1.02);
+   147	}
+   148	.ant-btn-primary:not(:disabled) {
+   149	  transition:
+   150	    transform var(--dur-fast) var(--ease-out),
+   151	    background-color var(--dur-base) var(--ease-out),
+   152	    border-color var(--dur-base) var(--ease-out),
+   153	    color var(--dur-base) var(--ease-out);
+   154	}
+   155	
+   156	/* 输入框激活：柔和淡蓝色光晕 */
+   157	.chat-composer textarea:focus,
+   158	.ant-input:focus,
+   159	.ant-input-focused {
+   160	  box-shadow: 0 0 0 3px rgba(150, 200, 232, 0.25) !important;
+   161	}
+   162	
+   163	/* 尊重系统减弱动效偏好 */
+   164	@media (prefers-reduced-motion: reduce) {
+   165	  .chat-msg {
+   166	    animation: none;
+   167	  }
+   168	  .chat-msg__text--stream::after {
+   169	    animation: none;
+   170	  }
+   171	  .chat-welcome__icon,
+   172	  .hot-card__icon {
+   173	    animation: none;
+   174	    transition: none;
+   175	  }
+   176	  .ant-btn {
+   177	    transition: none;
+   178	  }
+   179	  .ant-btn:not(:disabled):hover {
+   180	    transform: none;
+   181	  }
+   182	  .hot-card,
+   183	  .hot-card__item {
+   184	    transform: none !important;
+   185	    box-shadow: var(--shadow-card);
+   186	  }
+   187	}
+   188	
+   189	/* ---------- 布局辅助 ---------- */
+   190	
+   191	/* AppTable 行 hover 品牌化高亮 + 左侧色条微指示 */
+   192	.app-table-row:hover > td {
+   193	  background: var(--color-brand-soft) !important;
+   194	  transition: background-color var(--dur-fast) var(--ease-out);
+   195	}
+   196	.app-table-row > td:first-child {
+   197	  position: relative;
+   198	}
+   199	.app-table-row > td:first-child::before {
+   200	  content: '';
+   201	  position: absolute;
+   202	  left: 0;
+   203	  top: 0;
+   204	  bottom: 0;
+   205	  width: 2px;
+   206	  background: var(--color-brand);
+   207	  opacity: 0;
+   208	  transition: opacity var(--dur-fast) var(--ease-out);
+   209	}
+   210	.app-table-row:hover > td:first-child::before {
+   211	  opacity: 1;
+   212	}
+   213	
+   214	/* ---------- 页面氛围渐变（公共骨架，收敛自 11 个页面各自复制的 ::before 渐变） ----------
+   215	   用法：页面根元素挂 .page-atmo（可选 --atmo-h 覆盖渐变高度，默认 160px）。
+   216	   渐变本体来自 tokens.css 的 --atmo-gradient（单一真源）。 */
+   217	.page-atmo {
+   218	  position: relative;
+   219	  --atmo-h: 160px;
+   220	}
+   221	.page-atmo::before {
+   222	  content: "";
+   223	  position: absolute;
+   224	  inset: -16px -16px auto -16px;
+   225	  height: var(--atmo-h);
+   226	  background: var(--atmo-gradient);
+   227	  pointer-events: none;
+   228	  z-index: 0;
+   229	  border-radius: var(--radius-md);
+   230	}
+   231	.page-atmo > * {
+   232	  position: relative;
+   233	  z-index: 1;
+   234	}
+   235	@media (max-width: 767px) {
+   236	  .page-atmo {
+   237	    padding: 12px;
+   238	  }
+   239	  .page-atmo .ant-card {
+   240	    border-radius: var(--radius-sm);
+   241	  }
+   242	  .page-atmo .ant-table-wrapper {
+   243	    overflow-x: auto;
+   244	  }
+   245	  .page-atmo .ant-table {
+   246	    min-width: 600px;
+   247	  }
+   248	}
+   249	
+   250	/* ---------- KPI 指标卡（公共组件 KpiCard，收敛自 admin/Dashboard、admin/Stats、agent/Dashboard 三份重复实现） ---------- */
+   251	.kpi-card {
+   252	  background: var(--color-surface);
+   253	  border: 1px solid var(--border);
+   254	  border-radius: var(--radius-md);
+   255	  box-shadow: var(--shadow-card);
+   256	  padding: 16px 18px 14px;
+   257	  height: 100%;
+   258	  position: relative;
+   259	  overflow: hidden;
+   260	  transition:
+   261	    border-color var(--dur-fast) var(--ease-out),
+   262	    box-shadow var(--dur-fast) var(--ease-out),
+   263	    transform var(--dur-fast) var(--ease-out);
+   264	}
+   265	.kpi-card::before {
+   266	  content: '';
+   267	  position: absolute;
+   268	  top: 0;
+   269	  left: 0;
+   270	  bottom: 0;
+   271	  width: 3px;
+   272	  background: linear-gradient(180deg, var(--color-brand), var(--color-brand-pale));
+   273	  opacity: 0.8;
+   274	  transition: opacity var(--dur-fast) var(--ease-out);
+   275	}
+   276	.kpi-card:hover {
+   277	  border-color: color-mix(in srgb, var(--color-brand) 45%, var(--border));
+   278	  box-shadow: 0 4px 16px rgba(46, 93, 133, 0.1);
+   279	  transform: translateY(-1px);
+   280	}
+   281	.kpi-card:hover::before {
+   282	  opacity: 1;
+   283	}
+   284	/* 指标类型色条变体 */
+   285	.kpi-card--success::before {
+   286	  background: linear-gradient(180deg, var(--color-accent), #8bc9ac);
+   287	}
+   288	.kpi-card--warning::before {
+   289	  background: linear-gradient(180deg, var(--color-amber), #f0c896);
+   290	}
+   291	.kpi-card--danger::before {
+   292	  background: linear-gradient(180deg, var(--color-danger), #e8a0a0);
+   293	}
+   294	.kpi-card__label {
+   295	  font-size: 13px;
+   296	  color: var(--text-3);
+   297	  margin-bottom: 6px;
+   298	  font-weight: 500;
+   299	}
+   300	.kpi-card__value {
+   301	  font-size: 28px;
+   302	  line-height: 1.1;
+   303	  font-weight: 700;
+   304	  color: var(--text-1);
+   305	  font-variant-numeric: tabular-nums;
+   306	  letter-spacing: -0.5px;
+   307	  background: linear-gradient(135deg, var(--text-1), var(--text-2));
+   308	  -webkit-background-clip: text;
+   309	  -webkit-text-fill-color: transparent;
+   310	  background-clip: text;
+   311	}
+   312	.kpi-card__suffix {
+   313	  font-size: 14px;
+   314	  font-weight: 400;
+   315	  color: var(--text-3);
+   316	  margin-left: 4px;
+   317	  -webkit-text-fill-color: var(--text-3);
+   318	}
+   319	.kpi-card__caption {
+   320	  font-size: 12px;
+   321	  color: var(--text-4);
+   322	  white-space: nowrap;
+   323	  overflow: hidden;
+   324	  text-overflow: ellipsis;
+   325	  margin-top: 8px;
+   326	}
+   327	.kpi-card__foot {
+   328	  display: flex;
+   329	  align-items: center;
+   330	  justify-content: space-between;
+   331	  gap: 12px;
+   332	  margin-top: 10px;
+   333	}
+   334	/* KPI 卡内迷你趋势线（sparkline，flex none 不被挤压） */
+   335	.kpi-card .sparkline {
+   336	  flex: none;
+   337	  opacity: 0.92;
+   338	}
+   339	@media (max-width: 767px) {
+   340	  .kpi-card {
+   341	    padding: 12px 14px 12px 14px;
+   342	  }
+   343	  .kpi-card::before {
+   344	    width: 2px;
+   345	  }
+   346	  .kpi-card__value {
+   347	    font-size: 22px;
+   348	  }
+   349	}
+   350	
+   351	/* 表格表头：极浅蓝灰背景（token 化，暗色模式由 [data-theme='dark'] 覆盖） */
+   352	.ant-table-thead > tr > th {
+   353	  background: var(--table-head-bg) !important;
+   354	}
+   355	
+   356	/* 工作台内页面标题：22px / 700，比 antd 默认 20px 更醒目（仅工作台范围，不动 auth） */
+   357	.app-workbench .ant-typography h3,
+   358	.app-workbench h3.ant-typography {
+   359	  font-size: 22px !important;
+   360	  font-weight: 700 !important;
+   361	}
+   362	
+   363	/* 工单提示条（amber 微光，柔和化）。两行结构：文案行 + "工单号+状态角标"元信息行 */
+   364	.chat-msg__ticket {
+   365	  display: flex;
+   366	  align-items: flex-start;
+   367	  gap: 8px;
+   368	  margin-top: 8px;
+   369	  padding: 8px 12px;
+   370	  border-radius: 10px;
+   371	  font-size: 12px;
+   372	  line-height: 18px;
+   373	  color: var(--text-3);
+   374	  background: color-mix(in srgb, var(--color-amber) 16%, transparent);
+   375	  border: 1px solid color-mix(in srgb, var(--color-amber) 38%, transparent);
+   376	}
+   377	.chat-msg__ticket::before {
+   378	  content: '';
+   379	  flex-shrink: 0;
+   380	  width: 6px;
+   381	  height: 6px;
+   382	  margin-top: 6px; /* 对齐第一行文字中线 */
+   383	  border-radius: 50%;
+   384	  background: var(--color-amber);
+   385	}
+   386	.chat-msg__ticket-body {
+   387	  flex: 1;
+   388	  min-width: 0;
+   389	  display: flex;
+   390	  flex-direction: column;
+   391	  gap: 4px;
+   392	}
+   393	.chat-msg__ticket-line2 {
+   394	  display: flex;
+   395	  align-items: center;
+   396	  gap: 8px;
+   397	  flex-wrap: wrap;
+   398	}
+   399	.chat-msg__ticket-no {
+   400	  color: var(--color-muted);
+   401	  font-family: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
+   402	}
+   403	.chat-msg__ticket-no b {
+   404	  color: var(--text-2);
+   405	  font-weight: 600;
+   406	}
+   407	/* 工单状态角标：元信息行内展示（2026-08-22 改版，不再整行强制换行） */
+   408	.chat-msg__ticket-status {
+   409	  display: inline-flex;
+   410	}
+   411	.chat-msg__ticket-status .ant-tag {
+   412	  margin-inline-end: 0;
+   413	}
+   414	
+   415	/* 认证外壳 */
+   416	.auth-layout {
+   417	  min-height: 100vh;
+   418	  display: flex;
+   419	  flex-direction: column;
+   420	  align-items: center;
+   421	  justify-content: center;
+   422	  gap: 24px;
+   423	  padding: 24px;
+   424	  background: var(--color-brand-soft);
+   425	}
+   426	.auth-layout__brand {
+   427	  color: var(--color-brand-dark) !important;
+   428	}
+   429	.auth-layout__card {
+   430	  width: 100%;
+   431	  max-width: 420px;
+   432	  border-radius: var(--radius-md);
+   433	  box-shadow: var(--shadow-card);
+   434	}
+   435	
+   436	/* 管理后台外壳 */
+   437	.admin-layout {
+   438	  min-height: 100vh;
+   439	}
+   440	.admin-layout > .ant-layout-sider {
+   441	  position: sticky;
+   442	  top: 0;
+   443	  height: 100vh;
+   444	  height: 100dvh;
+   445	  overflow: hidden;
+   446	  flex-shrink: 0;
+   447	}
+   448	.admin-layout > .ant-layout-sider > .ant-layout-sider-children {
+   449	  height: 100%;
+   450	  display: flex;
+   451	  flex-direction: column;
+   452	  overflow: hidden;
+   453	}
+   454	.admin-layout__sider .side-nav {
+   455	  flex: 1;
+   456	  min-height: 0;
+   457	  overflow-y: auto;
+   458	  overflow-x: hidden;
+   459	}
+   460	.admin-layout__sider .side-nav::-webkit-scrollbar {
+   461	  width: 6px;
+   462	}
+   463	.admin-layout__sider .side-nav::-webkit-scrollbar-track {
+   464	  background: transparent;
+   465	}
+   466	.admin-layout__sider .side-nav::-webkit-scrollbar-thumb {
+   467	  background: rgba(255, 255, 255, 0.25);
+   468	  border-radius: 3px;
+   469	}
+   470	.admin-layout__sider .side-nav::-webkit-scrollbar-thumb:hover {
+   471	  background: rgba(255, 255, 255, 0.4);
+   472	}
+   473	.admin-layout__logo {
+   474	  height: 48px;
+   475	  line-height: 48px;
+   476	  text-align: center;
+   477	  font-weight: 700;
+   478	  font-size: 16px;
+   479	  color: var(--color-brand-dark);
+   480	}
+   481	.admin-layout__content {
+   482	  padding: 24px;
+   483	}
+   484	
+   485	/* 对话页固定高度：仅让对话消息区内部滚动，整页（含左侧导航）不滚动。
+   486	 * 关键：height 链自上而下传递 —— 只约束右侧内容列，左 sider 保持独立。
+   487	 * 仅命中含 .page--chat 的壳，其他管理页（Dashboard/Data/Stats…）保持整页滚动不受影响。
+   488	 */
+   489	.admin-layout:has(.page--chat) {
+   490	  height: 100vh;
+   491	  height: 100dvh;
+   492	}
+   493	.admin-layout:has(.page--chat) > .ant-layout-sider {
+   494	  position: static;
+   495	  height: 100%;
+   496	  display: flex;
+   497	  flex-direction: column;
+   498	}
+   499	.admin-layout:has(.page--chat) > .ant-layout-sider > .ant-layout-sider-children {
+   500	  flex: 1 1 auto;
+   501	  min-height: 0;
+   502	  display: flex;
+   503	  flex-direction: column;
+   504	  overflow: hidden;
+   505	}
+   506	.admin-layout:has(.page--chat) > .ant-layout-sider .admin-layout__logo {
+   507	  flex: 0 0 auto;
+   508	  flex-shrink: 0;
+   509	}
+   510	.admin-layout:has(.page--chat) > .ant-layout-sider .side-nav.ant-menu {
+   511	  flex: 1 1 auto;
+   512	  min-height: 0;
+   513	  overflow-y: auto !important;
+   514	  overflow-x: hidden;
+   515	  padding-bottom: 16px;
+   516	}
+   517	.admin-layout:has(.page--chat) .admin-layout__main {
+   518	  display: flex;
+   519	  flex-direction: column;
+   520	  min-height: 0;
+   521	}
+   522	.admin-layout:has(.page--chat) .admin-layout__content {
+   523	  flex: 1;
+   524	  min-height: 0;
+   525	  overflow: hidden;
+   526	  display: flex;
+   527	  flex-direction: column;
+   528	  padding: 0 !important;
+   529	}
+   530	.admin-layout:has(.page--chat) .page--chat {
+   531	  flex: 1;
+   532	  min-height: 0;
+   533	  display: flex;
+   534	  flex-direction: column;
+   535	  padding: 12px;
+   536	}
+   537	.admin-layout:has(.page--chat) .wb-grid {
+   538	  padding: 0;
+   539	  gap: 0;
+   540	}
+   541	.admin-layout:has(.page--chat) .wb-col--main {
+   542	  border-radius: var(--radius-md);
+   543	  height: 100%;
+   544	}
+   545	.admin-layout:has(.page--chat) .wb-chat-toolbar {
+   546	  padding: 4px 8px;
+   547	}
+   548	
+   549	/* 挂件外壳 */
+   550	.widget-shell {
+   551	  height: 100vh;
+   552	  height: 100dvh;
+   553	  overflow: hidden;
+   554	  display: flex;
+   555	  flex-direction: column;
+   556	}
+   557	.widget-shell__bar {
+   558	  display: flex;
+   559	  align-items: center;
+   560	  justify-content: space-between;
+   561	  padding: 8px 16px;
+   562	  border-bottom: 1px solid var(--border);
+   563	}
+   564	.widget-shell__body {
+   565	  flex: 1;
+   566	  min-height: 0;
+   567	  display: flex;
+   568	  flex-direction: column;
+   569	  overflow-y: auto;
+   570	}
+   571	
+   572	/* 品牌按钮（导航闭环 2026-08-18）：可点击回角色首页，去掉按钮默认样式 */
+   573	.widget-shell__brand {
+   574	  border: none;
+   575	  background: none;
+   576	  padding: 0;
+   577	  cursor: pointer;
+   578	  font: inherit;
+   579	  line-height: inherit;
+   580	  color: inherit;
+   581	  display: inline-flex;
+   582	  align-items: center;
+   583	}
+   584	.widget-shell__brand:hover {
+   585	  color: var(--color-brand-dark);
+   586	}
+   587	
+   588	/* 顶栏 */
+   589	.app-header {
+   590	  display: flex;
+   591	  align-items: center;
+   592	  justify-content: space-between;
+   593	  background: var(--color-surface) !important;
+   594	  border-bottom: 1px solid var(--border);
+   595	  line-height: normal;
+   596	}
+   597	.app-header__title {
+   598	  font-size: 15px;
+   599	}
+   600	
+   601	/* 通用页面容器 */
+   602	.page {
+   603	  padding: 24px;
+   604	  max-width: 1400px;
+   605	  margin: 0 auto;
+   606	}
+   607	.page--chat,
+   608	.page--widget {
+   609	  height: 100%;
+   610	  min-height: 0;
+   611	  overflow: hidden;
+   612	  max-width: none;
+   613	  margin: 0;
+   614	}
+   615	
+   616	/* 空态 / 加载态 */
+   617	.empty-state {
+   618	  padding: 48px 16px;
+   619	  text-align: center;
+   620	}
+   621	.empty-state__desc {
+   622	  display: flex;
+   623	  flex-direction: column;
+   624	  gap: 4px;
+   625	}
+   626	.loading-spin {
+   627	  display: flex;
+   628	  align-items: center;
+   629	  justify-content: center;
+   630	  padding: 32px;
+   631	}
+   632	.loading-spin--full {
+   633	  height: 100%;
+   634	}
+   635	
+   636	/* ---------- 骨架屏（替代 Spin 转圈，减少等待焦虑） ---------- */
+   637	.skeleton-line {
+   638	  display: block;
+   639	  border-radius: 4px;
+   640	  background: linear-gradient(
+   641	    90deg,
+   642	    var(--border) 0%,
+   643	    color-mix(in srgb, var(--border) 60%, var(--color-surface)) 50%,
+   644	    var(--border) 100%
+   645	  );
+   646	  background-size: 200% 100%;
+   647	  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+   648	}
+   649	@keyframes skeleton-shimmer {
+   650	  0% {
+   651	    background-position: 200% 0;
+   652	  }
+   653	  100% {
+   654	    background-position: -200% 0;
+   655	  }
+   656	}
+   657	/* KPI 卡片骨架：保持卡片容器形状，隐藏色条 */
+   658	.kpi-card--skeleton::before {
+   659	  display: none;
+   660	}
+   661	.kpi-card--skeleton:hover {
+   662	  transform: none;
+   663	  border-color: var(--border);
+   664	  box-shadow: var(--shadow-card);
+   665	}
+   666	/* 表格骨架行 */
+   667	.skeleton-table {
+   668	  display: flex;
+   669	  flex-direction: column;
+   670	  gap: 12px;
+   671	  padding: 12px 0;
+   672	}
+   673	.skeleton-table__row {
+   674	  display: flex;
+   675	  align-items: center;
+   676	  gap: 16px;
+   677	  padding: 0 16px;
+   678	}
+   679	.skeleton-table__row .skeleton-line {
+   680	  flex: 1;
+   681	  min-width: 0;
+   682	}
+   683	/* 聊天消息骨架：与真实消息同布局，降低视觉重量 */
+   684	.chat-msg--skeleton {
+   685	  opacity: 0.7;
+   686	}
+   687	.chat-msg--skeleton .skeleton-avatar {
+   688	  background: var(--border);
+   689	  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+   690	  background-size: 200% 100%;
+   691	}
+   692	.chat-msg--skeleton .skeleton-bubble {
+   693	  border-color: var(--border);
+   694	  box-shadow: none;
+   695	  min-width: 240px;
+   696	}
+   697	.chat-msg--skeleton .skeleton-bubble .skeleton-line {
+   698	  background: linear-gradient(
+   699	    90deg,
+   700	    var(--border) 0%,
+   701	    color-mix(in srgb, var(--border) 50%, #fff) 50%,
+   702	    var(--border) 100%
+   703	  );
+   704	  background-size: 200% 100%;
+   705	}
+   706	/* 尊重系统减弱动效：骨架屏改为静态浅灰 */
+   707	@media (prefers-reduced-motion: reduce) {
+   708	  .skeleton-line,
+   709	  .chat-msg--skeleton .skeleton-avatar,
+   710	  .chat-msg--skeleton .skeleton-bubble .skeleton-line {
+   711	    animation: none;
+   712	    background: var(--border);
+   713	  }
+   714	}
+   715	
+   716	/* ===================== 对话挂件（海盐蓝气泡） ===================== */
+   717	.page--widget,
+   718	.page--chat {
+   719	  height: 100%;
+   720	  min-height: 0;
+   721	  overflow: hidden;
+   722	}
+   723	.page--chat {
+   724	  /* W1：聊天页放宽容器上限（默认 1400px 在左侧全局导航展开时显得中间过窄） */
+   725	  max-width: 1600px;
+   726	}
+   727	/* 对话头部（observe 模式：客服查看对话时显示） */
+   728	.chat-header {
+   729	  display: flex;
+   730	  align-items: center;
+   731	  justify-content: space-between;
+   732	  padding: 8px 16px;
+   733	  border-bottom: 1px solid var(--border);
+   734	  background: #ffffff;
+   735	}
+   736	.chat-header__info {
+   737	  display: flex;
+   738	  align-items: center;
+   739	  gap: 10px;
+   740	}
+   741	.chat-header__avatar {
+   742	  width: 30px;
+   743	  height: 30px;
+   744	  border-radius: 50%;
+   745	  background: linear-gradient(135deg, #f6c38e, #e0a86a);
+   746	  color: #fff;
+   747	  display: flex;
+   748	  align-items: center;
+   749	  justify-content: center;
+   750	  font-size: 13px;
+   751	}
+   752	.chat-header__name {
+   753	  font-size: 14px;
+   754	  font-weight: 600;
+   755	  color: var(--text-1);
+   756	}
+   757	.chat-header__status {
+   758	  font-size: 12px;
+   759	  color: var(--text-3);
+   760	  display: flex;
+   761	  align-items: center;
+   762	  gap: 4px;
+   763	}
+   764	.chat-header__dot {
+   765	  width: 6px;
+   766	  height: 6px;
+   767	  border-radius: 50%;
+   768	  background: var(--color-accent);
+   769	}
+   770	/* Phase D：用户画像摘要胶囊（客服视角头部；浅色底 + 品牌色小标签，一眼可读） */
+   771	.chat-header__profile {
+   772	  display: flex;
+   773	  flex-wrap: wrap;
+   774	  gap: 4px;
+   775	  margin-top: 6px;
+   776	}
+   777	.chat-header__profile-tag {
+   778	  font-size: 11px;
+   779	  line-height: 18px;
+   780	  color: var(--color-brand-dark);
+   781	  background: var(--color-brand-soft);
+   782	  border: 1px solid var(--color-brand-pale);
+   783	  border-radius: var(--radius-full);
+   784	  padding: 0 8px;
+   785	  white-space: nowrap;
+   786	  user-select: none;
+   787	}
+   788	/* 转人工交接摘要胶囊（客服 observe 头部；主题/关联/诉求 行式布局） */
+   789	.chat-handoff {
+   790	  display: flex;
+   791	  flex-direction: column;
+   792	  gap: 2px;
+   793	  margin-top: 6px;
+   794	  padding: 6px 8px;
+   795	  font-size: 11px;
+   796	  line-height: 18px;
+   797	  color: var(--text-3);
+   798	  background: color-mix(in srgb, var(--color-brand) 6%, transparent);
+   799	  border: 1px solid var(--color-brand-pale);
+   800	  border-radius: var(--radius-md);
+   801	}
+   802	.chat-handoff__row {
+   803	  display: flex;
+   804	  gap: 6px;
+   805	  min-width: 0;
+   806	}
+   807	.chat-handoff__label {
+   808	  flex-shrink: 0;
+   809	  color: var(--color-brand-dark);
+   810	  font-weight: 600;
+   811	}
+   812	.chat-handoff__topic {
+   813	  font-weight: 600;
+   814	}
+   815	.chat-handoff__question {
+   816	  overflow: hidden;
+   817	  text-overflow: ellipsis;
+   818	  white-space: nowrap;
+   819	}
+   820	.chat-header__actions {
+   821	  display: flex;
+   822	  gap: 8px;
+   823	}
+   824	.chat-container {
+   825	  display: flex;
+   826	  flex-direction: column;
+   827	  flex: 1;
+   828	  min-height: 0;
+   829	}
+   830	.chat-container__body {
+   831	  flex: 1;
+   832	  min-height: 0;
+   833	  overflow-y: auto;
+   834	  padding: 12px 20px;
+   835	  background:
+   836	    linear-gradient(180deg, #f5f9fc 0%, #fafcfe 100%);
+   837	}
+   838	.chat-container__empty {
+   839	  margin-top: 64px;
+   840	}
+   841	/* 热门问题快捷入口（精品卡片网格） */
+   842	.chat-container__hot {
+   843	  display: grid;
+   844	  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+   845	  gap: 10px;
+   846	  width: 100%;
+   847	  max-width: 780px;
+   848	  padding: 0 16px;
+   849	}
+   850	.chat-container__hot-btn {
+   851	  border-radius: 999px;
+   852	  border-color: var(--border) !important;
+   853	  color: var(--text-2) !important;
+   854	  transition: all var(--dur-fast) var(--ease-out);
+   855	}
+   856	.chat-container__hot-btn:hover {
+   857	  transform: scale(1.02);
+   858	  border-color: var(--color-brand) !important;
+   859	  color: var(--color-brand-dark) !important;
+   860	}
+   861	.chat-container__footer {
+   862	  border-top: 1px solid var(--border);
+   863	  padding: 6px 14px;
+   864	  background: var(--color-surface);
+   865	}
+   866	/* 消息列表与气泡 */
+   867	.chat-list {
+   868	  display: flex;
+   869	  flex-direction: column;
+   870	  gap: 12px;
+   871	  width: 100%;
+   872	  /* 2026-08-22 加宽：820 → 1080。工作台已是单栏满宽（wb-grid 1fr），旧上限在
+   873	   * 宽屏下两侧留白过大、对话被挤得过窄；1080 在 1920 屏约占 56%，可读性与利用率平衡 */
+   874	  max-width: 1080px;
+   875	  margin: 0 auto;
+   876	  padding: 12px 20px 16px;
+   877	}
+   878	
+   879	/* 时间分隔线：间隔 > 5 分钟显示；居中 + 灰胶囊 */
+   880	.chat-time-divider {
+   881	  display: flex;
+   882	  align-items: center;
+   883	  justify-content: center;
+   884	  gap: 12px;
+   885	  margin: 12px 0;
+   886	  color: var(--text-4);
+   887	}
+   888	.chat-time-divider::before,
+   889	.chat-time-divider::after {
+   890	  content: '';
+   891	  flex: 0 0 32px;
+   892	  height: 1px;
+   893	  background: var(--border);
+   894	}
+   895	.chat-time-divider span {
+   896	  font-size: 11px;
+   897	  color: var(--text-3);
+   898	  background: var(--color-surface);
+   899	  padding: 2px 10px;
+   900	  border-radius: 10px;
+   901	  border: 1px solid var(--border);
+   902	}
+   903	
+   904	/* 历史消息折叠区域 */
+   905	.chat-collapse-zone {
+   906	  display: flex;
+   907	  justify-content: center;
+   908	  padding: 12px 0;
+   909	  margin: 8px 0;
+   910	}
+   911	.chat-collapse-btn {
+   912	  background: var(--color-surface);
+   913	  border: 1px solid var(--border);
+   914	  border-radius: 8px;
+   915	  padding: 6px 16px;
+   916	  font-size: 12px;
+   917	  color: var(--text-2);
+   918	  cursor: pointer;
+   919	  transition: all 0.2s ease;
+   920	}
+   921	.chat-collapse-btn:hover {
+   922	  background: var(--color-brand-light);
+   923	  border-color: var(--color-brand);
+   924	  color: var(--color-brand);
+   925	}
+   926	
+   927	/* 消息行：规范间距、对齐、宽度 */
+   928	.chat-msg {
+   929	  display: flex;
+   930	  gap: 10px;
+   931	  width: 100%;
+   932	  max-width: 100%;
+   933	}
+   934	.chat-msg--user {
+   935	  justify-content: flex-start;
+   936	  flex-direction: row-reverse;
+   937	}
+   938	.chat-msg--ai {
+   939	  justify-content: flex-start;
+   940	}
+   941	/* 气泡基类：内边距、字号、行高、圆角（680 → 860 随列表加宽同步放宽，2026-08-22） */
+   942	.chat-msg__bubble {
+   943	  max-width: 860px;
+   944	  padding: 10px 14px;
+   945	  border-radius: 14px;
+   946	  background: var(--color-surface);
+   947	  position: relative;
+   948	  font-size: 14px;
+   949	  line-height: 1.55;
+   950	  word-break: break-word;
+   951	  white-space: pre-wrap;
+   952	}
+   953	/* 用户消息：海盐蓝渐变（居右）
+   954	 * row-reverse 下：avatar 在右，bubble 在左，整行靠右
+   955	 * 折角在右上角（远离头像方向） */
+   956	.chat-msg--user .chat-msg__bubble {
+   957	  background: linear-gradient(135deg, #6baadd 0%, var(--color-brand) 100%);
+   958	  color: #ffffff;
+   959	  border: 1px solid var(--color-brand);
+   960	  border-top-right-radius: 4px;
+   961	  box-shadow: 0 1px 3px rgba(83, 159, 216, 0.2);
+   962	}
+   963	/* AI 消息：白卡 + 极淡阴影（层次分明但不喧宾夺主）
+   964	 * 默认 row：avatar 在左，bubble 在右
+   965	 * 折角在左上角（靠近头像方向） */
+   966	.chat-msg--ai .chat-msg__bubble {
+   967	  background: #ffffff;
+   968	  border: 1px solid var(--border);
+   969	  box-shadow: 0 1px 2px rgba(30, 45, 61, 0.04), 0 1px 4px rgba(30, 45, 61, 0.03);
+   970	  border-top-left-radius: 4px;
+   971	}
+   972	
+   973	/* ---------- 人工客服消息气泡（P2：role='agent'） ---------- */
+   974	/* self 视角下 agent 是"对面的客服"——和 AI 一样居左，但用客服色系区分 */
+   975	.chat-msg--agent {
+   976	  justify-content: flex-start;
+   977	}
+   978	.chat-msg--agent .chat-msg__bubble {
+   979	  background: #f0f8f4; /* 薄荷绿/客服色，比 AI 气泡略深 */
+   980	  border: 1px solid #cfe7da;
+   981	  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+   982	  border-top-left-radius: 4px; /* self 模式靠左，折角在左上 */
+   983	  color: #244c3a;
+   984	}
+   985	/* observe 视角下 agent 是"我"——居右，用户蓝风格略调（绿光带）
+   986	 * row-reverse 下 flex-start = 主轴 start = 右边（正确靠右） */
+   987	.chat-msg--agent[data-layout='observe'] {
+   988	  justify-content: flex-start;
+   989	  flex-direction: row-reverse;
+   990	}
+   991	.chat-msg--agent[data-layout='observe'] .chat-msg__bubble {
+   992	  background: linear-gradient(180deg, #5fb38c 0%, #4a9c79 100%);
+   993	  color: #ffffff;
+   994	  border: 1px solid #4a9c79;
+   995	  border-top-right-radius: 4px; /* observe 模式靠右，折角在右上 */
+   996	  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+   997	}
+   998	/* 客服头像：薄荷绿渐变方块 + 工牌图标 */
+   999	.chat-msg__avatar--agent {
+  1000	  width: 34px;
+  1001	  height: 34px;
+  1002	  border-radius: 8px;
+  1003	  background: linear-gradient(135deg, #73c9a8 0%, #4a9c79 100%);
+  1004	  color: #ffffff;
+  1005	  font-size: 16px;
+  1006	}
+  1007	.chat-msg__avatar--agent .anticon {
+  1008	  line-height: 34px;
+  1009	}
+  1010	/* AI 复制按钮：桌面 hover 显示（不遮挡正文）；触屏（hover:none）常显——I1 修复 */
+  1011	.chat-msg--ai .chat-msg__copy {
+  1012	  position: absolute;
+  1013	  top: 2px;
+  1014	  right: 2px;
+  1015	  opacity: 0;
+  1016	  transition: opacity 0.2s;
+  1017	  font-size: 12px;
+  1018	}
+  1019	.chat-msg--ai .chat-msg__bubble:hover .chat-msg__copy {
+  1020	  opacity: 1;
+  1021	}
+  1022	@media (hover: none) {
+  1023	  /* 触屏无 hover：复制按钮常显，且不遮挡正文（改为气泡底部行内） */
+  1024	  .chat-msg--ai .chat-msg__copy {
+  1025	    position: static;
+  1026	    opacity: 1;
+  1027	    float: right;
+  1028	    margin: 2px 0 0 8px;
+  1029	    padding: 0 4px;
+  1030	  }
+  1031	}
+  1032	/* 流式输出光标（已迁移为 .chat-msg__text--stream::after，此旧规则删除） */
+  1033	@keyframes chat-cursor-blink {
+  1034	  0%,
+  1035	  100% {
+  1036	    opacity: 1;
+  1037	  }
+  1038	  50% {
+  1039	    opacity: 0;
+  1040	  }
+  1041	}
+  1042	.chat-msg__text {
+  1043	  margin: 0;
+  1044	  font-size: 14px;
+  1045	  line-height: 1.5;
+  1046	  white-space: pre-wrap;
+  1047	  word-break: break-word;
+  1048	}
+  1049	/* 流式尾部：末尾追加闪烁光标（复用 chat-cursor-blink），随内容实时排版 */
+  1050	.chat-msg__text--stream {
+  1051	  padding-right: 10px;
+  1052	}
+  1053	.chat-msg__text--stream::after {
+  1054	  content: '';
+  1055	  display: inline-block;
+  1056	  width: 8px;
+  1057	  height: 1.1em;
+  1058	  margin-left: 2px;
+  1059	  vertical-align: text-bottom;
+  1060	  background: var(--color-brand-dark);
+  1061	  animation: chat-cursor-blink 1s step-end infinite;
+  1062	}
+  1063	/* Markdown 渲染 */
+  1064	.chat-msg__text p {
+  1065	  margin: 0 0 1px;
+  1066	  white-space: normal;
+  1067	}
+  1068	.chat-msg__text p:last-child {
+  1069	  margin-bottom: 0;
+  1070	}
+  1071	.chat-msg__text ul,
+  1072	.chat-msg__text ol {
+  1073	  margin: 0 0 1px;
+  1074	  padding-left: 14px;
+  1075	}
+  1076	.chat-msg__text li {
+  1077	  margin: 0;
+  1078	  line-height: 1.45;
+  1079	}
+  1080	.chat-msg__text code {
+  1081	  background: var(--color-brand-soft);
+  1082	  padding: 0 3px;
+  1083	  border-radius: 3px;
+  1084	  font-size: 0.9em;
+  1085	}
+  1086	.chat-msg__text pre {
+  1087	  background: var(--color-brand-soft);
+  1088	  padding: 6px 8px;
+  1089	  border-radius: var(--radius-sm);
+  1090	  overflow-x: auto;
+  1091	  margin: 2px 0;
+  1092	}
+  1093	.chat-msg__text pre code {
+  1094	  background: none;
+  1095	  padding: 0;
+  1096	}
+  1097	.chat-msg__text a {
+  1098	  color: var(--color-brand-dark);
+  1099	}
+  1100	.chat-msg__text h1,
+  1101	.chat-msg__text h2,
+  1102	.chat-msg__text h3 {
+  1103	  margin: 4px 0 3px;
+  1104	  padding: 4px 10px;
+  1105	  font-size: 13px;
+  1106	  font-weight: 600;
+  1107	  line-height: 1.35;
+  1108	  text-align: center;
+  1109	  background: var(--color-brand-soft, rgba(83,159,216,0.12));
+  1110	  border-bottom: 2px solid var(--color-brand, #539FD8);
+  1111	  border-radius: 8px;
+  1112	  white-space: normal;
+  1113	}
+  1114	/* GFM 表格（remark-gfm）：发丝线 + 表头浅底 + 隔行微色 */
+  1115	.chat-msg__text table {
+  1116	  border-collapse: collapse;
+  1117	  margin: 2px 0 4px;
+  1118	  width: 100%;
+  1119	  font-size: 12.5px;
+  1120	}
+  1121	.chat-msg__text th,
+  1122	.chat-msg__text td {
+  1123	  border: 1px solid var(--border);
+  1124	  padding: 2px 6px;
+  1125	  text-align: left;
+  1126	  vertical-align: top;
+  1127	}
+  1128	.chat-msg__text thead th {
+  1129	  background: var(--table-head-bg);
+  1130	  font-weight: 600;
+  1131	  color: var(--text-1);
+  1132	}
+  1133	.chat-msg__text tbody tr:nth-child(even) td {
+  1134	  background: rgba(150, 200, 232, 0.05);
+  1135	}
+  1136	/* 引用块：左竖线 + 浅品牌底 */
+  1137	.chat-msg__text blockquote {
+  1138	  margin: 2px 0 4px;
+  1139	  padding: 3px 8px;
+  1140	  border-left: 3px solid var(--color-brand-pale);
+  1141	  background: var(--color-brand-soft);
+  1142	  color: var(--text-3);
+  1143	  border-radius: 0 6px 6px 0;
+  1144	}
+  1145	/* 加粗：统一加深，利于用户扫重点 */
+  1146	.chat-msg__text strong {
+  1147	  font-weight: 650;
+  1148	  color: var(--text-1);
+  1149	}
+  1150	
+  1151	/* 来源折叠（海盐蓝胶囊） */
+  1152	.chat-source {
+  1153	  margin-top: 4px;
+  1154	}
+  1155	.chat-source__toggle {
+  1156	  display: inline-flex;
+  1157	  align-items: center;
+  1158	  gap: 5px;
+  1159	  padding: 1px 8px;
+  1160	  font-size: 11px;
+  1161	  line-height: 18px;
+  1162	  color: var(--color-brand-dark);
+  1163	  background: rgba(150, 200, 232, 0.1);
+  1164	  border: 1px solid var(--color-brand);
+  1165	  border-radius: var(--radius-sm);
+  1166	  cursor: pointer;
+  1167	  transition: background 0.2s;
+  1168	}
+  1169	.chat-source__toggle:hover {
+  1170	  background: rgba(150, 200, 232, 0.2);
+  1171	}
+  1172	.chat-source__panel {
+  1173	  margin-top: 4px;
+  1174	  border: 1px solid var(--border);
+  1175	  border-radius: var(--radius-sm);
+  1176	  padding: 3px 6px;
+  1177	  background: rgba(150, 200, 232, 0.05);
+  1178	}
+  1179	.chat-source__group {
+  1180	  padding: 3px 0;
+  1181	}
+  1182	.chat-source__group + .chat-source__group {
+  1183	  border-top: 1px dashed var(--border);
+  1184	}
+  1185	.chat-source__group-title {
+  1186	  font-size: 11px;
+  1187	  font-weight: 600;
+  1188	  color: var(--text-2);
+  1189	  margin-bottom: 1px;
+  1190	}
+  1191	.chat-source__refs {
+  1192	  font-weight: 400;
+  1193	  color: var(--color-brand-dark);
+  1194	  margin-left: 3px;
+  1195	}
+  1196	.chat-source__snippet {
+  1197	  font-size: 11px;
+  1198	  max-height: 80px;
+  1199	}
+  1200	.chat-source__chunk {
+  1201	  padding: 2px 6px;
+  1202	  border-radius: 6px;
+  1203	  transition: background var(--dur-fast) var(--ease-out);
+  1204	}
+  1205	.chat-source__chunk:hover {
+  1206	  background: rgba(150, 200, 232, 0.08);
+  1207	}
+  1208	.chat-source__ref {
+  1209	  color: var(--color-brand-dark);
+  1210	  font-weight: 600;
+  1211	  margin-right: 4px;
+  1212	}
+  1213	
+  1214	/* 阶段指示：海盐蓝三点呼吸（替换 Spin 转圈） */
+  1215	.chat-stage {
+  1216	  display: flex;
+  1217	  align-items: center;
+  1218	  gap: 8px;
+  1219	  color: var(--text-3);
+  1220	  font-size: 13px;
+  1221	}
+  1222	.chat-dots {
+  1223	  display: inline-flex;
+  1224	  gap: 4px;
+  1225	  align-items: center;
+  1226	}
+  1227	.chat-dots span {
+  1228	  width: 7px;
+  1229	  height: 7px;
+  1230	  border-radius: 50%;
+  1231	  background: var(--color-brand);
+  1232	  animation: dot-breathe 1.2s ease-in-out infinite;
+  1233	}
+  1234	.chat-dots span:nth-child(2) {
+  1235	  animation-delay: 0.2s;
+  1236	}
+  1237	.chat-dots span:nth-child(3) {
+  1238	  animation-delay: 0.4s;
+  1239	}
+  1240	@keyframes dot-breathe {
+  1241	  0%,
+  1242	  100% {
+  1243	    opacity: 0.35;
+  1244	    transform: scale(0.85);
+  1245	  }
+  1246	  50% {
+  1247	    opacity: 1;
+  1248	    transform: scale(1.1);
+  1249	  }
+  1250	}
+  1251	@media (prefers-reduced-motion: reduce) {
+  1252	  .chat-dots span {
+  1253	    animation: none;
+  1254	    opacity: 0.6;
+  1255	  }
+  1256	}
+  1257	
+  1258	/* 反馈条：圆形 + 边框 + hover（比 demo emoji 更专业，保留 antd 图标） */
+  1259	.chat-thumbs {
+  1260	  margin-top: 8px;
+  1261	  display: flex;
+  1262	  gap: 8px;
+  1263	}
+  1264	.chat-thumbs .ant-btn {
+  1265	  width: 30px !important;
+  1266	  height: 30px !important;
+  1267	  min-width: 30px !important;
+  1268	  padding: 0 !important;
+  1269	  border-radius: 50% !important;
+  1270	  border: 1px solid var(--border) !important;
+  1271	  background: #fff !important;
+  1272	  box-shadow: none !important;
+  1273	  display: flex;
+  1274	  align-items: center;
+  1275	  justify-content: center;
+  1276	  transition: all 0.2s;
+  1277	}
+  1278	.chat-thumbs .ant-btn:hover {
+  1279	  border-color: var(--color-brand) !important;
+  1280	  background: var(--color-brand-soft) !important;
+  1281	}
+  1282	.chat-thumbs .ant-btn-primary {
+  1283	  background: var(--color-brand-soft) !important;
+  1284	  border-color: var(--color-brand) !important;
+  1285	}
+  1286	
+  1287	/* 输入区（海盐蓝胶囊 + 激活光晕） */
+  1288	.chat-container__footer {
+  1289	  border-top: 1px solid var(--border);
+  1290	  padding: 6px 14px;
+  1291	}
+  1292	.chat-composer {
+  1293	  display: flex;
+  1294	  flex-direction: column;
+  1295	  gap: 4px;
+  1296	  background: var(--color-surface);
+  1297	  border: 1px solid var(--border);
+  1298	  border-radius: var(--radius-lg);
+  1299	  padding: 6px 10px 6px 12px;
+  1300	  box-shadow: var(--shadow-sm);
+  1301	  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+  1302	}
+  1303	/* 聚焦整卡：品牌色描边 + 柔和光晕（替代单输入框描边） */
+  1304	.chat-composer:focus-within {
+  1305	  border-color: var(--color-brand);
+  1306	  box-shadow: 0 0 0 3px var(--color-brand-soft), var(--shadow-card);
+  1307	}
+  1308	/* W5：客服视角下输入框居中显示（水平居中于中间列；宽度与气泡列对齐，2026-08-22） */
+  1309	.chat-composer--centered {
+  1310	  max-width: 860px;
+  1311	  margin: 0 auto;
+  1312	  width: 100%;
+  1313	}
+  1314	.chat-composer .ant-input-textarea {
+  1315	  flex: 1;
+  1316	}
+  1317	.chat-composer textarea {
+  1318	  background: transparent !important;
+  1319	  border: none !important;
+  1320	  border-radius: 0 !important;
+  1321	  box-shadow: none !important;
+  1322	  padding: 4px 2px !important;
+  1323	  font-size: 15px !important;
+  1324	  line-height: 1.5;
+  1325	  resize: none !important;
+  1326	}
+  1327	/* AntD Input.TextArea autoSize 会在 body 下生成一个隐藏的测量 textarea，
+  1328	 * 它默认带 resize:both，右下角手柄可能意外可见（尤其在聊天页固定布局下）。
+  1329	 * 这个元素直接挂在 body 下，且内联样式含 visibility:hidden，这里禁用其 resize。 */
+  1330	body > textarea[style*="visibility:hidden"] {
+  1331	  resize: none !important;
+  1332	}
+  1333	.chat-composer textarea:focus {
+  1334	  border-color: transparent !important;
+  1335	  box-shadow: none !important;
+  1336	}
+  1337	.chat-composer textarea::placeholder {
+  1338	  font-size: 14px;
+  1339	  color: var(--text-4);
+  1340	}
+  1341	.chat-composer__bar {
+  1342	  display: flex;
+  1343	  align-items: center;
+  1344	  justify-content: space-between;
+  1345	  gap: 8px;
+  1346	}
+  1347	.chat-composer__hint {
+  1348	  font-size: 11px;
+  1349	  color: var(--text-4);
+  1350	  user-select: none;
+  1351	}
+  1352	.chat-composer__count {
+  1353	  font-size: 11px;
+  1354	  color: var(--text-4);
+  1355	  font-variant-numeric: tabular-nums;
+  1356	  user-select: none;
+  1357	  padding: 0 8px;
+  1358	  margin-left: auto;
+  1359	}
+  1360	.chat-composer__count.near-limit {
+  1361	  color: #d48806;
+  1362	}
+  1363	.chat-composer__count.at-limit {
+  1364	  color: #cf1322;
+  1365	}
+  1366	.chat-composer__actions {
+  1367	  display: inline-flex;
+  1368	  gap: 8px;
+  1369	  align-items: center;
+  1370	}
+  1371	.chat-composer__actions .ant-btn {
+  1372	  border-radius: 999px;
+  1373	  height: 28px;
+  1374	  font-size: 13px;
+  1375	  display: inline-flex;
+  1376	  align-items: center;
+  1377	}
+  1378	.chat-composer__send.ant-btn-primary,
+  1379	.chat-composer .ant-btn-primary {
+  1380	  background: var(--color-brand) !important;
+  1381	  border-color: var(--color-brand) !important;
+  1382	  color: #fff !important;
+  1383	  padding: 0 16px;
+  1384	  font-weight: 600;
+  1385	}
+  1386	.chat-composer__send.ant-btn-primary:hover,
+  1387	.chat-composer .ant-btn-primary:hover {
+  1388	  background: var(--color-brand-dark) !important;
+  1389	  border-color: var(--color-brand-dark) !important;
+  1390	}
+  1391	/* 发送按钮 hover：轻微上浮 + 品牌色柔影（覆盖全局 scale(1.02)，避免和药丸形状冲突） */
+  1392	.chat-composer__send.ant-btn-primary:not(:disabled):hover {
+  1393	  transform: translateY(-1px);
+  1394	  box-shadow: 0 6px 14px var(--color-brand-soft);
+  1395	}
+  1396	
+  1397	/* ===================== 三栏工作台（Workbench，海盐蓝） ===================== */
+  1398	.wb {
+  1399	  height: 100%;
+  1400	  min-height: 0;
+  1401	  display: flex;
+  1402	  flex-direction: column;
+  1403	  position: relative;
+  1404	}
+  1405	/* 顶部氛围渐变：极淡品牌色 → 透明，营造纵深；不占布局、不遮挡点击。 */
+  1406	.wb::before {
+  1407	  content: "";
+  1408	  position: absolute;
+  1409	  inset: -10px -10px auto -10px; /* 略微溢出抵消父 padding */
+  1410	  height: 160px;
+  1411	  background: linear-gradient(
+  1412	    180deg,
+  1413	    rgba(83, 159, 216, 0.06) 0%,
+  1414	    rgba(83, 159, 216, 0.02) 60%,
+  1415	    transparent 100%
+  1416	  );
+  1417	  pointer-events: none;
+  1418	  z-index: 0;
+  1419	  border-radius: var(--radius-md);
+  1420	}
+  1421	.wb > * {
+  1422	  position: relative;
+  1423	  z-index: 1;
+  1424	}
+  1425	/* A+：移动端切换栏已移除，统一由对话工具栏图标触发抽屉 */
+  1426	.wb-grid {
+  1427	  flex: 1;
+  1428	  min-height: 0;
+  1429	  display: grid;
+  1430	  /* A+：默认单栏满宽对话；历史/溯源改为抽屉，对话区拿到最大宽度 */
+  1431	  grid-template-columns: minmax(0, 1fr);
+  1432	  grid-template-rows: minmax(0, 1fr);
+  1433	  gap: 12px;
+  1434	  padding: 12px;
+  1435	  width: 100%;
+  1436	}
+  1437	.wb-col {
+  1438	  min-height: 0;
+  1439	  max-height: 100%;
+  1440	  overflow: hidden;
+  1441	  display: flex;
+  1442	  flex-direction: column;
+  1443	}
+  1444	/* A+：左右栏已改为抽屉，常驻列样式不再使用（保留 .wb-col 基础用于 main） */
+  1445	.wb-col--main {
+  1446	  background: var(--color-surface);
+  1447	  border: 1px solid var(--border);
+  1448	  border-radius: var(--radius-md);
+  1449	  box-shadow: var(--shadow-card);
+  1450	  overflow: hidden;
+  1451	  display: flex;
+  1452	  flex-direction: column;
+  1453	}
+  1454	/* A+：对话工具栏（历史/溯源抽屉入口），默认对话区满宽，面板按需展开 */
+  1455	.wb-chat-toolbar {
+  1456	  display: flex;
+  1457	  align-items: center;
+  1458	  gap: 4px;
+  1459	  padding: 6px 12px;
+  1460	  border-bottom: 1px solid var(--border);
+  1461	  background: var(--color-surface);
+  1462	  flex: 0 0 auto;
+  1463	}
+  1464	.wb-chat-toolbar .ant-btn {
+  1465	  color: var(--text-2);
+  1466	}
+  1467	/* 品牌区（参考稿：灵犀·星河智家 + 客服在线 7×24） */
+  1468	.wb-brand {
+  1469	  display: flex;
+  1470	  flex-direction: column;
+  1471	  gap: 2px;
+  1472	  padding: 4px 4px 12px;
+  1473	  border-bottom: 1px solid var(--border);
+  1474	  margin-bottom: 12px;
+  1475	}
+  1476	.wb-brand__name {
+  1477	  font-size: 16px;
+  1478	  color: var(--text-1);
+  1479	}
+  1480	.wb-brand__online {
+  1481	  font-size: 12px;
+  1482	  display: inline-flex;
+  1483	  align-items: center;
+  1484	  gap: 5px;
+  1485	}
+  1486	.wb-brand__dot {
+  1487	  width: 7px;
+  1488	  height: 7px;
+  1489	  border-radius: 50%;
+  1490	  background: var(--color-accent);
+  1491	  display: inline-block;
+  1492	}
+  1493	/* 分组 */
+  1494	.wb-section {
+  1495	  margin-bottom: 16px;
+  1496	}
+  1497	.wb-section__title {
+  1498	  display: block;
+  1499	  font-size: 12px;
+  1500	  font-weight: 600;
+  1501	  color: var(--text-3);
+  1502	  margin-bottom: 8px;
+  1503	  letter-spacing: 0.02em;
+  1504	}
+  1505	/* W3：左栏内部采用 flex 列布局，历史会话区自适应剩余高度并内部滚动，避免撑高整页 */
+  1506	.wb-left {
+  1507	  display: flex;
+  1508	  flex-direction: column;
+  1509	  gap: 12px;
+  1510	  height: 100%;
+  1511	  min-height: 0;
+  1512	}
+  1513	.wb-section--history {
+  1514	  flex: 1 1 auto;
+  1515	  min-height: 0;
+  1516	  display: flex;
+  1517	  flex-direction: column;
+  1518	  margin-bottom: 0;
+  1519	}
+  1520	.wb-section--history .wb-section__head,
+  1521	.wb-section--history > .ant-input-affix-wrapper {
+  1522	  flex-shrink: 0;
+  1523	}
+  1524	.wb-sessions {
+  1525	  flex: 1 1 auto;
+  1526	  min-height: 0;
+  1527	  overflow-y: auto;
+  1528	  padding-right: 2px;
+  1529	}
+  1530	.wb-session-group {
+  1531	  margin-bottom: 12px;
+  1532	}
+  1533	.wb-session-group__title {
+  1534	  position: sticky;
+  1535	  top: 0;
+  1536	  z-index: 1;
+  1537	  font-size: 11px;
+  1538	  font-weight: 600;
+  1539	  color: var(--text-4);
+  1540	  padding: 4px 6px;
+  1541	  margin-bottom: 4px;
+  1542	  background: var(--color-surface);
+  1543	  backdrop-filter: blur(2px);
+  1544	}
+  1545	.wb-history-footer {
+  1546	  flex-shrink: 0;
+  1547	  display: flex;
+  1548	  justify-content: center;
+  1549	  padding-top: 6px;
+  1550	}
+  1551	.wb-history-footer button {
+  1552	  font-size: 12px;
+  1553	  color: var(--color-brand-dark);
+  1554	  background: transparent;
+  1555	  border: none;
+  1556	  cursor: pointer;
+  1557	  padding: 4px 8px;
+  1558	  border-radius: var(--radius-sm);
+  1559	  transition: background var(--dur-fast) var(--ease-out);
+  1560	}
+  1561	.wb-history-footer button:hover {
+  1562	  background: var(--color-brand-soft);
+  1563	}
+  1564	.wb-spin {
+  1565	  display: block;
+  1566	  padding: 16px 0;
+  1567	  text-align: center;
+  1568	}
+  1569	.wb-empty .ant-empty-description {
+  1570	  font-size: 12px;
+  1571	  color: var(--text-3);
+  1572	}
+  1573	/* 历史会话条目 */
+  1574	.wb-session {
+  1575	  width: 100%;
+  1576	  display: flex;
+  1577	  align-items: center;
+  1578	  justify-content: space-between;
+  1579	  gap: 10px;
+  1580	  padding: 12px;
+  1581	  border: none;
+  1582	  border-radius: var(--radius-sm);
+  1583	  background: transparent;
+  1584	  cursor: pointer;
+  1585	  text-align: left;
+  1586	  transition: background var(--dur-fast) var(--ease-out);
+  1587	}
+  1588	.wb-session:hover {
+  1589	  background: var(--color-brand-soft);
+  1590	}
+  1591	.wb-session__avatar {
+  1592	  width: 32px;
+  1593	  height: 32px;
+  1594	  border-radius: 50%;
+  1595	  background: linear-gradient(135deg, var(--color-brand), #7ab8e0);
+  1596	  color: #fff;
+  1597	  display: flex;
+  1598	  align-items: center;
+  1599	  justify-content: center;
+  1600	  font-size: 13px;
+  1601	  font-weight: 600;
+  1602	  flex-shrink: 0;
+  1603	}
+  1604	.wb-session__title {
+  1605	  font-size: 14px;
+  1606	  font-weight: 600;
+  1607	  color: var(--text-2);
+  1608	  white-space: nowrap;
+  1609	  overflow: hidden;
+  1610	  text-overflow: ellipsis;
+  1611	  flex: 1;
+  1612	}
+  1613	.wb-session__time {
+  1614	  font-size: 11px;
+  1615	  color: var(--text-4);
+  1616	  flex-shrink: 0;
+  1617	}
+  1618	/* BUG-12：客服视角客户标识小标签（email/phone） */
+  1619	.wb-session__customer {
+  1620	  font-size: 11px;
+  1621	  color: var(--color-brand-dark);
+  1622	  background: var(--color-brand-soft);
+  1623	  border-radius: var(--radius-sm);
+  1624	  padding: 1px 6px;
+  1625	  max-width: 140px;
+  1626	  white-space: nowrap;
+  1627	  overflow: hidden;
+  1628	  text-overflow: ellipsis;
+  1629	  flex-shrink: 0;
+  1630	}
+  1631	/* 知识库条目 */
+  1632	.wb-kb {
+  1633	  display: flex;
+  1634	  align-items: center;
+  1635	  justify-content: space-between;
+  1636	  padding: 6px 10px;
+  1637	  border-radius: var(--radius-sm);
+  1638	  transition: background var(--dur-fast) var(--ease-out);
+  1639	}
+  1640	.wb-kb:hover {
+  1641	  background: rgba(150, 200, 232, 0.12);
+  1642	}
+  1643	.wb-kb__name {
+  1644	  font-size: 13px;
+  1645	  color: var(--text-2);
+  1646	}
+  1647	.wb-kb__meta {
+  1648	  font-size: 11px;
+  1649	  color: var(--text-4);
+  1650	}
+  1651	/* 右栏：溯源 */
+  1652	.wb-source {
+  1653	  padding: 6px 8px;
+  1654	  border: 1px solid var(--border);
+  1655	  border-radius: var(--radius-sm);
+  1656	  margin-bottom: 6px;
+  1657	  background: rgba(150, 200, 232, 0.04);
+  1658	}
+  1659	.wb-source__head {
+  1660	  display: flex;
+  1661	  align-items: center;
+  1662	  justify-content: space-between;
+  1663	  gap: 6px;
+  1664	}
+  1665	.wb-source__doc {
+  1666	  font-size: 12px;
+  1667	  font-weight: 600;
+  1668	  color: var(--text-2);
+  1669	  white-space: nowrap;
+  1670	  overflow: hidden;
+  1671	  text-overflow: ellipsis;
+  1672	}
+  1673	.wb-source__tag {
+  1674	  font-size: 12px;  /* A3：10→12px */
+  1675	  line-height: 18px;
+  1676	  padding: 0 8px;
+  1677	  border-radius: 8px;
+  1678	  color: #4da07f;  /* A3：加深绿（浅绿 #73C9A8 对比不足） */
+  1679	  background: rgba(115, 201, 168, 0.16);
+  1680	  flex-shrink: 0;
+  1681	}
+  1682	.wb-source__score {
+  1683	  font-size: 11px;
+  1684	  color: var(--color-brand-dark);
+  1685	  margin: 2px 0;
+  1686	}
+  1687	.wb-source__snippet {
+  1688	  font-size: 12px;
+  1689	  color: var(--text-3);
+  1690	  line-height: 1.5;
+  1691	  display: -webkit-box;
+  1692	  -webkit-line-clamp: 3;
+  1693	  -webkit-box-orient: vertical;
+  1694	  overflow: hidden;
+  1695	}
+  1696	/* 右栏：快捷话术 */
+  1697	.wb-replies {
+  1698	  display: flex;
+  1699	  flex-direction: column;
+  1700	  gap: 6px;
+  1701	}
+  1702	.wb-reply {
+  1703	  padding: 6px 10px;
+  1704	  border: 1px solid var(--border);
+  1705	  border-radius: 999px;
+  1706	  background: var(--color-surface);
+  1707	  color: var(--text-2);
+  1708	  font-size: 12.5px;
+  1709	  text-align: left;
+  1710	  cursor: pointer;
+  1711	  transition:
+  1712	    border-color var(--dur-fast) var(--ease-out),
+  1713	    color var(--dur-fast) var(--ease-out);
+  1714	}
+  1715	.wb-reply:hover {
+  1716	  border-color: var(--color-brand);
+  1717	  color: var(--color-brand-dark);
+  1718	}
+  1719	/* 移动端（<768px）：折叠为单栏，左右栏走抽屉 */
+  1720	/* L1（建议书）：中屏 768-1080px —— 右栏收窄为 240px，避免对话区被挤压 */
+  1721	@media (max-width: 1080px) and (min-width: 768px) {
+  1722	  .wb-grid {
+  1723	    grid-template-columns: minmax(0, 1fr);
+  1724	    gap: 10px;
+  1725	    padding: 10px;
+  1726	  }
+  1727	}
+  1728	/* L2（建议书）：移动端去 .page 外框，对话区全宽沉浸 */
+  1729	@media (max-width: 767px) {
+  1730	  .page--chat,
+  1731	  .page--widget {
+  1732	    padding: 0;
+  1733	  }
+  1734	
+  1735	  /* 气泡移动端：限制最大宽度，防止溢出 */
+  1736	  .chat-msg__bubble {
+  1737	    max-width: calc(100vw - 88px);
+  1738	  }
+  1739	
+  1740	  .wb-grid {
+  1741	    grid-template-columns: minmax(0, 1fr);
+  1742	    gap: 0;
+  1743	    padding: 0;
+  1744	  }
+  1745	  .wb-col--main {
+  1746	    border-radius: 0;
+  1747	  }
+  1748	}
+  1749	
+  1750	/* ---------- P0-1：消息生命周期（sending/failed） + P0-2 创建错误提示 ---------- */
+  1751	.chat-msg__bubble--sending {
+  1752	  opacity: 0.65;
+  1753	}
+  1754	.chat-msg__bubble--failed {
+  1755	  border-color: var(--color-danger) !important;
+  1756	}
+  1757	.chat-msg__status {
+  1758	  display: block;
+  1759	  font-size: 11px;
+  1760	  color: var(--text-4);
+  1761	  margin-top: 4px;
+  1762	}
+  1763	.chat-msg__status--failed {
+  1764	  color: var(--color-danger);
+  1765	}
+  1766	.chat-container__error {
+  1767	  margin-bottom: 8px;
+  1768	  padding: 8px 12px;
+  1769	  border-radius: var(--radius-sm);
+  1770	  font-size: 13px;
+  1771	  color: var(--color-danger);
+  1772	  background: rgba(229, 142, 142, 0.1);
+  1773	  border: 1px solid rgba(229, 142, 142, 0.3);
+  1774	}
+  1775	
+  1776	/* P0-4：转人工按钮（海盐蓝描边胶囊）+ 手动转人工结果气泡 */
+  1777	.chat-composer__escalate {
+  1778	  border-color: var(--color-brand) !important;
+  1779	  color: var(--color-brand-dark) !important;
+  1780	  transition: all var(--dur-fast) var(--ease-out);
+  1781	}
+  1782	.chat-composer__escalate:hover {
+  1783	  background: rgba(150, 200, 232, 0.12) !important;
+  1784	}
+  1785	.chat-msg__ticket--error {
+  1786	  color: var(--color-danger);
+  1787	  border-color: rgba(229, 142, 142, 0.4);
+  1788	  background: rgba(229, 142, 142, 0.08);
+  1789	}
+  1790	
+  1791	/* P1-1：历史对话标题行 + 新建按钮 */
+  1792	.wb-section__head {
+  1793	  display: flex;
+  1794	  align-items: center;
+  1795	  justify-content: space-between;
+  1796	  margin-bottom: 8px;
+  1797	}
+  1798	.wb-section__head .wb-section__title {
+  1799	  margin-bottom: 0;
+  1800	}
+  1801	.wb-new {
+  1802	  border: 1px solid var(--border);
+  1803	  background: var(--color-surface);
+  1804	  color: var(--color-brand-dark);
+  1805	  font-size: 12px;
+  1806	  line-height: 22px;
+  1807	  padding: 0 10px;
+  1808	  border-radius: var(--radius-sm);
+  1809	  cursor: pointer;
+  1810	  transition: all var(--dur-fast) var(--ease-out);
+  1811	}
+  1812	.wb-new:hover {
+  1813	  border-color: var(--color-brand);
+  1814	  background: rgba(150, 200, 232, 0.12);
+  1815	}
+  1816	
+  1817	/* P1-3：快捷话术提示 */
+  1818	.wb-replies-hint {
+  1819	  display: block;
+  1820	  margin-top: 6px;
+  1821	  font-size: 11px;
+  1822	}
+  1823	
+  1824	/* ---------- V5：品牌化欢迎块（替代 Empty 空态感） ---------- */
+  1825	.chat-container__empty-wrap {
+  1826	  display: flex;
+  1827	  flex-direction: column;
+  1828	  align-items: center;
+  1829	  gap: 12px;
+  1830	  padding: 8px 0 16px;
+  1831	}
+  1832	.chat-welcome {
+  1833	  display: flex;
+  1834	  flex-direction: column;
+  1835	  align-items: center;
+  1836	  gap: 8px;
+  1837	  margin-top: 28px;
+  1838	  padding: 20px 24px 12px;
+  1839	  text-align: center;
+  1840	  position: relative;
+  1841	}
+  1842	.chat-welcome__icon {
+  1843	  width: 56px;
+  1844	  height: 56px;
+  1845	  display: flex;
+  1846	  align-items: center;
+  1847	  justify-content: center;
+  1848	  border-radius: 20px;
+  1849	  background: linear-gradient(135deg, rgba(150, 200, 232, 0.5), rgba(83, 159, 216, 0.2));
+  1850	  border: 1px solid rgba(150, 200, 232, 0.6);
+  1851	  box-shadow:
+  1852	    0 4px 16px rgba(83, 159, 216, 0.18),
+  1853	    0 1px 3px rgba(83, 159, 216, 0.1),
+  1854	    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  1855	  margin-bottom: 6px;
+  1856	  position: relative;
+  1857	  animation: welcome-breathe 3.6s ease-in-out infinite;
+  1858	  transform-origin: center;
+  1859	}
+  1860	.chat-welcome__icon::after {
+  1861	  content: '';
+  1862	  position: absolute;
+  1863	  inset: -12px;
+  1864	  border-radius: 28px;
+  1865	  background: radial-gradient(
+  1866	    closest-side,
+  1867	    rgba(83, 159, 216, 0.15),
+  1868	    transparent 70%
+  1869	  );
+  1870	  z-index: -1;
+  1871	  animation: welcome-glow 3.6s ease-in-out infinite;
+  1872	}
+  1873	/* 欢迎区品牌图标：轻柔缩放呼吸 + 光晕脉动（品牌印象 + 引导视线） */
+  1874	@keyframes welcome-breathe {
+  1875	  0%,
+  1876	  100% {
+  1877	    transform: scale(1);
+  1878	  }
+  1879	  50% {
+  1880	    transform: scale(1.04);
+  1881	  }
+  1882	}
+  1883	@keyframes welcome-glow {
+  1884	  0%,
+  1885	  100% {
+  1886	    opacity: 0.6;
+  1887	    transform: scale(1);
+  1888	  }
+  1889	  50% {
+  1890	    opacity: 1;
+  1891	    transform: scale(1.1);
+  1892	  }
+  1893	}
+  1894	.chat-welcome__title {
+  1895	  font-size: 20px;
+  1896	  font-weight: 700;
+  1897	  color: var(--text-1);
+  1898	  letter-spacing: 0.01em;
+  1899	  line-height: 1.3;
+  1900	}
+  1901	.chat-welcome__sub {
+  1902	  font-size: 13px;
+  1903	  color: var(--text-3);
+  1904	  line-height: 1.5;
+  1905	  max-width: 420px;
+  1906	}
+  1907	
+  1908	/* ---------- I4：自定义按钮统一可见焦点环（键盘可达性） ---------- */
+  1909	.wb-session:focus-visible,
+  1910	.wb-reply:focus-visible,
+  1911	.wb-new:focus-visible,
+  1912	.chat-container__hot-btn:focus-visible,
+  1913	.chat-source__toggle:focus-visible {
+  1914	  outline: 2px solid var(--color-brand-dark);
+  1915	  outline-offset: 2px;
+  1916	}
+  1917	
+  1918	/* ---------- A5（建议书）：滚动条定制（海盐蓝细轨，与圆角卡片统一） ---------- */
+  1919	* {
+  1920	  scrollbar-width: thin;
+  1921	  scrollbar-color: rgba(150, 200, 232, 0.55) transparent;
+  1922	}
+  1923	::-webkit-scrollbar {
+  1924	  width: 4px;
+  1925	  height: 4px;
+  1926	}
+  1927	::-webkit-scrollbar-thumb {
+  1928	  background: rgba(150, 200, 232, 0.55);
+  1929	  border-radius: 3px;
+  1930	}
+  1931	::-webkit-scrollbar-thumb:hover {
+  1932	  background: rgba(83, 159, 216, 0.7);
+  1933	}
+  1934	::-webkit-scrollbar-track {
+  1935	  background: transparent;
+  1936	}
+  1937	
+  1938	/* ---------- V8/A6（建议书）：AI 消息品牌头像锚点（左侧 28px） ---------- */
+  1939	.chat-msg--ai {
+  1940	  align-items: flex-start;
+  1941	  gap: 6px;
+  1942	}
+  1943	.chat-msg__avatar {
+  1944	  flex-shrink: 0;
+  1945	  width: 34px;
+  1946	  height: 34px;
+  1947	  margin-top: 1px;
+  1948	  display: flex;
+  1949	  align-items: center;
+  1950	  justify-content: center;
+  1951	  border-radius: 50%;
+  1952	  background: linear-gradient(135deg, var(--color-brand), #7ab8e0);
+  1953	  border: none;
+  1954	}
+  1955	.chat-msg__avatar svg {
+  1956	  width: 100%;
+  1957	  height: 100%;
+  1958	}
+  1959	
+  1960	/* ---------- 满意度评价：卡片包装，与气泡视觉层级一致 ---------- */
+  1961	.chat-satisfaction {
+  1962	  display: flex;
+  1963	  flex-direction: column;
+  1964	  gap: 8px;
+  1965	  padding: 12px 16px;
+  1966	  margin: 12px 0;
+  1967	  background: #ffffff;
+  1968	  border: 1px solid var(--border);
+  1969	  border-radius: var(--radius-md);
+  1970	  box-shadow: var(--shadow-card);
+  1971	}
+  1972	.chat-satisfaction__text {
+  1973	  font-size: 13px;
+  1974	  color: var(--text-2);
+  1975	}
+  1976	.chat-satisfaction__hint {
+  1977	  font-size: 11px;
+  1978	  color: var(--text-4);
+  1979	}
+  1980	
+  1981	/* ===================== 内部工作台外壳（semantic-workbench，T2'） ===================== */
+  1982	/* 唯一中深色：侧栏 #2E5D85（白字 6.95:1 AA）——内容区/顶栏全浅色 */
+  1983	.app-workbench .admin-layout__sider {
+  1984	  background: #2e5d85 !important;
+  1985	}
+  1986	.app-workbench .admin-layout__logo {
+  1987	  color: #ffffff;
+  1988	  font-size: 17px;
+  1989	  font-weight: 700;
+  1990	  letter-spacing: 0.5px;
+  1991	  padding: 16px 0 14px;
+  1992	  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  1993	  margin-bottom: 4px;
+  1994	}
+  1995	.app-workbench .side-nav {
+  1996	  background: transparent !important;
+  1997	  border-inline-end: none !important;
+  1998	}
+  1999	.app-workbench .side-nav .ant-menu-item {
+  2000	  color: rgba(255, 255, 255, 0.82);

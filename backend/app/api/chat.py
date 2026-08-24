@@ -34,8 +34,9 @@ from app.core.database import get_db
 from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
-from app.services.agents.router import TICKET_AGENT
+from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
 from app.services.agents.router import router as agent_router
+from app.services.agents.image_agent import ImageAgent
 from app.services.agents.ticket_agent import TicketAgent
 from app.services.answer_cache import put as cache_put
 from app.services.quick_answers import match_quick
@@ -55,6 +56,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 # v1.1 多 Agent 编排（方案书 §2）：Agent 均为无状态实例，模块级共享
 ticket_agent = TicketAgent()
+image_agent = ImageAgent()
 
 
 class ChatStreamReq(BaseModel):
@@ -63,6 +65,8 @@ class ChatStreamReq(BaseModel):
     stream: bool = True
     # R2：客户端提问幂等键（前端生成、重试复用）——配额幂等扣费，断连重试不重复扣
     client_msg_id: str | None = Field(default=None, max_length=64)
+    # v1.3 图片理解：图片文件路径列表（前端上传后存储到临时目录，传递路径给后端）
+    image_paths: list[str] = Field(default_factory=list)
 
 
 #: SSE 事件名白名单（C2：与前端 contracts/api.ts SSEEvent union 对齐，防事件名漂移）
@@ -300,8 +304,13 @@ async def chat_stream(
             message_id=user_msg.id,
             history=history,
             db=db,  # 请求级会话：Ticket Agent 建单复用（同事务语义）
+            image_paths=req.image_paths,  # v1.3 图片理解
         )
         ctx = agent_router.route(ctx)
+
+        # v1.3 图片理解：如果 Router 决定调用 Image Agent 且有图片，则执行图片理解
+        if IMAGE_AGENT in ctx.agents_invoked and ctx.image_paths:
+            ctx = await image_agent.run(ctx)
 
         assistant_parts: list[str] = []
         source_payloads: list[dict] = []
@@ -339,8 +348,10 @@ async def chat_stream(
                     yield ("sources", {"sources": []})
                     yield ("done", {"message_id": ""})
                     return
+                # v1.3 图片理解：如果有融合查询（Image Agent 成功处理），使用融合查询
+                search_query = ctx.fused_query if ctx.fused_query else req.content
                 async for e, d in stream_answer(
-                    req.content,
+                    search_query,
                     kb_id,
                     history=history,
                     kb_version=kb_version,
