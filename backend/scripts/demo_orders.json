@@ -1,0 +1,36 @@
+{
+  "orders": [
+    {
+      "order_no": "SO2026080091",
+      "status": "pending_shipped",
+      "items": "滚筒洗衣机 W5",
+      "logistics_no": null,
+      "eta": "2026-08-16 送装（预约 14:00-17:00）",
+      "updated_at": "2026-08-15 09:30"
+    },
+    {
+      "order_no": "SO2026080118",
+      "status": "shipped",
+      "items": "空气净化器 K1",
+      "logistics_no": "SF1384429007712",
+      "eta": "2026-08-26 前送达",
+      "updated_at": "2026-08-24 10:00"
+    },
+    {
+      "order_no": "XOZ-12345",
+      "status": "signed",
+      "items": "手机 X100 Ultra",
+      "logistics_no": "SF1399887766554",
+      "eta": null,
+      "updated_at": "2026-08-20 18:12"
+    },
+    {
+      "order_no": "SO2026070302",
+      "status": "refunding",
+      "items": "扫地机器人 R7",
+      "logistics_no": null,
+      "eta": null,
+      "updated_at": "2026-08-23 14:05"
+    }
+  ]
+}
