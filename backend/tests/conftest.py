@@ -25,6 +25,11 @@ _TEST_ENV: dict[str, str] = {
     "POSTGRES_DB": "lingxi",
     "REDIS_URL": "redis://localhost:6379/0",
     "QDRANT_URL": "http://localhost:6333",
+    # Windows 系统代理（如 Clash :7890）会把 qdrant-client(httpx) 对 localhost 的请求
+    # 路由进代理导致 ReadTimeout——httpx 读注册表代理但忽略其「本地绕过」名单。
+    # 显式 NO_PROXY 绕过；CI 无系统代理不受影响，setdefault 尊重外部注入。
+    "NO_PROXY": "localhost,127.0.0.1",
+    "no_proxy": "localhost,127.0.0.1",
     # 测试环境关闭登录/注册限流：TestClient 共享同一 IP，用例间累计会误伤
     "RATE_LIMIT_ENABLED": "false",
     # 测试环境关闭答案缓存：避免单测触发真实 Qdrant 建集合 + 本地 embedding 加载
