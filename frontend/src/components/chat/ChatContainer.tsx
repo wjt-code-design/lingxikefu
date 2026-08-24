@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Button } from 'antd';
-import { SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined, FileAddOutlined } from '@ant-design/icons';
+import { BulbOutlined, CloseOutlined, SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined, FileAddOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
-import { createSession, getSessionDetail, rateSatisfaction, sendAgentMessage } from '@/api/sessions';
+import { createSession, getSessionDetail, rateSatisfaction, sendAgentMessage, suggestReply } from '@/api/sessions';
 import { escalateSession, createTicket } from '@/api/tickets';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStream } from '@/hooks/useChatStream';
@@ -174,6 +174,17 @@ export function ChatContainer({
   const [userProfile, setUserProfile] = useState<SessionDetail['profile']>(undefined);
   // 转人工交接摘要（本次会话上下文压缩打包；来自 getSessionDetail.handoff_summary）
   const [handoffSummary, setHandoffSummary] = useState<SessionDetail['handoff_summary']>(undefined);
+  // 批次A：坐席辅助 AI 推荐（observe 视角；手动触发、fail-open 静默）
+  const [aiSuggest, setAiSuggest] = useState<{ text: string; sources: MessageSource[]; loading: boolean } | null>(null);
+  // 本地持有 Composer 的填入能力（建议卡片「填入输入框」用）；透传给父级 WorkbenchLayout（SourcePanel 快捷话术）
+  const fillRef = useRef<((t: string) => void) | null>(null);
+  const registerFill = useCallback(
+    (f: (t: string) => void) => {
+      fillRef.current = f;
+      onRegisterFill?.(f);
+    },
+    [onRegisterFill],
+  );
 
   // 三栏工作台：sources 变化时同步给右栏溯源面板（引用稳定，避免重复渲染）
   useEffect(() => {
@@ -457,6 +468,18 @@ export function ChatContainer({
     }
   }, [sessionId]);
 
+  // 批次A：请求 AI 建议。失败静默（建议是辅助能力，不打断客服主流程）
+  const onAskSuggest = useCallback(async () => {
+    if (!sessionId) return;
+    setAiSuggest({ text: '', sources: [], loading: true });
+    try {
+      const r = await suggestReply(sessionId);
+      setAiSuggest({ text: r.text, sources: r.sources, loading: false });
+    } catch {
+      setAiSuggest(null);
+    }
+  }, [sessionId]);
+
   const onRate = useCallback(
     async (id: string, rating: 'up' | 'down') => {
       setMessages((prev) => prev.map((m) => (m.id === id ? { ...m, feedback: rating } : m)));
@@ -620,6 +643,43 @@ export function ChatContainer({
           <TicketNotice kind="create" state={ticketCreated} isStaff={isStaff} />
         )}
       </div>
+      {/* 批次A：坐席辅助建议卡片（手动触发出现；空建议提示语由后端 fail-open 语义决定） */}
+      {aiSuggest && !aiSuggest.loading && (
+        <div className="chat-suggest-card" role="region" aria-label="AI 建议回复">
+          <div className="chat-suggest-card__head">
+            <BulbOutlined />
+            <span>AI 建议回复</span>
+            <Button type="text" size="small" aria-label="关闭建议" onClick={() => setAiSuggest(null)}>
+              <CloseOutlined />
+            </Button>
+          </div>
+          <div className="chat-suggest-card__text">
+            {aiSuggest.text || '暂无建议：知识库未覆盖该问题，可人工答复或向顾客确认更多信息。'}
+          </div>
+          {aiSuggest.sources.length > 0 && (
+            <div className="chat-suggest-card__sources">
+              {aiSuggest.sources.map((s, i) => (
+                <span key={`${s.chunk_id}-${i}`} className="chat-suggest-card__src" title={s.snippet}>
+                  {s.doc_title} · {Math.round(s.score * 100)}%
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="chat-suggest-card__actions">
+            <Button
+              size="small"
+              type="primary"
+              disabled={!aiSuggest.text}
+              onClick={() => fillRef.current?.(aiSuggest.text)}
+            >
+              填入输入框
+            </Button>
+            <Button size="small" onClick={onAskSuggest}>
+              重新生成
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="chat-container__footer">
         {createError && (
           <div className="chat-container__error" role="alert">
@@ -646,6 +706,14 @@ export function ChatContainer({
               >
                 {ticketCreated?.id ? '已建单' : '建单'}
               </Button>
+              <Button
+                icon={<BulbOutlined />}
+                loading={aiSuggest?.loading}
+                disabled={streaming || creating}
+                onClick={onAskSuggest}
+              >
+                AI 推荐
+              </Button>
             </div>
             <div className="chat-observe-composer">
               <Composer
@@ -653,7 +721,7 @@ export function ChatContainer({
                 onSend={onSend}
                 retry={retryText ? { text: retryText.text, onRetry } : null}
                 onEscalate={undefined}
-                onRegisterFill={onRegisterFill}
+                onRegisterFill={registerFill}
                 onStop={stop}
                 centered={false}
               />
@@ -665,7 +733,7 @@ export function ChatContainer({
             onSend={onSend}
             retry={retryText ? { text: retryText.text, onRetry } : null}
             onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
-            onRegisterFill={onRegisterFill}
+            onRegisterFill={registerFill}
             onStop={stop}
             centered={false}
           />
