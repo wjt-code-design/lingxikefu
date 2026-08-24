@@ -1,6 +1,7 @@
 """Clarify 澄清问句生成测试（批次C）：prompt 结构 / 失败抛错 / 输出清洗。"""
 from __future__ import annotations
 
+import app.services.rag_service as rag_service
 import pytest
 from app.services.clarify import ClarifyError, generate_clarify
 from app.services.retrieval_service import RetrievedChunk
@@ -67,3 +68,99 @@ async def test_generate_clarify_empty_output_raises(monkeypatch):
     monkeypatch.setattr("app.services.clarify.get_chat_client", lambda: fake)
     with pytest.raises(ClarifyError):
         await generate_clarify("q", [_chunk("x")])
+
+
+# ---------- stream_answer 拒答分支集成（批次C Task 2） ----------
+
+
+class _RefusePipeline:
+    """强制拒答的 run_pipeline 替身：refuse=True 且给候选片段。"""
+
+    @staticmethod
+    def run(query, kb_id, top_k=None, history=None, kb_version=None):
+        return rag_service.RagResult(
+            intent="qa",
+            chunks=[_chunk("退货申请流程……"), _chunk("退款到账说明……")],
+            refuse=True,
+            refuse_reason="未找到可靠依据",
+        )
+
+
+async def _collect(ag):
+    out = []
+    async for e, d in ag:
+        out.append((e, d))
+    return out
+
+
+async def test_stream_answer_clarify_when_allowed(monkeypatch):
+    """refuse + clarify_left=1 → 澄清问句流：intent(qa/false) + token(问句) + done(clarify=True)。"""
+    monkeypatch.setattr(rag_service, "run_pipeline", _RefusePipeline.run)
+    monkeypatch.setattr(
+        "app.services.rag_service.generate_clarify",
+        lambda q, chunks: _AsyncVal("您是想咨询退货流程还是退款到账？"),
+    )
+    events = await _collect(
+        rag_service.stream_answer("怎么退货", __import__("uuid").uuid4(), clarify_left=1)
+    )
+    kinds = [e for e, _ in events]
+    assert kinds[0] == "intent"
+    assert events[0][1] == {"intent": "qa", "refuse": False}  # 澄清轮不标记拒答
+    assert "token" in kinds
+    tokens = "".join(d["delta"] for e, d in events if e == "token")
+    assert "退货流程" in tokens or "退款到账" in tokens
+    done = [d for e, d in events if e == "done"][-1]
+    assert done.get("clarify") is True
+
+
+async def test_stream_answer_refuse_when_no_quota_left(monkeypatch):
+    """clarify_left=0（或 None）→ 原拒答路径不变（fail-open 兼容旧调用）。"""
+    monkeypatch.setattr(rag_service, "run_pipeline", _RefusePipeline.run)
+    events = await _collect(
+        rag_service.stream_answer("怎么退货", __import__("uuid").uuid4(), clarify_left=0)
+    )
+    intent_ev = events[0]
+    assert intent_ev[1]["refuse"] is True  # 原拒答语义
+    done = [d for e, d in events if e == "done"][-1]
+    assert "clarify" not in done
+    tokens = "".join(d["delta"] for e, d in events if e == "token")
+    assert "转人工" in tokens  # 原拒答文案
+
+
+async def test_stream_answer_clarify_error_falls_back(monkeypatch):
+    """generate_clarify 抛错 → 落回原拒答（不产生半截流）。"""
+    monkeypatch.setattr(rag_service, "run_pipeline", _RefusePipeline.run)
+    monkeypatch.setattr(
+        "app.services.rag_service.generate_clarify",
+        lambda q, chunks: _AsyncRaise(rag_service.ClarifyError("boom")),
+    )
+    events = await _collect(
+        rag_service.stream_answer("怎么退货", __import__("uuid").uuid4(), clarify_left=2)
+    )
+    assert events[0][1]["refuse"] is True
+    done = [d for e, d in events if e == "done"][-1]
+    assert "clarify" not in done
+
+
+class _AsyncVal:
+    """最小 awaitable 替身：bare yield（挂起值 None，asyncio Task 合法）+ return v。
+
+    注：`__await__` 内不可 `yield v`（非 None 挂起值穿透到 asyncio Task 会抛
+    "Task got bad yield"）——await 的结果必须经 StopIteration.value 返回。
+    """
+
+    def __init__(self, v):
+        self._v = v
+
+    def __await__(self):
+        yield
+        return self._v
+
+
+class _AsyncRaise:
+    def __init__(self, e):
+        self._e = e
+
+    def __await__(self):
+        raise self._e
+        yield  # pragma: no cover

@@ -20,6 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.llm_clients.chat import get_chat_client
 from app.prompts.qa_prompt import build_qa_messages
+from app.services.clarify import ClarifyError, generate_clarify
 from app.services.pipeline import Pipeline
 from app.services.retrieval_service import RetrievalError, RetrievedChunk
 from app.services.session_context import extract_topic
@@ -143,6 +144,7 @@ async def stream_answer(
     kb_version: str | None = None,
     user_profile: str | None = None,
     state_hint: str | None = None,
+    clarify_left: int | None = None,
 ):
     """流式回答：yield (event_type, data)。
 
@@ -155,6 +157,9 @@ async def stream_answer(
       <<用户画像>> 块；None 不注入（输出与旧版一致）。仅影响 prompt，不影响缓存 key。
     - state_hint（可选，批次B）：会话状态机提示（主题+槽位），优先级高于 extract_topic
       兜底；None 时回退 extract_topic（旧行为），且不进缓存 key（仅影响 prompt）。
+    - clarify_left（可选，批次C）：剩余澄清次数（None=调用方不允许澄清，行为同旧版）。
+      拒答且 clarify_left>0 时先尝试生成澄清问句（done 带 clarify=True）；
+      生成失败落回原拒答（fail-open）。
     """
     result = RagResult(intent="qa")
     top_k = settings.RETRIEVAL_TOP_K if top_k is None else top_k
@@ -167,6 +172,25 @@ async def stream_answer(
     except RagError as e:
         yield ("error", {"code": "RAG_RETRIEVAL", "message": str(e)})
         return
+
+    # 批次C：拒答前先澄清（clarify_left>0 时）——fail-open，失败落回原拒答。
+    # 澄清分支自带完整事件序列（intent 不标拒答），故须在统一 intent 事件之前，
+    # 且所有 yield 均在 generate_clarify 成功之后——异常时无半截流。
+    if result.refuse and result.intent == "qa" and (clarify_left or 0) > 0:
+        try:
+            question = await generate_clarify(query, result.chunks)
+            yield ("intent", {"intent": "qa", "refuse": False})
+            yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
+            yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
+            for delta in _split_tokens(question):
+                yield ("token", {"delta": delta})
+            yield ("sources", {"sources": []})
+            yield ("done", {"message_id": "", "clarify": True})
+            return
+        except ClarifyError as e:
+            logger.warning("澄清问句生成失败（%s），落回原拒答路径", e)
+        except Exception:  # noqa: BLE001 - 意外异常同样 fail-open 回退，不产生半截流
+            logger.exception("澄清问句生成意外异常，落回原拒答路径")
 
     # R-2：真实意图事件（chat 层据此落库 message.intent，不再写死 qa）
     yield ("intent", {"intent": result.intent, "refuse": result.refuse})
