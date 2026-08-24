@@ -488,3 +488,67 @@ def test_chat_conv_state_fail_open(client, monkeypatch):
     assert r.status_code == 200  # fail-open：异常不 5xx
     body = r.text
     assert "SYS_ERROR" not in body or "token" in body  # 流正常产出（token 事件存在）
+
+
+def test_chat_clarify_flow_updates_state(client, monkeypatch):
+    """批次C：拒答轮（有澄清额度）→ done.clarify → conv_state 置 clarifying + 计数+1。"""
+    c, Local, _ = client
+
+    class _RefuseThenClarifyStream:
+        """替身 stream_answer：模拟拒答且触发澄清（done 带 clarify=True）。"""
+
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            yield ("intent", {"intent": "qa", "refuse": True})
+            yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
+            yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
+            yield ("token", {"delta": "您是想咨询退货流程还是退款到账？"})
+            yield ("sources", {"sources": []})
+            yield ("done", {"message_id": "", "clarify": True})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _RefuseThenClarifyStream())
+    sid = "11111111-1111-1111-1111-111111111111"
+    r = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "怎么退货", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert '"clarify": true' in r.text.replace("'", '"') or '"clarify":true' in r.text.replace(" ", "")
+
+    with Local() as db:
+        s = db.scalar(select(Session).where(Session.id == uuid.UUID(sid)))
+        assert s.conv_state is not None
+        assert s.conv_state["stage"] == "clarifying"
+        assert s.conv_state["clarify_count"] == 1
+
+
+def test_chat_clarify_left_decrements_across_rounds(client, monkeypatch):
+    """批次C：额度耗尽（clarify_count=2）→ 拒答轮不再请求澄清（clarify_left=0 透传）。"""
+    c, Local, _ = client
+    captured: dict = {}
+
+    class _CaptureStream:
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            captured.update(kwargs)
+            yield ("intent", {"intent": "qa", "refuse": True})
+            yield ("token", {"delta": "建议转人工"})
+            yield ("sources", {"sources": []})
+            yield ("done", {"message_id": ""})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _CaptureStream())
+    sid = "11111111-1111-1111-1111-111111111111"
+    # 预置：已用完澄清额度
+    with Local() as db:
+        s = db.scalar(select(Session).where(Session.id == uuid.UUID(sid)))
+        s.conv_state = {"stage": "clarifying", "topic": "退换货", "slots": {}, "clarify_count": 2}
+        db.commit()
+
+    r = c.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "还是不清楚", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert captured.get("clarify_left") == 0  # 额度耗尽，禁止澄清

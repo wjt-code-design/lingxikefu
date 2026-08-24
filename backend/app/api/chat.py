@@ -304,6 +304,7 @@ async def chat_stream(
 
         # 批次B：会话状态机——读旧状态 → 消息推进 → 写回 + 生成 prompt 提示（fail-open：
         # 任何异常降级为无状态，问答照常；conv_state=None 的旧会话按 new_state 处理）
+        conv_state = None  # 批次C：try 前初始化——except 降级后仍需读 clarify_count
         try:
             conv_state = await run_in_threadpool(
                 lambda: conversation_state.update(session_obj.conv_state, req.content)
@@ -315,6 +316,11 @@ async def chat_stream(
             logger.exception("conv_state 更新失败（降级无状态，问答照常）")
             db.rollback()
             state_hint = None
+
+        # 批次C：澄清额度 = MAX_CLARIFY - 已用次数（conv_state 为 None 视为 0 已用）
+        clarify_left = max(
+            0, conversation_state.MAX_CLARIFY - (conv_state or {}).get("clarify_count", 0)
+        )
 
         # v1.1 Router 前置编排（方案书 §2.1）：前置意图分类（单一真源，规则式零 LLM）
         # + 决定执行计划（agents_invoked）。非阻塞关键词匹配，无需搬线程池。
@@ -380,6 +386,7 @@ async def chat_stream(
                     kb_version=kb_version,
                     user_profile=user_profile,
                     state_hint=state_hint,
+                    clarify_left=clarify_left,
                 ):
                     yield (e, d)
 
@@ -428,6 +435,17 @@ async def chat_stream(
                     source_payloads = data["sources"]
                     yield _sse({"event": "sources", "data": data})
                 elif event == "done":
+                    # 批次C：澄清轮 → 会话状态置 clarifying + 计数+1（fail-open，写库异常不影响响应）
+                    if data.get("clarify"):
+                        try:
+                            cs = dict(session_obj.conv_state or conversation_state.new_state())
+                            cs["stage"] = conversation_state.STAGE_CLARIFYING
+                            cs["clarify_count"] = cs.get("clarify_count", 0) + 1
+                            session_obj.conv_state = cs
+                            await run_in_threadpool(db.commit)
+                        except Exception:  # noqa: BLE001 - fail-open
+                            logger.exception("clarify 状态写回失败（不影响响应）")
+                            db.rollback()
                     # 落库 assistant 消息 + 来源真源 + 真实 intent + 首字时延埋点
                     content = "".join(assistant_parts)
                     meta = {"first_token_ms": first_token_ms} if first_token_ms is not None else {}
@@ -483,6 +501,8 @@ async def chat_stream(
                     }
                     if cache_hit:
                         done_data["cache_hit"] = True
+                    if data.get("clarify"):
+                        done_data["clarify"] = True  # 批次C：澄清轮前端可感知（引导补充信息）
                     yield _sse({"event": "done", "data": done_data})
                 elif event == "error":
                     yield _sse({"event": "error", "data": data})
