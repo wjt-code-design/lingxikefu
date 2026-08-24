@@ -43,4 +43,5 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   '/admin/sessions': { title: '会话审计', group: 'admin', breadcrumb: ['运营后台', '会话审计'] },
   '/admin/settings': { title: '系统设置', group: 'admin', breadcrumb: ['运营后台', '系统设置'] },
   '/admin/logs': { title: '操作日志', group: 'admin', breadcrumb: ['运营后台', '操作日志'] },
+  '/admin/eval': { title: '评测中心', group: 'admin', breadcrumb: ['运营后台', '评测中心'] },
 };

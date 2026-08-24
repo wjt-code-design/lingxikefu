@@ -20,8 +20,8 @@ ROLE_DEFS: list[RoleDef] = [
         menus=[
             "/admin/dashboard", "/admin/knowledge", "/admin/users", "/admin/stats",
             "/admin/feedback", "/admin/sessions", "/admin/settings", "/admin/logs",
-            "/admin/roles", "/agent/dashboard", "/agent/sessions", "/agent/tickets",
-            "/agent/customers", "/agent/kb-search", "/chat",
+            "/admin/roles", "/admin/eval", "/agent/dashboard", "/agent/sessions",
+            "/agent/tickets", "/agent/customers", "/agent/kb-search", "/chat",
         ],
         scope="all",
     ),

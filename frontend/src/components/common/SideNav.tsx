@@ -6,6 +6,7 @@ import {
   BookOutlined,
   CustomerServiceOutlined,
   DislikeOutlined,
+  ExperimentOutlined,
   FileSearchOutlined,
   FileTextOutlined,
   MessageOutlined,
@@ -19,7 +20,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { getMyPermissions } from '@/api/admin';
 import { ROUTE_META } from '@/routes.config';
-import type { RoleDef } from '@/contracts/api';
+import type { Role, RoleDef } from '@/contracts/api';
 
 type MenuItem = Required<MenuProps>['items'][number];
 
@@ -47,6 +48,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   '/admin/sessions': <MessageOutlined />,
   '/admin/settings': <SettingOutlined />,
   '/admin/logs': <FileTextOutlined />,
+  '/admin/eval': <ExperimentOutlined />,
 };
 
 /**
@@ -67,8 +69,44 @@ const GROUP_LABELS: Record<string, string> = {
 const GROUP_ORDER = ['grp-personal', 'grp-agent', 'grp-admin'];
 
 /**
+ * 本地兜底菜单：当后端 /auth/me/permissions 尚未返回、返回空或失败时，
+ * 按当前 role 渲染默认菜单，避免侧栏完全空白（BUG-16）。
+ * 与 backend/app/api/roles.py ROLE_DEFS 保持同步。
+ */
+const FALLBACK_MENUS: Record<Role, string[]> = {
+  admin: [
+    '/chat',
+    '/admin/dashboard',
+    '/admin/knowledge',
+    '/admin/users',
+    '/admin/stats',
+    '/admin/feedback',
+    '/admin/sessions',
+    '/admin/settings',
+    '/admin/logs',
+    '/admin/roles',
+    '/admin/eval',
+    '/agent/dashboard',
+    '/agent/sessions',
+    '/agent/tickets',
+    '/agent/customers',
+    '/agent/kb-search',
+  ],
+  agent: [
+    '/chat',
+    '/agent/dashboard',
+    '/agent/sessions',
+    '/agent/tickets',
+    '/agent/customers',
+    '/agent/kb-search',
+  ],
+  user: ['/chat', '/tickets', '/faq', '/help'],
+};
+
+/**
  * 通用侧栏导航：基于后端 /auth/me/permissions 动态渲染菜单。
  * 后端 ROLE_DEFS 定义每个角色可见的路径，前端只渲染有权限的菜单项。
+ * 若后端未返回或失败，按当前 role 使用本地兜底菜单，保证侧栏不空白。
  */
 export function SideNav() {
   const role = useAuthStore((s) => s.role);
@@ -77,14 +115,16 @@ export function SideNav() {
   const [openKeys, setOpenKeys] = useState<string[]>([]);
 
   // 从后端拉取当前用户可见菜单
-  const { data: permissions, isLoading } = useQuery({
+  const { data: permissions } = useQuery({
     queryKey: ['my-permissions', role],
     queryFn: getMyPermissions,
     placeholderData: (prev) => prev,
   });
 
-  // 提取所有可见路径
-  const visiblePaths = permissions?.roles?.flatMap((r: RoleDef) => r.menus) ?? [];
+  // 提取所有可见路径；后端不可用时按 role 兜底（避免侧栏空白）
+  const apiPaths = permissions?.roles?.flatMap((r: RoleDef) => r.menus) ?? [];
+  const fallbackPaths = (role && FALLBACK_MENUS[role]) ?? FALLBACK_MENUS.user;
+  const visiblePaths = apiPaths.length > 0 ? apiPaths : fallbackPaths;
 
   // 按分组归类
   const groupMap = new Map<string, MenuItem[]>();
@@ -116,10 +156,6 @@ export function SideNav() {
     const path = location.pathname;
     setOpenKeys([getGroupKey(path)]);
   }, [location.pathname]);
-
-  if (isLoading) {
-    return <div className="side-nav-loading" style={{ padding: 24 }} />;
-  }
 
   return (
     <Menu
