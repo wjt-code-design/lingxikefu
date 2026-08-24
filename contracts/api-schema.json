@@ -4254,6 +4254,11 @@
               }
             ],
             "title": "Question"
+          },
+          "refresh": {
+            "type": "boolean",
+            "title": "Refresh",
+            "default": false
           }
         },
         "type": "object",

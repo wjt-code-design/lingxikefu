@@ -185,3 +185,15 @@ def test_suggest_cache_hit(client, monkeypatch):
     assert r1.status_code == r2.status_code == 200
     assert r1.json() == r2.json()
     assert fake.calls == 1  # 二次命中缓存，LLM 只调一次
+
+
+def test_suggest_refresh_bypasses_cache(client, monkeypatch):
+    """refresh=true 绕过结果缓存：同 (session, question) 二次调用各打一次 LLM（重新生成）。"""
+    fake = _FakeChatClient()
+    monkeypatch.setattr("app.api.sessions.get_chat_client", lambda: fake)
+    q = {"question": "重新生成测试问题", "refresh": True}
+    r1 = client.post(f"{API}/sessions/{SID}/suggest", json=q, headers=_agent_h())
+    r2 = client.post(f"{API}/sessions/{SID}/suggest", json=q, headers=_agent_h())
+    assert r1.status_code == r2.status_code == 200
+    assert r2.json() == r1.json()  # 新结果仍写入缓存（fake 文本恒定）
+    assert fake.calls == 2  # refresh 跳过缓存读取，两次都真调 LLM

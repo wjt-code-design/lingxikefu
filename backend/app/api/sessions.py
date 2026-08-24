@@ -409,6 +409,7 @@ class SuggestReq(BaseModel):
     """坐席辅助请求：question 缺省取会话最近一条顾客消息。"""
 
     question: str | None = Field(default=None, max_length=500)
+    refresh: bool = False  # 绕过结果缓存强制重新生成（前端「重新生成」按钮）
 
 
 class SuggestResp(BaseModel):
@@ -467,12 +468,13 @@ async def suggest_reply(
     if not question:
         raise HTTPException(status_code=422, detail="no user message to suggest for")
 
-    # 结果缓存命中直接返回（成功结果才有缓存条目）
+    # 结果缓存命中直接返回（成功结果才有缓存条目）；refresh=True 跳过读取强制重新生成
     cache_key = (str(session_id), question)
-    with _suggest_lock:
-        hit = _suggest_cache.get(cache_key)
-        if hit and time.time() - hit[0] < _SUGGEST_CACHE_TTL:
-            return SuggestResp(**hit[1])
+    if not body.refresh:
+        with _suggest_lock:
+            hit = _suggest_cache.get(cache_key)
+            if hit and time.time() - hit[0] < _SUGGEST_CACHE_TTL:
+                return SuggestResp(**hit[1])
 
     try:
         kb_id = await run_in_threadpool(_latest_kb_id, db)

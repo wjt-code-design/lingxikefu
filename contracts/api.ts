@@ -110,6 +110,8 @@ export interface AgentMessageReq {
 export interface SuggestReq {
   /** 需要建议的问题；缺省取会话最近一条顾客消息 */
   question?: string;
+  /** 绕过结果缓存强制重新生成（前端「重新生成」按钮用） */
+  refresh?: boolean;
 }
 /** 批次A 坐席辅助响应：草拟回复 + 引用来源（fail-open：失败返回空 text）。 */
 export interface SuggestResp {
@@ -190,7 +192,7 @@ export type SSEEvent =
   | { event: 'intent'; data: { intent: string; refuse?: boolean } } // R-2：真实意图（qa/handoff/chitchat）
   | { event: 'token'; data: { delta: string } }
   | { event: 'sources'; data: { sources: MessageSource[] } }
-  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存
+  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean; clarify?: boolean } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存；批次C 澄清轮标记
   | { event: 'error'; data: { code: string; message: string } };
 
 // ---------- Chat · Stream Request ----------
