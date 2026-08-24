@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_PREFIX, type ChatStreamReq, type MessageSource, type SSEEvent } from '@/contracts/api';
 import { parseSSEFrame } from '@/api/sse';
+import { refreshAccessToken } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
 
 /** 流式对话的本地状态（与契约 SSEStage 对齐 + idle 初始态） */
@@ -93,16 +94,29 @@ export function useChatStream() {
       timedOut = true;
       controller.abort();
     }, STREAM_TIMEOUT_MS);
-    try {
-      const resp = await fetch(`${base}/chat/stream`, {
+    const doFetch = (tok: string | null) =>
+      fetch(`${base}/chat/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(tok ? { Authorization: `Bearer ${tok}` } : {}),
         },
         body: JSON.stringify({ ...req, stream: true }),
         signal: controller.signal,
       });
+    try {
+      let resp = await doFetch(token);
+      // B2：access token 过期 → 复用共享 refresh 续期后重试一次（与 axios 拦截器同源；
+      // 此前 SSE 走原生 fetch 不经拦截器，401 后必须整页刷新才能继续对话）
+      if (resp.status === 401) {
+        const newToken = await refreshAccessToken();
+        if (!newToken) {
+          // 刷新失败（会话已被清空）→ 与拦截器同口径跳登录
+          window.location.href = '/login';
+          return;
+        }
+        resp = await doFetch(newToken);
+      }
       if (!resp.ok || !resp.body) {
         setState((s) => ({
           ...s,
@@ -131,6 +145,17 @@ export function useChatStream() {
           setState((s) => applyEvent(s, ev));
         }
       }
+      // B3：流被服务端中途关闭（read 正常结束但未收到 done/error 事件）→ 落到终止态。
+      // 否则 stage 永远停在 retrieving/generating → streaming 恒真 → 输入区永久禁用。
+      setState((s) =>
+        s.stage === 'retrieving' || s.stage === 'generating'
+          ? {
+              ...s,
+              stage: 'error',
+              error: { code: 'STREAM_ENDED', message: '连接中断，回答未完成，请重试' },
+            }
+          : s
+      );
     } catch (e) {
       if ((e as Error).name === 'AbortError') {
         // 用户 reset（silent）或兜底超时（显式报错）

@@ -31,12 +31,13 @@ from sqlalchemy.orm import Session as OrmSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.tenant import get_current_tenant
 from app.models.knowledge import Document, KnowledgeBase
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
+from app.services.agents.image_agent import ImageAgent
 from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
 from app.services.agents.router import router as agent_router
-from app.services.agents.image_agent import ImageAgent
 from app.services.agents.ticket_agent import TicketAgent
 from app.services.answer_cache import put as cache_put
 from app.services.quick_answers import match_quick
@@ -82,9 +83,10 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-#: 最新 KB id 缓存（L7 + R-5）：单租户 KB 极少变动，60s TTL 内复用避免每请求查 DB。
+#: 最新 KB id 缓存（L7 + R-5 + B4）：按租户分桶，60s TTL 内复用避免每请求查 DB。
+#: B4 修复：原全局单值缓存所有租户共享 → 租户 A 的 kb_id 会在 TTL 内被租户 B 使用（跨租户串库）。
 #: R-5 修正：不缓存 None（新建 KB 立即可感知）+ 线程锁保护（run_in_threadpool 并发读写）。
-_kb_cache: tuple[float, uuid.UUID] | None = None
+_kb_cache: dict[str, tuple[float, uuid.UUID]] = {}
 _kb_lock = threading.Lock()
 _KB_CACHE_TTL = 60.0
 
@@ -111,15 +113,16 @@ def _kb_version_str(db: OrmSession, kb_id: uuid.UUID) -> str | None:
 
 
 def _latest_kb_id(db: OrmSession) -> uuid.UUID | None:
-    """MVP 单知识库：当前租户最新创建的 KB（带短 TTL 缓存，L7/R-5）。"""
-    global _kb_cache
+    """MVP 单知识库：当前租户最新创建的 KB（按租户分桶短 TTL 缓存，L7/R-5/B4）。"""
+    tenant = get_current_tenant()
     with _kb_lock:
         now = time.time()
-        if _kb_cache and now - _kb_cache[0] < _KB_CACHE_TTL:
-            return _kb_cache[1]
+        hit = _kb_cache.get(tenant)
+        if hit and now - hit[0] < _KB_CACHE_TTL:
+            return hit[1]
         kb = db.scalar(
             select(KnowledgeBase)
-            .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
+            .where(KnowledgeBase.tenant_id == tenant)
             .order_by(KnowledgeBase.created_at.desc())
             .limit(1)
         )
@@ -128,7 +131,10 @@ def _latest_kb_id(db: OrmSession) -> uuid.UUID | None:
         if kb_id is not None and not isinstance(kb_id, uuid.UUID):
             kb_id = uuid.UUID(str(kb_id))
         # 仅在确有 KB 时缓存；无 KB 不缓存 → 新建后立即生效
-        _kb_cache = (now, kb_id) if kb_id is not None else None
+        if kb_id is not None:
+            _kb_cache[tenant] = (now, kb_id)
+        else:
+            _kb_cache.pop(tenant, None)
         return kb_id
 
 

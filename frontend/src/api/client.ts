@@ -24,6 +24,42 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
 /** 并发 401 共享的刷新 Promise，避免同时发多个 refresh 请求 */
 let refreshing: Promise<string | null> | null = null;
 
+function redirectToLogin() {
+  if (window.location.pathname !== '/login') {
+    window.location.href = '/login';
+  }
+}
+
+/**
+ * B2：共享刷新入口（axios 401 拦截器与 SSE fetch 共用）。
+ * 并发调用复用同一次 /auth/refresh；刷新成功返回新 access token，
+ * 失败时清空会话并返回 null（由调用方决定跳转登录）。
+ */
+export function refreshAccessToken(): Promise<string | null> {
+  const { refreshToken, clear } = useAuthStore.getState();
+  if (!refreshToken) return Promise.resolve(null);
+  if (!refreshing) {
+    refreshing = http
+      .post<RefreshResp>('/auth/refresh', { refresh_token: refreshToken })
+      .then((r) => {
+        // R-4：轮换后同步覆盖存储新 refresh token（旧 token 已吊销）
+        useAuthStore.setState({
+          token: r.data.access_token,
+          ...(r.data.refresh_token ? { refreshToken: r.data.refresh_token } : {}),
+        });
+        return r.data.access_token;
+      })
+      .catch(() => {
+        clear();
+        return null;
+      })
+      .finally(() => {
+        refreshing = null;
+      });
+  }
+  return refreshing;
+}
+
 function toApiError(error: unknown): ApiError {
   const err = error as {
     response?: { status?: number; data?: Record<string, unknown> };
@@ -41,12 +77,6 @@ function toApiError(error: unknown): ApiError {
     message,
     request_id: typeof data?.request_id === 'string' ? data.request_id : '',
   };
-}
-
-function redirectToLogin() {
-  if (window.location.pathname !== '/login') {
-    window.location.href = '/login';
-  }
 }
 
 http.interceptors.request.use((config) => {
@@ -80,29 +110,14 @@ http.interceptors.response.use(
         return Promise.reject(toApiError(error));
       }
 
-      try {
-        if (!refreshing) {
-          refreshing = http
-            .post<RefreshResp>('/auth/refresh', { refresh_token: refreshToken })
-            .then((r) => {
-              // R-4：轮换后同步覆盖存储新 refresh token（旧 token 已吊销）
-              useAuthStore.setState({
-                token: r.data.access_token,
-                ...(r.data.refresh_token ? { refreshToken: r.data.refresh_token } : {}),
-              });
-              return r.data.access_token;
-            });
-        }
-        await refreshing;
-        // 重试原请求：请求拦截器会自动带上更新后的 token
-        return http(original);
-      } catch {
-        clear();
+      // B2：复用共享刷新（与 SSE fetch 同源），失败统一清会话跳登录
+      const newToken = await refreshAccessToken();
+      if (!newToken) {
         redirectToLogin();
         return Promise.reject(toApiError(error));
-      } finally {
-        refreshing = null;
       }
+      // 重试原请求：请求拦截器会自动带上更新后的 token
+      return http(original);
     }
 
     return Promise.reject(toApiError(error));

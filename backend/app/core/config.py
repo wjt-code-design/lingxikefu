@@ -110,6 +110,9 @@ class Settings(BaseSettings):
     VOLCENGINE_API_KEY: str | None = None
     VOLCENGINE_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
     VOLCENGINE_CHAT_MODEL: str = "ep-m-20260811130634-mnpgq"
+    # B1（安全）：聊天图片上传白名单目录——ImageAgent 仅允许读取该目录内的图片。
+    # 客户端传来的 image_paths 是服务器路径，不做白名单校验可读任意文件（经视觉模型外泄）。
+    IMAGE_UPLOAD_DIR: str = "uploads/images"
     # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境）；bailian=百炼 text-embedding
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"

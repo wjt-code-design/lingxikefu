@@ -25,6 +25,21 @@ MAX_IMAGE_SIZE_MB = 10  # 单张图片最大 10MB
 ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
+def _safe_image_path(raw: str) -> Path | None:
+    """B1（安全修复）：图片路径必须位于上传白名单目录内。
+
+    resolve() 消解相对路径、`..` 段与 symlink 逃逸；白名单外一律拒绝
+    （返回 None），防止客户端传服务器任意路径（如 /app/.env、/etc/xxx）
+    经视觉模型外泄文件内容。
+    """
+    try:
+        base = Path(settings.IMAGE_UPLOAD_DIR).resolve()
+        p = Path(raw).resolve()
+        return p if p.is_relative_to(base) else None
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
 class ImageAgent(BaseAgent):
     """图片理解 Agent：调用火山引擎视觉模型生成图片描述。"""
 
@@ -49,11 +64,16 @@ class ImageAgent(BaseAgent):
             return ctx
 
         try:
-            vision_client = get_vision_client()
+            vision_client = None  # 懒初始化：路径全部被拒/失败时不依赖客户端可用
             descriptions = []
 
             for image_path_str in ctx.image_paths:
-                image_path = Path(image_path_str)
+                # B1：白名单校验在格式/大小检查之前——路径越界直接拒绝读取
+                image_path = _safe_image_path(image_path_str)
+                if image_path is None:
+                    ctx.degraded.append("image:path_forbidden")
+                    logger.warning("图片路径越界（拒绝读取）: %s", image_path_str)
+                    continue
 
                 # 格式检查
                 if image_path.suffix.lower() not in ALLOWED_EXTENSIONS:
@@ -71,6 +91,8 @@ class ImageAgent(BaseAgent):
 
                 # 调用视觉模型
                 try:
+                    if vision_client is None:
+                        vision_client = get_vision_client()
                     description = await vision_client.describe_image(
                         image_path,
                         text_query=ctx.query
