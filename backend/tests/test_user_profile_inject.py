@@ -79,7 +79,7 @@ def patch(monkeypatch):
     def _fake_search(q, kb, top_k=5):  # type: ignore[no-untyped-def]
         return [make_chunk(0.9)]
 
-    monkeypatch.setattr("app.services.rag_service.search_kb", _fake_search)
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", _fake_search)
     captured = {"messages": None}
 
     class FakeChat:
@@ -121,10 +121,8 @@ async def test_stream_answer_without_profile_no_profile_block(patch):
     assert "<<用户画像>>" not in msgs[-1]["content"]
 
 
-async def test_stream_answer_profile_does_not_affect_cache_key(patch):
+async def test_stream_answer_profile_does_not_affect_cache_key(patch, monkeypatch):
     """画像只影响 prompt，不影响检索/缓存路径（检索仍用改写 query，无画像注入检索）。"""
-    from app.services import rag_service
-
     # 捕获检索调用：确认检索 query 不含画像
     captured_search = {}
 
@@ -132,8 +130,7 @@ async def test_stream_answer_profile_does_not_affect_cache_key(patch):
         captured_search["q"] = q
         return [make_chunk(0.9)]
 
-    patch[0].__class__  # noqa: B018 - 保持引用
-    rag_service.search_kb = _search_spy  # type: ignore[assignment]
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", _search_spy)
     events = [
         e
         async for e in stream_answer(

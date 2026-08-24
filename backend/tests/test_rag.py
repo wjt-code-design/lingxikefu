@@ -41,7 +41,7 @@ def patch(monkeypatch):
         captured["query"] = q
         return [make_chunk(0.9)]
 
-    monkeypatch.setattr("app.services.rag_service.search_kb", _fake_search)
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", _fake_search)
     monkeypatch.setattr("app.services.rag_service.settings.CHAT_MODEL", "qwen3.7-flash", raising=False)
     fake = FakeChat()
     monkeypatch.setattr("app.services.rag_service.get_chat_client", lambda: fake)
@@ -96,7 +96,7 @@ def test_pipeline_search_uses_rewritten_query(patch):
 def test_pipeline_low_score_refuses(patch, monkeypatch):
     """诚实性：top-1 分数低于阈值 → 拒答，不编造。"""
     monkeypatch.setattr(
-        "app.services.rag_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)]
+        "app.services.retrieval_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)]
     )
     r = run_pipeline("星河的创始人是谁", uuid4())
     assert r.refuse is True
@@ -104,7 +104,7 @@ def test_pipeline_low_score_refuses(patch, monkeypatch):
 
 def test_pipeline_no_chunks_refuses(patch, monkeypatch):
     monkeypatch.setattr(
-        "app.services.rag_service.search_kb", lambda q, kb, top_k=5: []
+        "app.services.retrieval_service.search_kb", lambda q, kb, top_k=5: []
     )
     r = run_pipeline("完全无关的问题", uuid4())
     assert r.refuse is True
@@ -116,7 +116,7 @@ def test_pipeline_retrieval_error_raises(patch, monkeypatch):
     def boom(*_a, **_k):
         raise RetrievalError("Qdrant 挂了")
 
-    monkeypatch.setattr("app.services.rag_service.search_kb", boom)
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", boom)
     with pytest.raises(RagError, match="检索不可用"):
         run_pipeline("退货运费", uuid4())
 
@@ -180,7 +180,7 @@ async def test_stream_answer_handoff_no_llm(patch):
 
 async def test_stream_answer_refuse_no_llm(patch, monkeypatch):
     monkeypatch.setattr(
-        "app.services.rag_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)]
+        "app.services.retrieval_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)]
     )
     events = [e async for e in stream_answer("星河的创始人是谁", uuid4())]
     types = [t for t, _ in events]
@@ -194,7 +194,7 @@ async def test_stream_answer_error_event(patch, monkeypatch):
     def boom(*_a, **_k):
         raise RetrievalError("down")
 
-    monkeypatch.setattr("app.services.rag_service.search_kb", boom)
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", boom)
     events = [e async for e in stream_answer("退货运费", uuid4())]
     assert events[0][0] == "error"
     assert events[0][1]["code"] == "RAG_RETRIEVAL"

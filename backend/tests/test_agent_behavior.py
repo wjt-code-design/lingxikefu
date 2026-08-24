@@ -44,9 +44,10 @@ def patch(monkeypatch):
     def _fake_search(q, kb, top_k=5):  # type: ignore[no-untyped-def]
         return [make_chunk(0.9)]
 
-    monkeypatch.setattr("app.services.rag_service.search_kb", _fake_search)
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", _fake_search)
     fake = FakeChat()
     monkeypatch.setattr("app.services.rag_service.get_chat_client", lambda: fake)
+    return fake
     return fake
 
 
@@ -104,7 +105,7 @@ def test_intent_privacy_identity_flow():
 
 def test_refuse_low_score_uses_no_llm(patch, monkeypatch):
     """TC-偏题/无依据：低分 → refuse，且不调 LLM（grounred 拒答）。"""
-    monkeypatch.setattr("app.services.rag_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)])
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)])
     r = run_pipeline("今天A股什么行情", uuid4())
     assert r.refuse is True
     assert _no_llm_reply(r) == "抱歉，我暂时没有找到关于这个问题的可靠信息，为避免误导您，建议转人工客服处理。"
@@ -130,7 +131,7 @@ async def test_stream_handoff_no_llm_calls(patch):
 
 
 async def test_stream_refuse_no_llm_calls(patch, monkeypatch):
-    monkeypatch.setattr("app.services.rag_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)])
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", lambda q, kb, top_k=5: [make_chunk(0.1)])
     events = [e async for e in stream_answer("星河的创始人是谁", uuid4())]
     assert patch.calls == []
     assert events[-1][1]["message_id"] == ""

@@ -20,6 +20,7 @@ from fastapi.concurrency import run_in_threadpool
 from app.core.config import settings
 from app.llm_clients.chat import get_chat_client
 from app.prompts.qa_prompt import build_qa_messages
+from app.services.pipeline import Pipeline
 from app.services.query_rewrite import rewrite
 from app.services.retrieval_service import RetrievalError, RetrievedChunk, search_kb
 from app.services.session_context import extract_topic
@@ -86,6 +87,24 @@ def classify_intent(query: str) -> str:
     return "qa"
 
 
+def _build_pipeline(pipeline: Pipeline) -> Pipeline:
+    """内部：用可组合节点构建管线（向后兼容 run_pipeline）"""
+    from app.services.steps.intent import classify_intent as _classify_intent
+    from app.services.steps.rewrite import rewrite_query
+    from app.services.steps.cache_check import check_cache
+    from app.services.steps.retrieve import retrieve_chunks
+    from app.services.steps.refuse import check_refuse
+
+    pipeline = _classify_intent(pipeline)
+    if pipeline.intent == "qa":
+        pipeline = rewrite_query(pipeline)
+        pipeline = check_cache(pipeline)
+        if not pipeline.from_cache:
+            pipeline = retrieve_chunks(pipeline)
+            pipeline = check_refuse(pipeline)
+    return pipeline
+
+
 def run_pipeline(query: str, kb_id: UUID, top_k: int | None = None, history: list[dict] | None = None, kb_version: str | None = None) -> RagResult:
     """RAG 管线入口（非流式部分）：intent(原文) → 缓存/检索(改写后) → 拒答判定。
 
@@ -94,42 +113,23 @@ def run_pipeline(query: str, kb_id: UUID, top_k: int | None = None, history: lis
     自 2026-08-21：top_k 默认跟随 settings.RETRIEVAL_TOP_K（单一真源；外部显式传参可覆盖）。
     返回 RagResult，生成阶段由 Chat 层用 build_qa_messages 组装后流式调用。
     """
-    top_k = settings.RETRIEVAL_TOP_K if top_k is None else top_k
-    intent = classify_intent(query)
-    result = RagResult(intent=intent)
+    try:
+        pipeline = Pipeline(query=query, kb_id=kb_id, history=history or [], kb_version=kb_version)
+        pipeline = _build_pipeline(pipeline)
+    except RetrievalError as e:
+        raise RagError(f"检索不可用: {e}") from e
 
-    if intent == "qa":
-        # T9-S3：改写（检索/缓存 key 用）；intent 已用原文
-        rewritten, _meta = rewrite(query, history)
-        result.rewritten_query = rewritten
-        try:
-            # T10：缓存命中（精确+语义，实体锁定+KB 版本校验）→ 不走检索/LLM
-            from app.services.answer_cache import get as cache_get
-
-            cached = cache_get(rewritten, kb_version, kb_id=str(kb_id))
-            if cached:
-                result.from_cache = True
-                result.cached_answer = cached.get("answer", "")
-                result.cached_sources = cached.get("sources", [])
-                logger.info("RAG 缓存命中: query=%s", rewritten[:40])
-                return result
-
-            chunks = search_kb(rewritten, kb_id, top_k=top_k)
-        except RetrievalError as e:
-            raise RagError(f"检索不可用: {e}") from e
-        result.chunks = chunks
-        # 诚实性：无依据拒答。hybrid 下 RRF 融合分无绝对语义（排序用），
-        # 拒答独立看 dense 余弦分数（best dense——RRF 排序与相关性判定解耦，ADR-2026-08-16 §3.5）
-        best_dense = max((c.dense_score for c in chunks), default=0.0) if chunks else 0.0
-        if not chunks or best_dense < settings.MIN_SCORE:
-            result.refuse = True
-            result.refuse_reason = "未找到可靠依据"
-        # 降噪（2026-08-21）：MIN_SCORE 亦作 context 硬过滤——低于阈值的低分近义片段
-        # 不进 prompt，减少生成期噪声。拒答判定已用原始 best_dense，不受此处过滤影响。
-        result.chunks = [c for c in chunks if c.dense_score >= settings.MIN_SCORE]
-        logger.info("RAG qa: best_dense=%.3f refuse=%s", best_dense, result.refuse)
-
-    return result
+    # 映射回 RagResult（chat.py 现有调用不变）
+    return RagResult(
+        intent=pipeline.intent,
+        chunks=pipeline.chunks,
+        refuse=pipeline.refuse,
+        refuse_reason=pipeline.refuse_reason,
+        from_cache=pipeline.from_cache,
+        cached_answer=pipeline.cached_answer,
+        cached_sources=pipeline.cached_sources,
+        rewritten_query=pipeline.rewritten_query,
+    )
 
 
 async def stream_answer(
