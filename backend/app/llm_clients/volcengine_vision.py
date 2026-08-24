@@ -6,7 +6,6 @@ API 兼容 OpenAI 格式，但需要特殊的消息结构（content 为数组）
 from __future__ import annotations
 
 import base64
-import json
 import logging
 from pathlib import Path
 

@@ -1,5 +1,4 @@
 """Patch config.py to add VOLCENGINE_* fields after ZHIPU_CHAT_MODEL line."""
-import re
 from pathlib import Path
 
 p = Path(__file__).resolve().parent.parent / "app" / "core" / "config.py"

@@ -13,3 +13,8 @@ build/
 *.egg-info/
 .DS_Store
 .excalidraw
+
+# 测试/工具运行时产物（2026-08-25）
+backend-test-results.xml
+coverage.xml
+.superpowers/

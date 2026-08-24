@@ -111,7 +111,7 @@ def run_golden_set(golden_path: Path) -> dict:
     total = 0
     passed = 0
 
-    with open(golden_path, "r", encoding="utf-8") as f:
+    with open(golden_path, encoding="utf-8") as f:
         for line_num, line in enumerate(f, 1):
             parsed = parse_golden_line(line)
             if parsed is None:
@@ -173,9 +173,9 @@ def main() -> None:
                 print(f"    期望: {r['expected']}")
                 print(f"    实际: {r['actual']}")
                 if not r["agents_match"]:
-                    print(f"    ❌ agents_invoked 不匹配")
+                    print("    ❌ agents_invoked 不匹配")
                 if not r["intent_match"]:
-                    print(f"    ❌ intent 不匹配")
+                    print("    ❌ intent 不匹配")
     else:
         print("\n✅ 所有用例通过！")
 

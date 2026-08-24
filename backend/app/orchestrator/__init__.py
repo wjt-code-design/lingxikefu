@@ -57,13 +57,11 @@ class PipelineRunner:
                 continue
 
             # 节点级重试
-            last_error: Exception | None = None
             for attempt in range(self.retry + 1):
                 try:
                     pipeline = node(pipeline)
                     break  # 成功 → 跳出重试循环
                 except Exception as e:
-                    last_error = e
                     if attempt < self.retry:
                         logger.warning(
                             "Runner: 节点 %s 第 %d 次失败, 重试: %s",

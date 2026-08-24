@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.services.agents.router import (
     IMAGE_AGENT,
     QA_AGENT,

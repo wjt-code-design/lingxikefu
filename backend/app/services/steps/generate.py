@@ -6,8 +6,8 @@ from app.services.pipeline import Pipeline
 
 async def generate_answer(pipeline: Pipeline) -> Pipeline:
     """LLM 流式生成"""
-    from app.prompts.qa_prompt import build_qa_messages
     from app.llm_clients.chat import get_chat_client
+    from app.prompts.qa_prompt import build_qa_messages
 
     messages = build_qa_messages(
         query=pipeline.query,

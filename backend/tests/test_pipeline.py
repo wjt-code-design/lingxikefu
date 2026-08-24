@@ -4,10 +4,8 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from app.orchestrator import PipelineRunner
 from app.services.pipeline import Pipeline
-
 
 # ---------------------------------------------------------------------------
 # fixtures

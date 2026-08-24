@@ -12,12 +12,11 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session as OrmSession
 
-from app.api.deps import get_current_user, require_admin
-from app.core.config import settings
+from app.api.deps import require_admin
 from app.core.database import get_db
 from app.models.eval_result import EvalResult, EvalStatus
 from app.schemas.eval import (
@@ -134,7 +133,6 @@ async def _do_eval(run_id: str, limit: int = 0, kb_name: str | None = None) -> N
     try:
         # 调用评测脚本
         from scripts.eval_faithfulness import run_faithfulness_eval
-        from scripts.eval_recall import run_recall_eval
 
         # faithfulness
         try:

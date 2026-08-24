@@ -18,7 +18,7 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 # 允许从 scripts/ 子目录直接运行
@@ -29,11 +29,9 @@ os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 
-import sqlalchemy
-from sqlalchemy import func, select
-
 from app.core.database import SessionLocal
 from app.models.message import Message, MessageRole
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +69,7 @@ def extract_perf_baseline(days: int | None = None) -> dict:
         )
 
         if days is not None:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
             query = query.where(Message.created_at >= cutoff)
 
         rows = db.scalars(query).all()

@@ -23,7 +23,6 @@ from datetime import UTC, datetime
 from sqlalchemy import update
 from sqlalchemy.orm import Session as OrmSession
 
-from app.core.config import settings
 from app.core.tenant import get_current_tenant
 from app.models.ticket import Ticket, TicketStatus
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 from uuid import uuid4
 
 import pytest
-
 from app.orchestrator import PipelineRunner
 from app.services.pipeline import Pipeline
 from app.services.steps.cache_check import check_cache
@@ -16,7 +15,6 @@ from app.services.steps.intent import classify_intent
 from app.services.steps.refuse import check_refuse
 from app.services.steps.retrieve import retrieve_chunks
 from app.services.steps.rewrite import rewrite_query
-
 
 # ---------------------------------------------------------------------------
 # helpers
@@ -122,8 +120,8 @@ class TestFullPipelineWithRealNodes:
 
     def test_low_score_triggers_refuse(self, mock_search, mock_cache):
         """检索分数低于阈值 → refuse=True。"""
-        from app.services.retrieval_service import RetrievedChunk
         import app.services.retrieval_service as rs
+        from app.services.retrieval_service import RetrievedChunk
 
         def _fake(q, kb, top_k=5):
             return [RetrievedChunk(chunk_id="c1", doc_id="d1", kb_id="kb1", idx=0,
@@ -144,8 +142,8 @@ class TestFullPipelineWithRealNodes:
 
     def test_rewrite_output_feeds_retrieval(self, mock_search, mock_cache):
         """改写输出作为检索输入（T9-S3 契约）。"""
-        from app.services.retrieval_service import RetrievedChunk
         import app.services.retrieval_service as rs
+        from app.services.retrieval_service import RetrievedChunk
 
         def _fake(q, kb, top_k=5):
             mock_search["query"] = q
@@ -168,8 +166,8 @@ class TestFullPipelineWithRealNodes:
 
     def test_stage_log_tracks_execution_order(self, mock_search, mock_cache):
         """stages 记录节点执行顺序，用于排障。"""
-        from app.services.retrieval_service import RetrievedChunk
         import app.services.retrieval_service as rs
+        from app.services.retrieval_service import RetrievedChunk
 
         def _fake(q, kb, top_k=5):
             return [RetrievedChunk(chunk_id="c1", doc_id="d1", kb_id="kb1", idx=0,
@@ -189,8 +187,8 @@ class TestFullPipelineWithRealNodes:
 
     def test_to_dict_serialization_excludes_chunks(self, mock_search, mock_cache):
         """to_dict() 不含 chunks 大数组，只保留长度。"""
-        from app.services.retrieval_service import RetrievedChunk
         import app.services.retrieval_service as rs
+        from app.services.retrieval_service import RetrievedChunk
 
         def _fake(q, kb, top_k=5):
             return [RetrievedChunk(chunk_id="c1", doc_id="d1", kb_id="kb1", idx=0,

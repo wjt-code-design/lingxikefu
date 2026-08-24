@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
+from app.api.roles import ROLE_DEFS
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.rate_limit import rate_limit
 from app.core.security import JWTError, decode_token
 from app.core.token_revocation import revoke_token
-from app.api.roles import ROLE_DEFS
 from app.schemas.auth import (
     AuthResp,
     LoginReq,
