@@ -14,6 +14,9 @@ import { SourcePanel } from './SourcePanel';
 export function WorkbenchLayout() {
   const [sources, setSources] = useState<MessageSource[]>([]);
   const onSourcesChange = useCallback((s: MessageSource[]) => setSources(s), []);
+  // 快捷话术回答标记（done.answer_source）：SourcePanel 据此区分「预置话术无引用」空态
+  const [answerSource, setAnswerSource] = useState<string | undefined>(undefined);
+  const onAnswerSourceChange = useCallback((v: string | undefined) => setAnswerSource(v), []);
   // A+：历史/溯源默认收起，由对话工具栏图标触发抽屉（桌面/移动统一）；panel 取代原 mobilePanel
   const [panel, setPanel] = useState<'history' | 'source' | null>(null);
   // P1-3：Composer 的"填入输入框"能力注册到这里，快捷话术点击时调用
@@ -33,7 +36,7 @@ export function WorkbenchLayout() {
               溯源来源
             </Button>
           </div>
-          <ChatContainer onSourcesChange={onSourcesChange} onRegisterFill={onRegisterFill} />
+          <ChatContainer onSourcesChange={onSourcesChange} onAnswerSourceChange={onAnswerSourceChange} onRegisterFill={onRegisterFill} />
         </main>
       </div>
 
@@ -56,7 +59,7 @@ export function WorkbenchLayout() {
         styles={{ body: { padding: 0 } }}
         destroyOnClose
       >
-        <SourcePanel sources={sources} onUseReply={fillReply ?? undefined} />
+        <SourcePanel sources={sources} answerSource={answerSource} onUseReply={fillReply ?? undefined} />
       </Drawer>
     </div>
   );

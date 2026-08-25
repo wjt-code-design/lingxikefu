@@ -129,14 +129,17 @@ function TicketNotice({
  */
 export function ChatContainer({
   onSourcesChange,
+  onAnswerSourceChange,
   onRegisterFill,
 }: {
   /** 右栏溯源面板订阅 sources（三栏工作台用）；不传则忽略。 */
   onSourcesChange?: (s: MessageSource[]) => void;
+  /** 快捷话术回答标记推送（done.answer_source，每轮 finalize 覆盖；SourcePanel 区分空态用） */
+  onAnswerSourceChange?: (v: string | undefined) => void;
   /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel） */
   onRegisterFill?: (fill: (text: string) => void) => void;
 }) {
-  const { stage, tokens, sources, messageId, userMessageId, ticketId, tool, error, reset, stop, stream } = useChatStream();
+  const { stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, stop, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -362,9 +365,11 @@ export function ChatContainer({
     setRetryText(stage === 'error' && u.clientMsgId ? { text: u.text, clientMsgId: u.clientMsgId } : null);
     // P2-2：成功完成一轮对话 → 轮次 +1（done 才计，error 不计）
     if (stage === 'done') setTurnCount((n) => n + 1);
+    // 快捷话术标记推送：每轮 finalize 覆盖（done 带 answer_source=quick；普通轮 undefined 清除）
+    onAnswerSourceChange?.(stage === 'done' ? answerSource : undefined);
     reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 不参与依赖（防 done 后点赞等触发重复 finalize）
-  }, [stage, tokens, sources, messageId, userMessageId, ticketId, tool, error, reset, sessionId]);
+  }, [stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, sessionId, onAnswerSourceChange]);
 
   const onSend = useCallback(
     async (text: string, clientMsgId?: string): Promise<boolean> => {

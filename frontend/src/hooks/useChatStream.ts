@@ -15,6 +15,7 @@ export interface ChatStreamState {
   userMessageId?: string; // R2/C4：本次提问的后端真 id（done 回传，本地消息 id 对齐用）
   ticketId?: string; // T1：handoff 建单后携带工单号
   tool?: string; // 批次D/T3：工具回答标记（如 order_query，气泡徽章展示来源）
+  answerSource?: string; // 快捷话术回答标记（done.answer_source=quick，SourcePanel 空态区分）
   error?: { code: string; message: string };
 }
 
@@ -47,6 +48,7 @@ function applyEvent(state: ChatStreamState, ev: SSEEvent): ChatStreamState {
         userMessageId: ev.data.user_message_id, // R2/C4：后端 user 消息真 id
         ticketId: ev.data.ticket_id, // T1：handoff 建单工单号
         tool: ev.data.tool, // 批次D/T3：工具回答标记（无则 undefined）
+        answerSource: ev.data.answer_source, // 快捷话术回答（无则 undefined，每轮 done 覆盖）
       };
     case 'error':
       return { ...state, stage: 'error', error: ev.data };

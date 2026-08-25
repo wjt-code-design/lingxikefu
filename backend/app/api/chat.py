@@ -342,15 +342,16 @@ async def chat_stream(
                 logger.exception("读取用户画像失败（不注入，回答照常）")
 
             async def _events():
-                # 方案A：快捷预置话术短路——命中固定问句（按钮或手打同文案）直接秒回，不检索/不判缓存版本
+                # 方案A：快捷预置话术短路——命中固定问句（按钮或手打同文案）直接秒回，不检索/不判缓存版本。
+                # 诚实标注（2026-08-25 溯源空面板排查）：该分支不检索、零 LLM，
+                # 不发 retrieving/generating 进度剧场（此前谎报「已检索知识库」）；
+                # done 带 answer_source=quick，前端 SourcePanel 区分「预置话术无引用」空态。
                 if quick_ans:
                     yield ("intent", {"intent": "qa", "refuse": False})
-                    yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
-                    yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
                     for delta in _split_answer(quick_ans):
                         yield ("token", {"delta": delta})
                     yield ("sources", {"sources": []})
-                    yield ("done", {"message_id": ""})
+                    yield ("done", {"message_id": "", "answer_source": "quick"})
                     return
                 # 批次D：订单工具短路——零 LLM 模板回答（quick_ans 同构事件形态）
                 if order_info is not None:
@@ -443,6 +444,8 @@ async def chat_stream(
                     if data.get("cache_hit"):
                         cache_hit = True
                         meta["cache_hit"] = True  # T10：缓存命中可溯源
+                    if data.get("answer_source"):
+                        meta["answer_source"] = data["answer_source"]  # 快捷话术可辨（SourcePanel 区分空态）
                     msg_id = await _persist_answer(
                         db, session_id, content, source_payloads, intent, meta
                     )
@@ -496,6 +499,8 @@ async def chat_stream(
                         done_data["clarify"] = True  # 批次C：澄清轮前端可感知（引导补充信息）
                     if data.get("tool"):
                         done_data["tool"] = data["tool"]  # 大扫查O2：工具回答透传（与 meta 同源）
+                    if data.get("answer_source"):
+                        done_data["answer_source"] = data["answer_source"]  # 快捷话术透传（前端空态区分）
                     yield _sse({"event": "done", "data": done_data})
                 elif event == "error":
                     yield _sse({"event": "error", "data": data})

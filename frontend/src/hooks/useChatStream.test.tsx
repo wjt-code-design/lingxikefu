@@ -220,3 +220,36 @@ describe('useChatStream 工具回答标记（T3.1）', () => {
     expect(result.current.tool).toBeUndefined();
   });
 });
+
+describe('useChatStream 快捷话术回答标记（answer_source · 2026-08-25 溯源空面板）', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('done 带 answer_source=quick → 写入 state.answerSource', async () => {
+    installOneShotFetch([
+      'data: {"event":"token","data":{"delta":"预置答案"}}\n\n',
+      'data: {"event":"sources","data":{"sources":[]}}\n\n',
+      'data: {"event":"done","data":{"message_id":"m11","answer_source":"quick"}}\n\n',
+    ]);
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '保修多久？' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.stage).toBe('done');
+    // 旧实现 state 无 answerSource 字段 → undefined → 红
+    expect(result.current.answerSource).toBe('quick');
+  });
+
+  it('done 不带 answer_source（普通 RAG/工具回答）→ 保持 undefined（每轮覆盖）', async () => {
+    installOneShotFetch([
+      'data: {"event":"done","data":{"message_id":"m12"}}\n\n',
+    ]);
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '退货政策' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.stage).toBe('done');
+    expect(result.current.answerSource).toBeUndefined();
+  });
+});

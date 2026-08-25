@@ -187,6 +187,37 @@ def test_chat_cache_write_reuses_stream_rewritten_query(client, monkeypatch):
     assert writes and writes[0][0] == "规范化后的问题"
 
 
+def test_chat_quick_answer_marks_source_and_honest_stage(client, monkeypatch):
+    """快捷话术短路可辨 + stage 诚实（2026-08-25 溯源空面板排查）。
+
+    命中 match_quick 预置话术时：不检索、秒回固定文案、sources 恒空。
+    - done/meta 落 answer_source="quick"（前端 SourcePanel 区分「预置话术无引用」与「暂无引用」；
+      admin 后续可统计快捷命中率）
+    - stage 进度提示不再谎报「已检索知识库」（该分支不检索，诚实标注）
+    """
+    tc, Local, _ = client
+    monkeypatch.setattr("app.api.chat.match_quick", lambda content: "预置答案：保修12个月")
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "保修多久？", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    events = [line[6:] for line in r.text.splitlines() if line.startswith("data: ")]
+    # 诚实性：quick 分支不检索，进度提示不得出现「已检索知识库」
+    assert all("已检索知识库" not in e for e in events)
+    done = next(e for e in events if '"done"' in e)
+    assert '"answer_source"' in done and '"quick"' in done
+
+    # 落库可辨：meta.answer_source = quick
+    with Local() as db:
+        assistant = db.scalars(
+            select(Message).where(Message.role == MessageRole.assistant)
+        ).one()
+        assert assistant.meta.get("answer_source") == "quick"
+
+
 def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
     tc, Local, calls = client
 
