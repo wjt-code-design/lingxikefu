@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent as ReactMouseEvent } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { Button, Tag, Typography, message } from 'antd';
 import { CopyOutlined, CustomerServiceOutlined } from '@ant-design/icons';
 import type { ChatMessage } from './types';
+import type { MessageSource } from '@/contracts/api';
 import { MarkdownContent } from '@/components/common/MarkdownContent';
 import { SourceAccordion } from './SourceAccordion';
 import { ThumbsBar } from './ThumbsBar';
@@ -54,11 +56,17 @@ export function MessageBubble({
   msg,
   onRate,
   layout = 'self',
+  selected = false,
+  onSelect,
 }: {
   msg: ChatMessage;
   onRate: (rating: 'up' | 'down') => void;
   /** 'self' = 用户侧（user 右 / AI+agent 左）；'observe' = 客服视角（customer+ai 左 / agent 右） */
   layout?: 'self' | 'observe';
+  /** 溯源选中态（2026-08-25）：当前被右栏溯源面板查看的 AI 回复 → 气泡高亮 */
+  selected?: boolean;
+  /** 点击 AI 回复 → 通知右栏溯源面板切换（点哪条看哪条；answerSource 透出该条快捷话术标记） */
+  onSelect?: (msgId: string, sources: MessageSource[], answerSource?: string) => void;
 }) {
   const variant = getVariant(msg.role, layout);
   const isUser = msg.role === 'user';
@@ -70,6 +78,38 @@ export function MessageBubble({
   const userInitial = (authUser?.email?.charAt(0) ?? '我').toUpperCase();
   // 2026-08-21：检索来源仅客服/管理员可见（工作台溯源），顾客端不展示来源（用户确认的方向）。
   const isStaff = role === 'admin' || role === 'agent';
+  // 溯源选中（2026-08-25）：客服视角下 AI 回复可点击，右栏溯源面板切换到该条来源。
+  // 顾客消息 / 人工客服消息不可点（无溯源）；点击无来源的 AI 回复 → 面板显示"暂无引用来源"。
+  const clickable = isAi && isStaff;
+  const handleSelect = () => {
+    if (clickable) onSelect?.(msg.id, msg.sources ?? [], msg.answerSource);
+  };
+  // code-review F1（2026-08-25）：气泡内含复制/溯源折叠/点赞等交互控件——点击这些控件不应误切溯源面板；
+  // 用 closest 拦截事件源头，避免按钮点击冒泡触发 handleSelect 的副作用。
+  const handleRootClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (!clickable) return;
+    // 从点击目标向上遍历（不含根容器自身）：命中内部交互控件（复制/折叠/点赞等）→ 不误切溯源面板。
+    // 注意：根容器自身 role="button" 不能计入拦截，否则任何内部点击都会被拦掉导致选中失效。
+    let el: HTMLElement | null = e.target as HTMLElement;
+    while (el && el !== e.currentTarget) {
+      if (el.matches('button, a, [role="button"], input, textarea, select')) return;
+      el = el.parentElement;
+    }
+    handleSelect();
+  };
+  // code-review F1（2026-08-25）：role=button 需键盘可激活（WCAG 2.1.1）——Enter/Space 触发面板切换。
+  const handleKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (!clickable) return;
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    // 焦点在内部交互控件上时，交由其自身处理，不触发面板切换（与点击拦截保持一致）
+    let el: HTMLElement | null = e.target as HTMLElement;
+    while (el && el !== e.currentTarget) {
+      if (el.matches('button, a, [role="button"], input, textarea, select')) return;
+      el = el.parentElement;
+    }
+    e.preventDefault();
+    handleSelect();
+  };
   const [copied, setCopied] = useState(false);
   // P0-1：sending 态半透明 + failed 态红色提示（可重试）
   const statusCls = msg.status === 'sending' ? ' chat-msg__bubble--sending' : msg.status === 'failed' ? ' chat-msg__bubble--failed' : '';
@@ -154,7 +194,25 @@ export function MessageBubble({
   };
 
   return (
-    <div className={`chat-msg chat-msg--${variant}`} data-layout={layout}>
+    <div
+      className={`chat-msg chat-msg--${variant}${selected ? ' chat-msg--selected' : ''}`}
+      data-layout={layout}
+      onClick={clickable ? handleRootClick : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      aria-selected={clickable ? selected : undefined}
+      title={clickable ? '点击查看该回复的溯源来源' : undefined}
+      onKeyDown={clickable ? handleKeyDown : undefined}
+      style={
+        selected
+          ? {
+              outline: '2px solid var(--color-brand)',
+              outlineOffset: 2,
+              borderRadius: 12,
+            }
+          : undefined
+      }
+    >
       {renderAvatar()}
       <div className={`chat-msg__bubble${statusCls}`}>
         {renderIdentity()}

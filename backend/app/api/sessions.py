@@ -83,6 +83,9 @@ class SessionMessage(BaseModel):
     # 大扫查 F-major（2026-08-25）：工具回答标记透出（meta.tool）——历史加载/observe
     # 视角气泡徽章的读路径（写路径 chat.py 落库、直播态走 SSE done.tool）
     tool: str | None = None
+    # 2026-08-25：快捷话术回答标记透出（meta.answer_source=quick）——历史加载/observe
+    # 视角 SourcePanel「预置话术无引用」空态判断的读路径（写路径 chat.py 落库、直播态走 SSE done.answer_source）
+    answer_source: str | None = None
     # 2026-08-21：AI 回复的引用来源（assistant 角色）；user/agent 通常为空
     sources: list[SessionMessageSource] = Field(default_factory=list)
 
@@ -280,6 +283,7 @@ def get_session(
                 agent_id=m.agent_id,  # Branch 3：人工客服归属透出
                 agent_name=m.agent_name,
                 tool=(m.meta or {}).get("tool"),  # 大扫查 F-major：工具标记读路径
+                answer_source=(m.meta or {}).get("answer_source"),  # 2026-08-25：快捷话术标记读路径
                 sources=src_by_msg.get(str(m.id), []),
             )
             for m in msgs

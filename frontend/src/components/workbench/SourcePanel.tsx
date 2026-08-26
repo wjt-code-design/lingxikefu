@@ -1,6 +1,6 @@
 import { Typography } from 'antd';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
-import type { MessageSource } from '@/contracts/api';
+import { ANSWER_SOURCE_QUICK, type MessageSource } from '@/contracts/api';
 
 /** 快捷话术：点击填入输入框（onUse），供用户在 Composer 修改后发送。 */
 const QUICK_REPLIES = [
@@ -21,18 +21,29 @@ export function SourcePanel({
   sources,
   answerSource,
   onUseReply,
+  selectedMsgId,
 }: {
   sources: MessageSource[];
   /** 最近一轮完成的回答来源标记：quick = 快捷话术预置答案（无知识库引用） */
   answerSource?: string;
   /** P1-3：点击话术 → 填入输入框（WorkbenchLayout 透传的 fill） */
   onUseReply?: (text: string) => void;
+  /** 溯源选中（2026-08-25）：非空表示面板正跟随某条选中的 AI 回复 */
+  selectedMsgId?: string | null;
 }) {
-  const isQuickAnswer = !sources.length && answerSource === 'quick';
+  const isQuickAnswer = !sources.length && answerSource === ANSWER_SOURCE_QUICK;
   return (
     <aside className="wb-right">
       <div className="wb-section">
         <Typography.Text className="wb-section__title">RAG 溯源</Typography.Text>
+        {selectedMsgId && (
+          <Typography.Text
+            type="secondary"
+            style={{ display: 'block', fontSize: 12, marginBottom: 8 }}
+          >
+            正在查看选中回复的溯源，点击对话中其他 AI 回复可切换
+          </Typography.Text>
+        )}
         <div className="wb-sources">
           {!sources.length ? (
             isQuickAnswer ? (

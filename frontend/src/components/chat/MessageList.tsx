@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ChatStage } from '@/hooks/useChatStream';
 import type { ChatMessage } from './types';
+import type { MessageSource } from '@/contracts/api';
 import { MessageBubble } from './MessageBubble';
 import { MarkdownContent } from '@/components/common/MarkdownContent';
 import { StageIndicator } from './StageIndicator';
@@ -18,12 +19,18 @@ export function MessageList({
   stream,
   onRate,
   layout = 'self',
+  selectedMsgId,
+  onSelectMessage,
 }: {
   messages: ChatMessage[];
   stream?: StreamView;
   onRate: (id: string, rating: 'up' | 'down') => void;
   /** 'self' = 用户侧；'observe' = 客服视角（顾客+AI 均在左） */
   layout?: 'self' | 'observe';
+  /** 溯源选中（2026-08-25）：当前被右栏面板查看的 AI 回复 id（气泡高亮） */
+  selectedMsgId?: string | null;
+  /** 点击 AI 回复 → 右栏溯源面板切换（点哪条看哪条；answerSource 透出该条快捷话术标记） */
+  onSelectMessage?: (msgId: string, sources: MessageSource[], answerSource?: string) => void;
 }) {
   const listRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -112,7 +119,14 @@ export function MessageList({
                         <span>{new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
                     )}
-                    <MessageBubble key={m.id} msg={m} layout={layout} onRate={(r) => onRate(m.id, r)} />
+                    <MessageBubble
+                      key={m.id}
+                      msg={m}
+                      layout={layout}
+                      onRate={(r) => onRate(m.id, r)}
+                      selected={selectedMsgId === m.id}
+                      onSelect={onSelectMessage}
+                    />
                   </div>
                 );
               })}
@@ -132,7 +146,14 @@ export function MessageList({
                   <span>{new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
               )}
-              <MessageBubble key={m.id} msg={m} layout={layout} onRate={(r) => onRate(m.id, r)} />
+              <MessageBubble
+                key={m.id}
+                msg={m}
+                layout={layout}
+                onRate={(r) => onRate(m.id, r)}
+                selected={selectedMsgId === m.id}
+                onSelect={onSelectMessage}
+              />
             </div>
           );
         });

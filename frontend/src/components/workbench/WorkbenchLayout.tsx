@@ -13,10 +13,28 @@ import { SourcePanel } from './SourcePanel';
  */
 export function WorkbenchLayout() {
   const [sources, setSources] = useState<MessageSource[]>([]);
-  const onSourcesChange = useCallback((s: MessageSource[]) => setSources(s), []);
+  // 溯源选中（2026-08-25）：右栏面板当前查看的 AI 回复 id（气泡高亮 + 面板标题提示）
+  const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  // 实时流 sources（SSE 事件）→ 面板跟随最新回答；同时清空"历史选中"（实时回答不是某条历史）
+  const onSourcesChange = useCallback((s: MessageSource[]) => {
+    setSources(s);
+    setSelectedMsgId(null);
+  }, []);
+  // 点击 AI 回复（点哪条看哪条）→ 面板切换到该条溯源 + 气泡高亮
+  const onSelectMessage = useCallback((msgId: string, msgSources: MessageSource[], msgAnswerSource?: string) => {
+    setSelectedMsgId(msgId);
+    setSources(msgSources);
+    // 2026-08-25：同步选中消息的快捷话术标记 → SourcePanel「预置话术无引用」空态跟随选中消息
+    setAnswerSource(msgAnswerSource);
+  }, []);
   // 快捷话术回答标记（done.answer_source）：SourcePanel 据此区分「预置话术无引用」空态
   const [answerSource, setAnswerSource] = useState<string | undefined>(undefined);
-  const onAnswerSourceChange = useCallback((v: string | undefined) => setAnswerSource(v), []);
+  // code-review F8（2026-08-25）：与 onSourcesChange 对称——answerSource 变化同样清"历史选中"，
+  // 避免仅 answerSource 更新（如新实时回答 done.answer_source）时残留历史气泡高亮与「正在查看选中回复」提示。
+  const onAnswerSourceChange = useCallback((v: string | undefined) => {
+    setAnswerSource(v);
+    setSelectedMsgId(null);
+  }, []);
   // A+：历史/溯源默认收起，由对话工具栏图标触发抽屉（桌面/移动统一）；panel 取代原 mobilePanel
   const [panel, setPanel] = useState<'history' | 'source' | null>(null);
   // P1-3：Composer 的"填入输入框"能力注册到这里，快捷话术点击时调用
@@ -36,7 +54,13 @@ export function WorkbenchLayout() {
               溯源来源
             </Button>
           </div>
-          <ChatContainer onSourcesChange={onSourcesChange} onAnswerSourceChange={onAnswerSourceChange} onRegisterFill={onRegisterFill} />
+          <ChatContainer
+            onSourcesChange={onSourcesChange}
+            onAnswerSourceChange={onAnswerSourceChange}
+            onRegisterFill={onRegisterFill}
+            selectedMsgId={selectedMsgId}
+            onSelectMessage={onSelectMessage}
+          />
         </main>
       </div>
 
@@ -59,7 +83,12 @@ export function WorkbenchLayout() {
         styles={{ body: { padding: 0 } }}
         destroyOnClose
       >
-        <SourcePanel sources={sources} answerSource={answerSource} onUseReply={fillReply ?? undefined} />
+        <SourcePanel
+          sources={sources}
+          answerSource={answerSource}
+          onUseReply={fillReply ?? undefined}
+          selectedMsgId={selectedMsgId}
+        />
       </Drawer>
     </div>
   );

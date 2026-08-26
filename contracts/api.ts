@@ -142,7 +142,11 @@ export interface Message {
   tool?: string;
   /** 2026-08-21：AI 回复的引用来源（message_sources，session 详情透出）。user/agent 通常为空 */
   sources?: MessageSource[];
+  /** 2026-08-25：快捷话术回答标记（meta.answer_source=quick）→ 历史加载/observe「预置话术无引用」空态判断；普通回答无 */
+  answer_source?: string;
 }
+/** 2026-08-25（code-review F3）：answer_source 取值常量——'quick' = 快捷话术预置答案（不经检索）。统一判断，避免裸字符串跨文件漂移。 */
+export const ANSWER_SOURCE_QUICK = 'quick' as const;
 export interface MessageSource {
   chunk_id: string;
   doc_id?: string;

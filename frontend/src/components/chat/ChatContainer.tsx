@@ -7,7 +7,7 @@ import { createSession, getSessionDetail, rateSatisfaction, sendAgentMessage, su
 import { escalateSession, createTicket } from '@/api/tickets';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStream } from '@/hooks/useChatStream';
-import type { MessageSource, SessionDetail } from '@/contracts/api';
+import type { Message, MessageSource, SessionDetail } from '@/contracts/api';
 import { Composer } from './Composer';
 import { MessageList } from './MessageList';
 import { SatisfactionBar } from './SatisfactionBar';
@@ -120,6 +120,25 @@ function TicketNotice({
   );
 }
 
+/** 2026-08-25（code-review F4）：API 消息 → 前端 ChatMessage 的单一映射。
+ * 历史加载与 observe 轮询追加重载共用，避免字段映射漂移（Shotgun Surgery 收敛）。 */
+function toChatMessage(m: Message): ChatMessage {
+  return {
+    id: m.id,
+    role: m.role as 'user' | 'assistant' | 'agent',
+    content: m.content,
+    status: 'done',
+    createdAt: new Date(m.created_at || Date.now()).getTime(),
+    sources: m.sources ?? [],
+    ...(m.role === 'assistant' ? { messageId: m.id } : {}),
+    ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
+    // 大扫查 F-major：工具徽章读路径（刷新/历史加载不丢徽章）
+    ...(m.tool ? { tool: m.tool } : {}),
+    // 2026-08-25：快捷话术标记读路径（不丢「预置话术无引用」判断依据）
+    ...(m.answer_source ? { answerSource: m.answer_source } : {}),
+  };
+}
+
 /**
  * 对话挂件容器（FE-03 核心）：
  * - 会话懒创建：首次发问时 POST /sessions 拿 session_id；
@@ -131,6 +150,8 @@ export function ChatContainer({
   onSourcesChange,
   onAnswerSourceChange,
   onRegisterFill,
+  selectedMsgId,
+  onSelectMessage,
 }: {
   /** 右栏溯源面板订阅 sources（三栏工作台用）；不传则忽略。 */
   onSourcesChange?: (s: MessageSource[]) => void;
@@ -138,6 +159,10 @@ export function ChatContainer({
   onAnswerSourceChange?: (v: string | undefined) => void;
   /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel） */
   onRegisterFill?: (fill: (text: string) => void) => void;
+  /** 溯源选中（2026-08-25）：当前被右栏面板查看的 AI 回复 id（来自 WorkbenchLayout，气泡高亮用） */
+  selectedMsgId?: string | null;
+  /** 点击 AI 回复 → 右栏溯源面板切换（点哪条看哪条；answerSource 透出选中消息的快捷话术标记） */
+  onSelectMessage?: (msgId: string, sources: MessageSource[], answerSource?: string) => void;
 }) {
   const { stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, stop, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -181,6 +206,11 @@ export function ChatContainer({
   const [aiSuggest, setAiSuggest] = useState<{ text: string; sources: MessageSource[]; loading: boolean } | null>(null);
   // 本地持有 Composer 的填入能力（建议卡片「填入输入框」用）；透传给父级 WorkbenchLayout（SourcePanel 快捷话术）
   const fillRef = useRef<((t: string) => void) | null>(null);
+  // 溯源选中（2026-08-25）：ref 保持最新 onSelectMessage（历史加载 .then 异步回调内使用，避免闭包过期）
+  const onSelectMessageRef = useRef(onSelectMessage);
+  useEffect(() => {
+    onSelectMessageRef.current = onSelectMessage;
+  }, [onSelectMessage]);
   const registerFill = useCallback(
     (f: (t: string) => void) => {
       fillRef.current = f;
@@ -231,21 +261,15 @@ export function ChatContainer({
         setSessionId(d.id);
         setUserProfile(d.profile); // Phase D：客服视角展示画像
         setHandoffSummary(d.handoff_summary); // 转人工交接摘要（客服视角展示）
-        setMessages(
-          d.messages.map((m) => ({
-            id: m.id,
-            // P2：契约扩展 agent role 后透传所有角色（含人工客服消息）
-            role: m.role as 'user' | 'assistant' | 'agent',
-            content: m.content,
-            status: 'done',
-            createdAt: new Date(m.created_at || Date.now()).getTime(),
-            sources: m.sources ?? [], // 2026-08-21：历史消息带来源，修复无溯源
-            ...(m.role === 'assistant' ? { messageId: m.id } : {}),
-            ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
-            // 大扫查 F-major：工具徽章读路径（刷新/历史加载不丢徽章）
-            ...(m.tool ? { tool: m.tool } : {}),
-          }))
-        );
+        setMessages(d.messages.map(toChatMessage));
+        // 溯源面板（2026-08-25）：历史加载默认选中最后一条 AI 回复 → 右栏显示其溯源；
+        // 客服可再点其他 AI 回复切换（点哪条看哪条）。无 AI 回复（如纯人工会话）不选中。
+        const lastAssistant = [...d.messages].reverse().find((m) => m.role === 'assistant');
+        if (lastAssistant) {
+          // 2026-08-25：默认选中同时透出该消息的快捷话术标记（answer_source）→
+          // 右栏「预置话术无引用」空态跟随选中消息，不依赖实时流残留 state。
+          onSelectMessageRef.current?.(lastAssistant.id, lastAssistant.sources ?? [], lastAssistant.answer_source);
+        }
       })
       .catch(() => {
         // 加载失败保留空态，不阻断页面
@@ -304,18 +328,7 @@ export function ChatContainer({
             const known = new Set(prev.map((m) => m.id));
             const fresh = d.messages
               .filter((m) => !known.has(m.id))
-              .map((m) => ({
-                id: m.id,
-                role: m.role as 'user' | 'assistant' | 'agent',
-                content: m.content,
-                status: 'done' as const,
-                createdAt: new Date(m.created_at || Date.now()).getTime(),
-                sources: m.sources ?? [],
-                ...(m.role === 'assistant' ? { messageId: m.id } : {}),
-                ...(m.role === 'agent' ? { agentName: m.agent_name } : {}),
-                // 大扫查 F-major：轮询追加的历史消息同样带工具徽章（observe/顾客端人工介入后）
-                ...(m.tool ? { tool: m.tool } : {}),
-              }));
+              .map(toChatMessage);
             return fresh.length ? [...prev, ...fresh] : prev;
           });
         })
@@ -652,6 +665,8 @@ export function ChatContainer({
           stream={{ stage, tokens, error }}
           layout={chatLayout}
           onRate={onRate}
+          selectedMsgId={selectedMsgId}
+          onSelectMessage={onSelectMessage}
         />
         {manualTicket && (
           <TicketNotice kind="escalate" state={manualTicket} isStaff={isStaff} />

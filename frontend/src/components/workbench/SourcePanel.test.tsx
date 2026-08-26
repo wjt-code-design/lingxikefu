@@ -34,3 +34,15 @@ describe('SourcePanel 溯源空态区分（answer_source）', () => {
     expect(screen.getByText(/相似度 90%/)).toBeInTheDocument();
   });
 });
+describe('SourcePanel 溯源选中提示（2026-08-25 点哪条看哪条）', () => {
+  it('有 sources + selectedMsgId → 提示"正在查看选中回复的溯源"并正常渲染引用', () => {
+    render(<SourcePanel sources={[SRC]} selectedMsgId="m2" />);
+    expect(screen.getByText(/正在查看选中回复的溯源/)).toBeInTheDocument();
+    expect(screen.getByText('售后政策')).toBeInTheDocument();
+  });
+
+  it('无选中（selectedMsgId 为空）→ 不显示选中提示', () => {
+    render(<SourcePanel sources={[SRC]} selectedMsgId={null} />);
+    expect(screen.queryByText(/正在查看选中回复的溯源/)).not.toBeInTheDocument();
+  });
+});
