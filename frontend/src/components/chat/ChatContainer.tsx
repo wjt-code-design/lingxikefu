@@ -167,11 +167,17 @@ export function ChatContainer({
   const { stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, stop, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // P3-⑫：会话 ref（每 render 同步）——历史加载/建议等在途回调用它做 stale 守卫
+  const sessionIdRef = useRef<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null); // I-1：会话创建失败提示
   const [retryText, setRetryText] = useState<{ text: string; clientMsgId: string } | null>(null); // U1：最近失败消息 → 一键重试（含幂等键，重试复用不重复扣费）
   const [searchParams] = useSearchParams();
   const sessionParam = searchParams.get('session');
+  // P3-⑫：sessionParam 的 ref 镜像（每 render 同步）——异步回调读「最新参数」做 stale 守卫，
+  // 闭包里的 sessionParam 与发起时捕获值恒等，直接比对永远为 true（不守卫）。
+  const sessionParamRef = useRef<string | null>(null);
+  sessionParamRef.current = sessionParam;
   const role = useAuthStore((s) => s.role);
   // 客服视角：agent/admin 打开既有会话（?session=）时进入 observe 模式——
   // 顾客与 AI 的对话统一在左，人工介入区在右（demo 招牌布局）；用户侧（自己聊天）保持原样。
@@ -234,7 +240,9 @@ export function ChatContainer({
     const prev = prevSessionParamRef.current;
     prevSessionParamRef.current = sessionParam;
     if (!sessionParam) {
-      if (prev && sessionId) {
+      // P3-⑫：从「?session=A」切到无参（新建）时无条件清理——详情仍在途也允许把状态清成新会话，
+      // 之后异步 .then 靠 stale 守卫丢弃过期详情，杜绝旧会话消息写入新会话。
+      if (prev) {
         setSessionId(null);
         setMessages([]);
         setUserProfile(undefined); // Phase D：切会话重置画像
@@ -256,8 +264,12 @@ export function ChatContainer({
     setTicketCreated(null);
     setManualTicket(null);
     setAiSuggest(null); // 批次A：切会话重置 AI 建议卡片（防旧会话建议残留/填入新会话输入框）
-    getSessionDetail(sessionParam)
+    const sid = sessionParam; // P3-⑫：请求发起时捕获，回调内比对最新参数/会话
+    getSessionDetail(sid)
       .then((d) => {
+        // P3-⑫：stale 守卫——详情仍处等待时用户已切走（新建/换会话），丢弃过期历史，
+        // 用 sessionParamRef 读「最新参数」比对（闭包 sessionParam 恒等于 sid，直接比对无效）。
+        if (sessionParamRef.current !== sid || sessionIdRef.current === d.id) return;
         setSessionId(d.id);
         setUserProfile(d.profile); // Phase D：客服视角展示画像
         setHandoffSummary(d.handoff_summary); // 转人工交接摘要（客服视角展示）
@@ -496,7 +508,6 @@ export function ChatContainer({
   // 批次A：请求 AI 建议。失败静默（建议是辅助能力，不打断客服主流程）
   // 终审②在途竞态守卫：请求发起时捕获 sessionId，await 返回后与最新会话比对，不一致（客服
   // 已切会话）则丢弃。闭包里的 sessionId 与捕获值同源恒等（deps 含 sessionId），故用 ref 读最新值。
-  const sessionIdRef = useRef<string | null>(null);
   sessionIdRef.current = sessionId;
   const onAskSuggest = useCallback(
     async (refresh = false) => {

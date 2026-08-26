@@ -1,11 +1,13 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import { ChatContainer } from '@/components/chat/ChatContainer';
 import { useAuthStore } from '@/store/authStore';
 import type { ChatStage } from '@/hooks/useChatStream';
+import { createSession as mockCreateSession, getSessionDetail as mockGetSessionDetail } from '@/api/sessions';
+import type { SessionDetail } from '@/contracts/api';
 
 /** P0-1 回归测试：用户消息立即可见 + done 后不重复追加 assistant（防重复 finalize）。 */
 
@@ -179,5 +181,56 @@ describe('P0-1 消息生命周期', () => {
     );
     // 全屏仅第一轮那一枚徽章——第二轮气泡未残留
     expect(screen.getAllByText('订单查询')).toHaveLength(1);
+  });
+});
+
+/** P3-⑫ 历史加载竞态：打开 ?session=A 后立即新建 → 旧会话详情晚返回不得写入新会话。 */
+function NavButton({ to, label }: { to: string; label: string }) {
+  const nav = useNavigate();
+  return (
+    <button type="button" onClick={() => nav(to)}>
+      {label}
+    </button>
+  );
+}
+
+describe('P3-⑫ 历史加载 stale 守卫', () => {
+  it('详情在途时切到新建 → 旧会话消息不出现，后续发送创建新会话', async () => {
+    let resolveDetail!: (d: SessionDetail) => void;
+    vi.mocked(mockGetSessionDetail).mockImplementationOnce(
+      () =>
+        new Promise((res) => {
+          resolveDetail = res;
+        })
+    );
+    useAuthStore.setState({
+      token: 't', refreshToken: 't', role: 'user',
+      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+    });
+    render(
+      <ConfigProvider>
+        <MemoryRouter initialEntries={['/chat?session=old-session']}>
+          <NavButton to="/chat" label="go-new" />
+          <ChatContainer />
+        </MemoryRouter>
+      </ConfigProvider>
+    );
+    // 历史详情请求已发起（effect 已跑），但尚未 resolve——用户此刻点「新建」
+    await waitFor(() => expect(mockGetSessionDetail).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole('button', { name: 'go-new' }));
+    // 旧会话详情此刻才返回（携带旧消息）——stale 守卫必须丢弃，绝不写入新会话
+    resolveDetail({
+      id: 'old-session',
+      messages: [
+        { id: 'm-old', role: 'assistant', content: '旧会话A的消息', created_at: '2026-01-01T00:00:00Z' },
+      ],
+    } as SessionDetail);
+    await waitFor(() => expect(mockGetSessionDetail).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText('旧会话A的消息')).not.toBeInTheDocument();
+    // 后续发送 → 走新建会话（createSession），不带着旧会话 id 直发
+    await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '新会话的问题');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(mockCreateSession).toHaveBeenCalled());
   });
 });

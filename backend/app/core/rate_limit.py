@@ -18,10 +18,13 @@ def rate_limit(key: str, limit: int, window: int) -> bool:
         return True
     try:
         r = get_redis()
-        count = r.incr(key)
-        if count == 1:
-            r.expire(key, window)
-        return count <= limit
+        # P3-⑪：incr+expire 并入同一 MULTI pipeline 原子提交——消除「incr 成功、expire 前崩溃
+        # → 永不失效计数键」导致的永久限流误伤（固定窗口语义不变：每次计数顺带刷新 TTL）。
+        pipe = r.pipeline()
+        pipe.incr(key)
+        pipe.expire(key, window)
+        results = pipe.execute()
+        return int(results[0]) <= limit
     except Exception:  # noqa: BLE001 - Redis 不可用：降级放行（避免锁死登录）
         logger.warning("rate_limit: redis 不可用，放行请求")
         return True

@@ -188,6 +188,20 @@ async def _persist_answer(
     return await run_in_threadpool(_work)
 
 
+def _update_conv_state_locked(db: OrmSession, session_id: uuid.UUID, message: str) -> dict:
+    """P2-⑥：conv_state 读改写加行锁——重新 select 当前行（with_for_update）再合并写回，
+    消除「请求进入时读取的旧 conv_state」被并发覆盖导致的丢更新。
+    PG 方言下对行加锁、提交即释放；SQLite 测试自动降级（无锁语义，双双可跑）。
+    """
+    locked = db.scalar(select(Session).where(Session.id == session_id).with_for_update())
+    if locked is None:
+        raise RuntimeError(f"session not found: {session_id}")
+    new_state = conversation_state.update(locked.conv_state, message)
+    locked.conv_state = new_state
+    db.commit()
+    return new_state
+
+
 @router.post("/stream")
 async def chat_stream(
     req: ChatStreamReq,
@@ -282,11 +296,8 @@ async def chat_stream(
         # 任何异常降级为无状态，问答照常；conv_state=None 的旧会话按 new_state 处理）
         conv_state = None  # 批次C：try 前初始化——except 降级后仍需读 clarify_count
         try:
-            conv_state = await run_in_threadpool(
-                lambda: conversation_state.update(session_obj.conv_state, req.content)
-            )
-            session_obj.conv_state = conv_state
-            await run_in_threadpool(db.commit)
+            # P2-⑥：行锁读改写（防止并发丢更新）——helper 内重读最新行并提交
+            conv_state = await run_in_threadpool(_update_conv_state_locked, db, session_id, req.content)
             state_hint = conversation_state.to_prompt_hint(conv_state)
         except Exception:  # noqa: BLE001 - fail-open
             logger.exception("conv_state 更新失败（降级无状态，问答照常）")

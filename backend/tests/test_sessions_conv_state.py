@@ -92,3 +92,66 @@ def test_detail_conv_state_none_for_old_session(client):
         r2 = c.get(f"{API}/sessions/{new_sid}", headers=_agent_h())
         assert r2.status_code == 200
         assert r2.json()["conv_state"] is None
+
+
+# ---- P2-⑥ 并发读改写 —— 行锁（with_for_update）防丢更新 ----
+
+def _conv_state_engine():
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine, tables=[Session.__table__])
+    return engine, sessionmaker(bind=engine, expire_on_commit=False)
+
+
+def test_update_conv_state_uses_row_lock(monkeypatch):
+    """P2-⑥：conv_state 读改写必须调用 with_for_update()（旧实现直接读请求入口的 stale 对象，绝不走行锁）。"""
+    from app.api.chat import _update_conv_state_locked
+    from sqlalchemy.sql.selectable import Select
+
+    calls: list[bool] = []
+    orig = Select.with_for_update
+
+    def spy(self, **kw):
+        calls.append(True)
+        return orig(self, **kw)
+
+    monkeypatch.setattr(Select, "with_for_update", spy)
+    engine, Local = _conv_state_engine()
+    with Local() as db:
+        db.add(Session(id=SID, user_id=USER_ID, conv_state=None))
+        db.commit()
+        new_state = _update_conv_state_locked(db, SID, "我要退款")
+    assert calls, "conv_state 读改写必须经 with_for_update() 行锁"
+    assert new_state["topic"] == "退款"
+
+
+def test_conv_state_locked_two_writers_both_persist():
+    """P2-⑥：后提交写者以行锁重读的最新行（含先提交者的槽位）为基准合并——先提交者写入不丢。"""
+    from app.api.chat import _update_conv_state_locked
+
+    engine, Local = _conv_state_engine()
+    with Local() as db:
+        db.add(Session(id=SID, user_id=USER_ID, conv_state=None))
+        db.commit()
+    # 写者 A：先提交主题 + 订单号
+    with Local() as db:
+        _update_conv_state_locked(db, SID, "我要退款，订单号 SO111222333")
+    # 写者 B：后提交（无主题词/无订单号）——若基于过期空状态会覆盖掉 A 的主题与订单号；
+    # 行锁重读的最新行 → A 的结果整体保留
+    with Local() as db:
+        state_b = _update_conv_state_locked(db, SID, "运费怎么算")
+    assert state_b["slots"]["order_no"] == "SO111222333"
+    assert state_b["topic"] == "退款"  # A 的主题与槽位不因 B 的写回而丢
+
+
+def test_conv_state_locked_emits_for_update_on_pg():
+    """P2-⑥：PG 方言下编译必须带 FOR UPDATE（真实行锁）；SQLite 自动降级无锁。"""
+    from sqlalchemy import select
+    from sqlalchemy.dialects import postgresql
+
+    stmt = select(Session).where(Session.id == SID).with_for_update()
+    sql = str(stmt.compile(dialect=postgresql.dialect()))
+    assert "FOR UPDATE" in sql.upper()
