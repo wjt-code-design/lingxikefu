@@ -254,42 +254,30 @@ async def eval_one_retry(db, kb_id: uuid.UUID, q: dict, gt: dict | None, retries
     raise last
 
 
-async def main() -> int:
-
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--limit", type=int, default=0, help="仅评测前 N 题（0=全部）")
-    ap.add_argument("--offset", type=int, default=0, help="跳过前 N 题（续跑用）")
-    ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
-    args = ap.parse_args()
-
-    questions = parse_questions()
-    gt = parse_ground_truth()
-    print(f"[INPUT] 问题 {len(questions)} 题 | ground-truth {len(gt)} 题")
-    if args.offset:
-        questions = questions[args.offset:]
-    if args.limit:
-        questions = questions[: args.limit]
-
-    db = SessionLocal()
+def _resolve_kb(db, kb_name: str | None) -> KnowledgeBase | None:
+    """按名取最新同名 KB；找不到退租户最新 KB（与 eval_recall/seed_demo_data 同规则）。"""
+    name = kb_name or "星河智家·售后与订单全量库"
     kb = db.scalar(
-        select(KnowledgeBase).where(KnowledgeBase.name == args.kb_name).order_by(KnowledgeBase.created_at.desc())
+        select(KnowledgeBase)
+        .where(KnowledgeBase.name == name)
+        .order_by(KnowledgeBase.created_at.desc())
     )
-    db.close()
     if not kb:
-        # 兜底：按名找不到时退到租户最新 KB（与 eval_recall/seed_demo_data 同规则）
-        db = SessionLocal()
         kb = db.scalar(
             select(KnowledgeBase)
             .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
             .order_by(KnowledgeBase.created_at.desc())
         )
-        db.close()
         if kb:
-            print(f"[WARN] 未找到 {args.kb_name!r}，回退最新 KB：{kb.name} ({kb.id})")
-    if not kb:
-        print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
-        return 2
+            print(f"[WARN] 未找到 {name!r}，回退最新 KB：{kb.name} ({kb.id})")
+    return kb
 
+
+async def _run_faithfulness(db, kb_id: uuid.UUID, questions: list[dict], gt: dict) -> tuple:
+    """核心循环：逐题评测并汇总（供 main 与 run_faithfulness_eval 复用）。
+
+    返回 (stats, fails, cit_good, cit_total)。
+    """
     stats = {"qa": [0, 0], "refuse": [0, 0], "refuse_qa": [0, 0], "handoff": [0, 0], "chitchat": [0, 0]}
     fails: list[str] = []
     cit_good = cit_total = 0
@@ -299,7 +287,7 @@ async def main() -> int:
             print(f"  [SKIP] {q['qid']} 无 ground-truth")
             continue
         try:
-            res = await eval_one_retry(db, kb.id, q, g)
+            res = await eval_one_retry(db, kb_id, q, g)
         except Exception as e:  # noqa: BLE001
             print(f"  [ERR] {q['qid']} {type(e).__name__}: {e}")
             res = None
@@ -320,6 +308,70 @@ async def main() -> int:
                 fails.append(f"{res['qid']} [cite] 引用不合法 {g0}/{t0}")
         tag = "PASS" if res["ok"] else "FAIL"
         print(f"  [{tag}] {res['qid']} ({kind}) {res['answer'][:60]}")
+    return stats, fails, cit_good, cit_total
+
+
+async def run_faithfulness_eval(
+    db, limit: int = 0, kb_name: str | None = None
+) -> list[tuple[str, float, int, int]]:
+    """后台评测中心复用入口：跑 faithfulness 全量，返回指标元组列表。
+
+    [(metric, score, total, passed), ...]，score=passed/total，供 EvalResult 落表。
+    """
+    questions = parse_questions()
+    gt = parse_ground_truth()
+    print(f"[INPUT] 问题 {len(questions)} 题 | ground-truth {len(gt)} 题")
+    if limit:
+        questions = questions[:limit]
+    kb = _resolve_kb(db, kb_name)
+    if kb is None:
+        print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
+        return []
+    stats, fails, cit_good, cit_total = await _run_faithfulness(db, kb.id, questions, gt)
+    print("\n=== FAITHFULNESS 汇总 ===")
+    for kind, (total, ok) in stats.items():
+        rate = ok / total if total else 0.0
+        print(f"  {kind:9s} {ok}/{total} = {rate:.1%}")
+    if cit_total:
+        print(f"  引用合法率 {cit_good}/{cit_total} = {cit_good / cit_total:.1%}（[来源N] 可溯源，目标≥95%）")
+    out: list[tuple[str, float, int, int]] = []
+    for kind in ("qa", "refuse", "handoff", "chitchat"):
+        total, ok = stats[kind]
+        if total:
+            out.append((kind, ok / total, total, ok))
+    if cit_total:
+        out.append(("citation", cit_good / cit_total, cit_total, cit_good))
+    if fails:
+        print("失败明细:")
+        for f in fails:
+            print(f"  - {f}")
+    return out
+
+
+async def main() -> int:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=0, help="仅评测前 N 题（0=全部）")
+    ap.add_argument("--offset", type=int, default=0, help="跳过前 N 题（续跑用）")
+    ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
+    args = ap.parse_args()
+
+    questions = parse_questions()
+    gt = parse_ground_truth()
+    print(f"[INPUT] 问题 {len(questions)} 题 | ground-truth {len(gt)} 题")
+    if args.offset:
+        questions = questions[args.offset:]
+    if args.limit:
+        questions = questions[: args.limit]
+
+    db = SessionLocal()
+    try:
+        kb = _resolve_kb(db, args.kb_name)
+        if kb is None:
+            print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
+            return 2
+        stats, fails, cit_good, cit_total = await _run_faithfulness(db, kb.id, questions, gt)
+    finally:
+        db.close()
 
     print("\n=== FAITHFULNESS 汇总 ===")
     for kind, (total, ok) in stats.items():

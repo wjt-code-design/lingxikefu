@@ -165,6 +165,41 @@ async def _do_eval(run_id: str, limit: int = 0, kb_name: str | None = None) -> N
             )
             db.commit()
 
+        # recall（检索召回：recall@5 + 诚实性未命中率）
+        from scripts.eval_recall import run_recall_eval
+
+        try:
+            recall_rows = await asyncio.to_thread(
+                run_recall_eval, db, limit=limit, kb_name=kb_name
+            )
+            for metric, score, total, passed in recall_rows:
+                db.add(
+                    EvalResult(
+                        run_id=run_id,
+                        metric=metric,
+                        score=score,
+                        total=total,
+                        passed=passed,
+                        status=EvalStatus.DONE,
+                        source="manual",
+                    )
+                )
+            db.commit()
+        except Exception:
+            logger.exception("recall eval failed")
+            db.add(
+                EvalResult(
+                    run_id=run_id,
+                    metric="recall",
+                    score=0.0,
+                    total=0,
+                    passed=0,
+                    status=EvalStatus.FAILED,
+                    source="manual",
+                )
+            )
+            db.commit()
+
     except Exception:
         logger.exception("eval run %s failed", run_id)
     finally:
