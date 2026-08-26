@@ -711,3 +711,87 @@ def test_chat_order_tool_no_slot_skips(client, monkeypatch):
     )
     assert r.status_code == 200
     assert called["n"] == 0  # 工具未被调用
+
+
+# ============ v1.3 图片集成：fused_query 进 QA（P0-3 锁定） ============
+
+class _FakeVisionClient:
+    """mock 火山视觉模型：describe_image 返回固定描述，记录调用。"""
+
+    def __init__(self):
+        self.calls: list[tuple[str, str | None]] = []
+
+    async def describe_image(self, image_path, text_query=None):
+        self.calls.append((str(image_path), text_query))
+        return "屏幕碎裂的手机屏幕"
+
+
+def _capture_stream(seen: dict):
+    async def _fake_stream(query, kb_id, history=None, top_k=5, **kwargs):
+        seen["query"] = query
+        yield ("intent", {"intent": "qa"})
+        yield ("token", {"delta": "保修12个月"})
+        yield ("sources", {"sources": []})
+        yield ("done", {"message_id": ""})
+
+    return _fake_stream
+
+
+def test_chat_image_fused_query_feeds_qa(client, monkeypatch, tmp_path):
+    """P0-3：带图请求 → Router 排 Image Agent 先行 → fused_query 进 QA。
+
+    锁定：图片描述与用户问题融合后进入 stream_answer（检索/缓存键同源）。
+    此前 router 用 image_refs 判断（恒空）而 chat 层注入 image_paths——
+    字段错位导致图片请求实际走纯文本 QA，本用例即回归保险丝。
+    """
+    import app.services.agents.image_agent as _img_mod
+    from app.core.config import settings
+
+    upload_dir = tmp_path / "uploads"
+    upload_dir.mkdir()
+    img = upload_dir / "screen.png"
+    img.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)  # 白名单内合法图片（<10MB）
+    monkeypatch.setattr(settings, "IMAGE_UPLOAD_DIR", str(upload_dir))
+
+    fake_vision = _FakeVisionClient()
+    monkeypatch.setattr(_img_mod, "get_vision_client", lambda: fake_vision)
+
+    c, _, _ = client
+    seen: dict = {}
+    monkeypatch.setattr("app.api.chat.stream_answer", _capture_stream(seen))
+
+    r = c.post(
+        f"{API}/chat/stream",
+        json={
+            "session_id": "11111111-1111-1111-1111-111111111111",
+            "content": "看看这个手机屏幕",
+            "stream": True,
+            "image_paths": [str(img)],
+        },
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    # Image Agent 真实执行（视觉模型被调用）
+    assert len(fake_vision.calls) == 1
+    # fused_query 进入 QA：用户问题 + 图片描述融合文本
+    assert seen["query"] == "看看这个手机屏幕（图片内容：屏幕碎裂的手机屏幕）"
+
+
+def test_chat_no_image_uses_raw_content(client, monkeypatch):
+    """回归：无图请求 fused_query 为空 → stream_answer 收到原始 query。"""
+    c, _, _ = client
+    seen: dict = {}
+    monkeypatch.setattr("app.api.chat.stream_answer", _capture_stream(seen))
+
+    r = c.post(
+        f"{API}/chat/stream",
+        json={
+            "session_id": "11111111-1111-1111-1111-111111111111",
+            "content": "退货运费谁出",
+            "stream": True,
+            "image_paths": [],
+        },
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert seen["query"] == "退货运费谁出"

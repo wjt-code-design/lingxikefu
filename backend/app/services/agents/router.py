@@ -7,7 +7,7 @@
   断连回滚 / 首字埋点等既有行为）。
 
 分发规则（与方案书 §2.1 一致）：
-1. 有图片引用 → Image Agent 先行（fused_query 喂给 QA；通道当前未实现，见 image_agent）
+1. 有图片引用 → Image Agent 先行（image_agent 生成 fused_query 喂给 QA；qa_agent 以 fused_query 优先进入检索/缓存键）
 2. intent=handoff（人工/情绪词）→ QA + Ticket Agent（建单与流式并行语义）
 3. 默认 → QA Agent 单走
 """
@@ -33,7 +33,9 @@ class Router:
         ctx.intent = classify_intent(ctx.query)
 
         agents: list[str] = []
-        if ctx.image_refs:
+        # v1.3：图片通道实际数据源是 image_paths（chat 层注入文件路径，Image Agent 消费）；
+        # image_refs 为预留引用字段（当前恒空）——任一有值即排 Image Agent 先行
+        if ctx.image_paths or ctx.image_refs:
             agents.append(IMAGE_AGENT)  # Image Agent 必走且先行
         agents.append(QA_AGENT)
         if ctx.intent == "handoff":

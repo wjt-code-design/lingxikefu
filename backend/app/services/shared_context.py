@@ -29,8 +29,8 @@ class SharedContext:
     session_id: UUID | None = None
     message_id: UUID | None = None
     history: list[dict] = field(default_factory=list)
-    image_refs: list[str] = field(default_factory=list)  # 图片通道预留（当前无上传入口，恒空）
-    image_paths: list[str] = field(default_factory=list)  # 图片文件路径列表（Image Agent 使用）
+    image_refs: list[str] = field(default_factory=list)  # 图片引用预留（未启用，恒空）；实际入口 image_paths
+    image_paths: list[str] = field(default_factory=list)  # 图片文件路径列表（chat 注入，Image Agent 使用）
 
     # 请求级资源句柄（非共享数据）：chat 层注入的请求 DB 会话，供 Ticket Agent 建单。
     # 用 Any 避免本模块硬依赖 SQLAlchemy；测试可注入 SQLite 会话。
