@@ -114,3 +114,13 @@ def test_database_url_built_from_fields() -> None:
     """database_url 由 POSTGRES_* 拼接，不含默认值漂移。"""
     settings = make_settings()
     assert settings.database_url.startswith("postgresql+psycopg://lingxi:lingxi@localhost:5432/lingxi")
+
+
+def test_env_must_be_in_enum() -> None:
+    """P2-⑦：ENV 必须是 dev/test/prod 枚举之一；大写/非法值启动即报错（fail-fast）。"""
+    # 合法值不抛
+    for env in ("dev", "test", "prod"):
+        make_settings(ENV=env)
+    # 大写非法变体必须抛 ValidationError（pydantic Literal 枚举校验）
+    with pytest.raises(ValidationError):
+        make_settings(ENV="Production")

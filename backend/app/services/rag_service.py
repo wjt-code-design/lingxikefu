@@ -169,8 +169,10 @@ async def stream_answer(
         result = await run_in_threadpool(
             run_pipeline, query, kb_id, top_k=top_k, history=history, kb_version=kb_version
         )
-    except RagError as e:
-        yield ("error", {"code": "RAG_RETRIEVAL", "message": str(e)})
+    except RagError:
+        # P2-④：对外 SSE 只给通用文案，不转发原始异常（内网地址/细节可能被注入）
+        logger.exception("RAG 检索/管线失败")
+        yield ("error", {"code": "RAG_RETRIEVAL", "message": "知识库检索暂不可用，请稍后重试"})
         return
 
     # 批次C：拒答前先澄清（clarify_left>0 时）——fail-open，失败落回原拒答。
@@ -235,9 +237,9 @@ async def stream_answer(
         # Chat 层回填答案缓存时复用该 key；避免在 done 分支再次执行 rewrite。
         # 这是内部流事件字段，Chat 只向前端转发自己的 done 数据，因而不扩展 SSE 契约。
         yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query})
-    except Exception as e:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         logger.exception("RAG 生成失败")
-        yield ("error", {"code": "RAG_GENERATE", "message": f"生成失败: {e}"})
+        yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
 
 
 def _no_llm_reply(result: RagResult) -> str:

@@ -200,6 +200,21 @@ async def test_stream_answer_error_event(patch, monkeypatch):
     assert events[0][1]["code"] == "RAG_RETRIEVAL"
 
 
+async def test_stream_answer_error_msg_no_qdrant_url(patch, monkeypatch):
+    """P2-④：SSE error frame 的 message 不得透传内部 QDRANT_URL（防御：即便异常带 URL 也截断）。"""
+    from app.core.config import settings
+    from app.services.retrieval_service import RetrievalError
+
+    def boom(*_a, **_k):
+        raise RetrievalError(f"down {settings.QDRANT_URL}")  # 恶意/内部异常带 URL
+
+    monkeypatch.setattr("app.services.retrieval_service.search_kb", boom)
+    events = [e async for e in stream_answer("退货运费", uuid4())]
+    assert events[0][0] == "error"
+    assert events[0][1]["code"] == "RAG_RETRIEVAL"
+    assert settings.QDRANT_URL not in events[0][1]["message"]
+
+
 async def test_stream_answer_does_not_force_bailian_model_when_provider_is_zhipu(patch, monkeypatch):
     """回归保护：provider=zhipu 时 stream_answer 不应硬塞 settings.CHAT_MODEL（百炼模型名）。
 

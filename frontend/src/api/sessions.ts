@@ -95,6 +95,7 @@ export async function suggestReply(id: string, question?: string, refresh = fals
   const body: Record<string, unknown> = {};
   if (question) body.question = question;
   if (refresh) body.refresh = true;
-  const r = await http.post<SuggestResp>(`/sessions/${id}/suggest`, body);
+  // P2-⑤：坐席辅助给出 35s 单请求超时（> 后端 25s LLM 上限），避免后端慢导致假失败
+  const r = await http.post<SuggestResp>(`/sessions/${id}/suggest`, body, { timeout: 35_000 });
   return r.data;
 }

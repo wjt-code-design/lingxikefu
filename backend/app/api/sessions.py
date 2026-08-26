@@ -511,7 +511,8 @@ async def suggest_reply(
             chunks=chunks,
             state_hint=conversation_state.to_prompt_hint(s.conv_state),
         )
-        text = (await get_chat_client().complete(messages)).strip()
+        # P2-⑤：坐席辅助用短超时（25s < 前端 35s 阈值），避免后端慢导致前端假失败
+        text = (await get_chat_client().complete(messages, timeout=25)).strip()
 
         titles = await run_in_threadpool(
             _doc_titles, db, {c.doc_id for c in chunks if c.doc_id}

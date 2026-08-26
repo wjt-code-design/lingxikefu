@@ -115,6 +115,8 @@ class OpenAILikeChatClient(ChatClient):
             raise last_err
 
     async def complete(self, messages: list[dict], model: str | None = None, **kwargs) -> str:
+        # P2-⑤：允许调用方显式覆写超时（如坐席辅助用短超时 25s，低于前端阈值 35s）
+        req_timeout = kwargs.pop("timeout", None)
         payload = {
             "model": model or self._default_model(),
             "messages": messages,
@@ -122,7 +124,12 @@ class OpenAILikeChatClient(ChatClient):
             **{k: v for k, v in kwargs.items() if k not in ("stream",)},
         }
         headers, body = self._request(payload)
-        async with httpx.AsyncClient(timeout=_COMPLETE_TIMEOUT) as client:
+        client_timeout = (
+            _COMPLETE_TIMEOUT
+            if req_timeout is None
+            else httpx.Timeout(float(req_timeout), connect=10.0)
+        )
+        async with httpx.AsyncClient(timeout=client_timeout) as client:
             last_err: httpx.HTTPStatusError | None = None
             for _attempt in range(2):  # 429/5xx 重试 1 次（非流式长回答 + 偶发限流双兜底）
                 try:

@@ -123,7 +123,8 @@ def test_search_kb_bad_top_k_rejected(patch):
 
 
 def test_search_kb_qdrant_failure_raises(patch, monkeypatch):
-    """fail-closed：Qdrant 不可达必须抛 RetrievalError，不静默返回空。"""
+    """fail-closed：Qdrant 不可达必须抛 RetrievalError，不静默返回空，且不泄漏内部 QDRANT_URL。"""
+    from app.core.config import settings
 
     def boom(*_a, **_k):
         raise VectorStoreError("Qdrant 不可达")
@@ -131,5 +132,7 @@ def test_search_kb_qdrant_failure_raises(patch, monkeypatch):
     monkeypatch.setattr(
         "app.services.retrieval_service.get_qdrant_client", boom
     )
-    with pytest.raises(RetrievalError, match="检索失败"):
+    with pytest.raises(RetrievalError, match="vector store unavailable") as excinfo:
         search_kb("退货", uuid4())
+    # P2-④：异常 message 不得拼接 QDRANT_URL（内部端点信息不外泄）
+    assert settings.QDRANT_URL not in str(excinfo.value)

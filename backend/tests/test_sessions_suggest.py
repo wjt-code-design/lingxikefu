@@ -176,6 +176,22 @@ def test_suggest_no_kb_fail_open(client, monkeypatch):
     assert r.json() == {"text": "", "sources": []}
 
 
+def test_suggest_passes_short_timeout_to_llm(client, monkeypatch):
+    """P2-⑤：suggest 的 LLM complete 传给提供方的超时须短于前端阈值(35s)，
+    避免 LLM 慢时后端未先失败、前端先 15s 超时假失败。"""
+    seen: dict[str, object] = {}
+
+    class _Recorder:
+        async def complete(self, messages, **kwargs):
+            seen["timeout"] = kwargs.get("timeout")
+            return "建议回复"
+
+    monkeypatch.setattr("app.api.sessions.get_chat_client", lambda: _Recorder())
+    r = client.post(f"{API}/sessions/{SID}/suggest", json={"question": "超时契约测试问题"}, headers=_agent_h())
+    assert r.status_code == 200
+    assert seen["timeout"] == 25
+
+
 def test_suggest_cache_hit(client, monkeypatch):
     fake = _FakeChatClient()
     monkeypatch.setattr("app.api.sessions.get_chat_client", lambda: fake)

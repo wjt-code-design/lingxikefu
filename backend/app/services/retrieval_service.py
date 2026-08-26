@@ -129,6 +129,8 @@ def search_kb(query: str, kb_id: UUID, top_k: int = 8) -> list[RetrievedChunk]:
             )
             chunks = [_to_chunk(h.payload, float(h.score), float(h.score)) for h in hits]
     except Exception as e:  # noqa: BLE001
-        raise RetrievalError(f"dense 检索失败（{settings.QDRANT_URL}）: {e}") from e
+        # 不泄漏内部 QDRANT_URL 到对外 message；详情走日志（P2-④）
+        logger.exception("dense 检索失败（qdrant url=%s）", settings.QDRANT_URL)
+        raise RetrievalError("vector store unavailable") from e
 
     return chunks

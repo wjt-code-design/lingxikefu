@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -59,7 +60,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
     # --- 运行环境（M5：dev / prod；prod 强制强密钥） ---
-    ENV: str = "dev"
+    ENV: Literal["dev", "test", "prod"] = "dev"
 
     # --- 安全（M1：登录/注册防爆破限流；测试/内部环境可关闭，prod 必须开启） ---
     RATE_LIMIT_ENABLED: bool = True
