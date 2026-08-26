@@ -77,6 +77,10 @@ jobs:
       POSTGRES_DB: lingxi
       REDIS_URL: redis://localhost:6379/0
       QDRANT_URL: http://localhost:6333
+      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET/LITELLM_MASTER_KEY 非空非占位符，
+      # 缺失会导致 app.main import 即抛 ValueError，pytest collection 崩（run#2 已实证）
+      JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
+      LITELLM_MASTER_KEY: ci-test-litellm-master-key-0123456789abcdef0123456789abcdef
     defaults:
       run:
         working-directory: backend
@@ -300,6 +304,9 @@ jobs:
       POSTGRES_DB: lingxi
       REDIS_URL: redis://localhost:6379/0
       QDRANT_URL: http://localhost:6333
+      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET/LITELLM_MASTER_KEY 非空非占位符
+      JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
+      LITELLM_MASTER_KEY: ci-test-litellm-master-key-0123456789abcdef0123456789abcdef
       ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
       EVAL_KB_NAME: "星河智家·官方政策库"
     defaults:
@@ -315,6 +322,13 @@ jobs:
         run: pip install -r requirements.txt
       - name: Apply migrations (fresh PG)
         run: alembic upgrade head
+      # bge 模型预下载：CI 全新 runner 无 HF 缓存，而 embedding.py 以 HF_HUB_OFFLINE=1 强制离线加载，
+      # 无缓存会 OSError 秒崩（run#2 已实证）。此处先行在线下载（经 hf-mirror 镜像），
+      # 落盘后 smoke_import 内 setdefault 设离线可命中缓存。注意本 step 不得设置 HF_HUB_OFFLINE。
+      - name: Pre-download embedding model (bge-base-zh-v1.5)
+        run: python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-zh-v1.5'); print('bge model cached OK')"
+        env:
+          HF_ENDPOINT: https://hf-mirror.com
       # 导入评测知识库（eval-and-samples/kb/ + kb-pdf/，sha256 幂等）。
       # smoke_import 建库名为「星河智家·官方政策库」，评测脚本经 --kb-name 对齐。
       - name: Import eval KB (kb/ + kb-pdf/)
