@@ -62,16 +62,24 @@ def test_register_duplicate_email(client):
     assert r.status_code == 400
 
 
-def test_register_rejects_admin_role(client):
-    """提权漏洞回归：匿名注册不能指定 admin/agent 角色。"""
+def test_register_ignores_legacy_role_field(client):
+    """提权漏洞回归（P4 契约去误导）：注册不再声明 role 字段。
+
+    旧契约声明 role 再 400 拒绝——攻击面仍在（注入即被接受后拒绝）；
+    新契约不声明该字段：客户端即便携带 role 也被 pydantic 忽略，注册恒为 user。
+    安全属性保持：不存在任何让注册账户成为 admin/agent 的路径。
+    """
     r = client.post(
         f"{API}/auth/register",
         json={"email": "hack@b.com", "password": "secret123", "role": "admin"},
     )
-    assert r.status_code == 400
-    # 确认该邮箱未被创建为任何账号
-    r2 = client.post(f"{API}/auth/login", json={"account": "hack@b.com", "password": "secret123"})
-    assert r2.status_code == 401
+    assert r.status_code == 201
+    reg = r.json()
+    me = client.get(
+        f"{API}/auth/me", headers={"Authorization": f"Bearer {reg['access_token']}"}
+    )
+    assert me.status_code == 200
+    assert me.json()["role"] == "user"
 
 
 def test_register_short_password_rejected(client):

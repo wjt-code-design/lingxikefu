@@ -20,7 +20,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -231,13 +231,11 @@ async def chat_stream(
 
     # 2) 配额原子扣减闸门（M2：try_consume 修复 TOCTOU，fail-closed 超额拒答）
     #    R2：client_msg_id 作幂等键 —— 断连重试同一请求不重复扣费
+    #    P4：超额统一走 HTTP 429（不再 HTTP200+SSE error 双面不一致——客户端语义应看状态码）
     quota = get_quota_service()
     allowed, _ = quota.try_consume(str(user_id), 1, idem_key=req.client_msg_id)
     if not allowed:
-        return StreamingResponse(
-            _sse({"event": "error", "data": {"code": "QUOTA_EXCEEDED", "message": "今日问答额度已用完"}}),
-            media_type="text/event-stream",
-        )
+        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "今日问答额度已用完")
 
     # 3) 写 user 消息（T5：代答时记录 agent 身份，溯源用）
     #    R2：落库失败 → 回滚已扣配额（消息没写成不扣费）

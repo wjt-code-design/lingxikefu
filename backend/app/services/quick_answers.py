@@ -57,3 +57,32 @@ def match_quick(content: str) -> str | None:
     if not content:
         return None
     return _QUICK.get(_norm(content))
+
+
+#: 高频虚词（去停用后取 bigram，避免"的/吗/怎么"泛词误判覆盖）
+_STOP_WORDS = [
+    "怎么", "如何", "可以", "哪里", "哪儿", "有没有", "什么", "多久", "在哪", "请问",
+    "吗", "呢", "吧", "的", "在", "是", "了", "要", "会", "能", "我", "我们", "您", "需",
+]
+
+
+def _topic_bigrams(q: str) -> set[str]:
+    """问题去虚词后取字符 bigram（覆盖判据的核心词元）。"""
+    norm = "".join(ch for ch in _norm(q) if ch not in _STOP_WORDS and not ch.isspace())
+    return {norm[i : i + 2] for i in range(len(norm) - 1)}
+
+
+def check_kb_coverage(kb_text: str) -> list[str]:
+    """P4：快捷话术与 KB 双源漂移告警（知识导入成功后调用）。
+
+    对每个快捷问题：去虚词取 bigram，KB 文本（归一化后）若不含其中任一 bigram，
+    判定该问题在 KB 中无覆盖依据 → 返回未覆盖问题列表（调用方记 warning，不阻断）。
+    是启发式告警而非门禁：少量未覆盖提示"该话题只有话术没有文档"，运营据此补录。
+    """
+    kb_norm = _norm(kb_text or "")
+    uncovered: list[str] = []
+    for q, _a in _QA:
+        grams = _topic_bigrams(q)
+        if grams and not any(g in kb_norm for g in grams):
+            uncovered.append(q)
+    return uncovered

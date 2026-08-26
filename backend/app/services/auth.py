@@ -34,16 +34,13 @@ class AuthService:
             raise AuthError("该邮箱已注册")
         if req.phone and self.repo.get_by_phone(req.phone):
             raise AuthError("该手机号已注册")
-        role = req.role or UserRole.user
-        # 安全红线：匿名注册只允许普通用户，禁止提权为 admin/agent
-        if role != UserRole.user:
-            raise AuthError("注册仅允许 user 角色")
+        # P4：注册恒为普通用户（契约不再声明 role，杜绝匿自提权入口；注入 role 被 schema 忽略）
         try:
             return self.repo.create(
                 email=req.email,
                 phone=req.phone,
                 password_hash=hash_password(req.password),
-                role=role,
+                role=UserRole.user,
             )
         except IntegrityError:  # Bug 修复：并发注册同邮箱/手机号 → DB 唯一约束兜底 → 转可操作错误而非 500
             self.repo.db.rollback()

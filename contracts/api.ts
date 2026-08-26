@@ -28,7 +28,7 @@ export interface RegisterReq {
   email?: string;
   phone?: string;
   password: string;
-  role?: Role;
+  // P4：删除 role 可选字段——注册恒为 user，契约不再暴露可"提权"的假入口
 }
 export interface AuthResp {
   user_id: string;

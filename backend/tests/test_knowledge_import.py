@@ -141,6 +141,22 @@ def test_import_qdrant_failure_rolls_back_chunks(db, _mock_ext, monkeypatch):
     assert ChunkRepository(db).count_by_doc(doc.id) == 0  # 无假索引
 
 
+def test_import_clean_failure_aborts_and_fails(db, _mock_ext, monkeypatch):
+    """P4：清旧向量失败 → 中止导入标 failed（防孤儿向量，不容忍新旧向量混杂）。"""
+    _, doc = _make_doc(db)
+
+    def _fail(*_a, **_k):
+        raise VectorStoreError("Qdrant 不可达")
+
+    monkeypatch.setattr("app.services.knowledge_import_service.vector_service.delete_by_doc_id", _fail)
+    with pytest.raises(ImportError_):
+        import_document(doc.id, db)
+    db.refresh(doc)
+    assert doc.status == DocumentStatus.failed
+    assert "旧向量" in (doc.error or ""), f"错误信息应指明清旧失败: {doc.error}"
+    assert ChunkRepository(db).count_by_doc(doc.id) == 0  # 未写任何新 chunk
+
+
 def test_import_idempotent_rerun(db, _mock_ext):
     _, doc = _make_doc(db)
     import_document(doc.id, db)

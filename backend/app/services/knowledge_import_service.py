@@ -76,11 +76,14 @@ def import_document(doc_id: UUID, db: Session):
         raise ImportError_(f"文档不存在: {doc_id}")
 
     # --- 幂等：清旧数据（worker 重试 / 重复导入安全） ---
+    # P4：清旧失败 → 中止导入标 failed。旧版"清失败继续导入"会产生孤儿向量
+    # （新 chunk 写入、旧向量残留）→ 检索命中新旧混杂内容；宁可失败重试也不残留脏数据。
     try:
         vector_service.delete_by_doc_id(doc_id)
-    except VectorStoreError:
-        # 清理失败不中断：后续 upsert 失败同样会标 failed，最终状态一致
-        logger.warning("清理文档 %s 旧向量失败（继续导入）", doc_id)
+    except VectorStoreError as e:
+        doc_repo.set_status(doc, DocumentStatus.failed, "无法清理该文档旧向量，导入中止")
+        logger.warning("清理文档 %s 旧向量失败，中止导入", doc_id)
+        raise ImportError_(f"无法清理该文档旧向量（{e}），导入中止（请稍后重试）") from e
     chunk_repo.delete_by_doc(doc_id)
 
     # --- 状态机：进入 embedding ---
@@ -143,3 +146,36 @@ def _evict_stale_cache_after_import(db: Session, kb_id: UUID) -> None:
         answer_cache.evict_stale_kb(str(kb_id), version)
     except Exception:  # noqa: BLE001 - fail-open：缓存清理失败不影响导入结果
         logger.exception("KB 版本推进缓存清理失败（不阻塞导入）")
+    # P4：快捷话术与 KB 双源漂移告警（fail-open，不阻塞导入）
+    _check_quick_coverage(db, kb_id)
+
+
+def _check_quick_coverage(db: Session, kb_id: UUID) -> None:
+    """P4：快捷预置话术 vs KB 内容覆盖校验——漂移告警（不阻断，不阻塞导入）。
+
+    文本过大（>2M 字符）跳过扫描（避免每次导入全量拼接的 IO 开销）；告警提示
+    "该话题只有话术没有文档"，运营据此补录知识或更新话术。
+    """
+    try:
+        from app.services import quick_answers
+
+        texts = db.scalars(
+            select(Document.raw_text).where(
+                Document.kb_id == kb_id,
+                Document.status == "indexed",
+                Document.raw_text.isnot(None),
+            )
+        ).all()
+        blob = "".join(texts or [])
+        if len(blob) > 2_000_000:
+            logger.debug("KB %s 文本过大（%s 字符），跳过快捷话术覆盖校验", kb_id, len(blob))
+            return
+        uncovered = quick_answers.check_kb_coverage(blob)
+        if uncovered:
+            logger.warning(
+                "快捷话术与 KB 漂移：%s 个快捷问题在 KB 中无覆盖依据（建议补录知识或更新话术）：%s",
+                len(uncovered),
+                "；".join(uncovered),
+            )
+    except Exception:  # noqa: BLE001 - fail-open：校验失败不影响导入结果
+        logger.exception("快捷话术覆盖校验失败（不阻塞导入）")

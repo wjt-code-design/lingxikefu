@@ -133,3 +133,16 @@ def test_faq_empty_db(empty_client):
     r = empty_client.get(f"{API}/faq")
     assert r.status_code == 200
     assert r.json()["items"] == []
+
+
+def test_quick_kb_coverage_detects_drift():
+    """P4：快捷话术 vs KB 双源覆盖校验——KB 覆盖话题不告警，无覆盖话题报警（漂移）。"""
+    from app.services.quick_answers import check_kb_coverage
+
+    covered = check_kb_coverage("手机整机保修 12 个月；七天无理由退货可申请。")
+    assert "保修多久？" not in covered, f"保修话题有 KB 依据，不应告警: {covered}"
+    assert "七天无理由退货怎么申请？" not in covered
+
+    drifted = check_kb_coverage("仅包含保修与退货相关内容")
+    assert "可以开发票吗？" in drifted, f"发票话题无 KB 依据，应告警: {drifted}"
+    assert "支持哪些支付方式？" in drifted

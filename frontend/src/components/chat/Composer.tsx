@@ -10,8 +10,9 @@ interface ComposerProps {
   retry?: { text: string; onRetry: () => void } | null;
   /** P0-4：主动转人工（会话已创建且非转人工进行中时可用） */
   onEscalate?: () => void;
-  /** P1-3：快捷话术点击 → 填入输入框（callback 而非 ref，WorkbenchLayout 透传给 SourcePanel） */
-  onRegisterFill?: (fill: (text: string) => void) => void;
+  /** P1-3：快捷话术点击 → 填入输入框（callback 而非 ref，WorkbenchLayout 透传给 SourcePanel）。
+   *  返回注销函数：Composer 卸载时父组件不再持有指向已卸载实例的回调。 */
+  onRegisterFill?: (fill: (text: string) => void) => (() => void) | undefined;
   /** P0-4：停止生成（流式响应中可用） */
   onStop?: () => void;
   /** W5：客服视角下输入框居中显示（收窄并水平居中于中间列） */
@@ -25,9 +26,13 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, 
   const nearLimit = text.length >= MAX_LEN * 0.8;
   const atLimit = text.length >= MAX_LEN;
 
-  // P1-3：把"填入输入框"能力注册给父组件（快捷话术调用）；卸载时注销
+  // P1-3：把"填入输入框"能力注册给父组件（快捷话术调用）；卸载时注销。
+  // P4：旧版注释谎称"注销"却无 cleanup，父组件会一直持有指向已卸载实例的回调。
   useEffect(() => {
-    onRegisterFill?.((t) => setText((prev) => (prev ? `${prev}${t}` : t)));
+    const unregister = onRegisterFill?.((t) => setText((prev) => (prev ? `${prev}${t}` : t)));
+    return () => {
+      unregister?.();
+    };
   }, [onRegisterFill]);
 
   const submit = async () => {

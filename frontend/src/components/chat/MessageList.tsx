@@ -73,91 +73,65 @@ export function MessageList({
   const collapsedMessages = shouldCollapse ? messages.slice(0, messages.length - RECENT_COUNT) : [];
   const recentMessages = shouldCollapse ? messages.slice(-RECENT_COUNT) : messages;
 
+  // P4：折叠/全量两支的逐条渲染此前重复两遍，抽为单一函数保证行为一致
+  const renderMessages = (list: ChatMessage[]) => {
+    let lastTime = 0;
+    return list.map((m) => {
+      const time = m.createdAt || 0;
+      const showDivider = !!(time && time - lastTime > 5 * 60 * 1000);
+      if (time) lastTime = time;
+      return (
+        <div key={m.id}>
+          {showDivider && (
+            <div className="chat-time-divider">
+              <span>{new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          )}
+          <MessageBubble
+            msg={m}
+            layout={layout}
+            onRate={(r) => onRate(m.id, r)}
+            selected={selectedMsgId === m.id}
+            onSelect={onSelectMessage}
+          />
+        </div>
+      );
+    });
+  };
+
   return (
     <div ref={listRef} className="chat-list">
-      {(() => {
-        let lastTime = 0;
-        const messagesToRender = shouldCollapse ? recentMessages : messages;
-        
-        // 折叠提示按钮
-        if (shouldCollapse && collapsedMessages.length > 0) {
-          // 计算折叠区域最后一条消息的时间，用于判断是否显示分隔线
-          const lastCollapsedTime = collapsedMessages[collapsedMessages.length - 1]?.createdAt || 0;
-          const firstRecentTime = recentMessages[0]?.createdAt || 0;
-          const showDividerAfterCollapse = !!(firstRecentTime && lastCollapsedTime && 
-            firstRecentTime - lastCollapsedTime > 5 * 60 * 1000);
-          
-          return (
-            <>
-              {/* 折叠按钮 */}
-              <div className="chat-collapse-zone">
-                <button
-                  type="button"
-                  className="chat-collapse-btn"
-                  onClick={() => setExpanded(true)}
-                >
-                  ▲ 展开 {collapsedMessages.length} 条更早的消息
-                </button>
-              </div>
-              
-              {/* 折叠后的时间分隔线 */}
-              {showDividerAfterCollapse && (
-                <div className="chat-time-divider">
-                  <span>{new Date(firstRecentTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              )}
-              
-              {/* 最近消息 */}
-              {messagesToRender.map((m) => {
-                const time = m.createdAt || 0;
-                const showDivider = !!(time && time - lastTime > 5 * 60 * 1000);
-                if (time) lastTime = time;
-                return (
-                  <div key={m.id}>
-                    {showDivider && (
-                      <div className="chat-time-divider">
-                        <span>{new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
-                      </div>
-                    )}
-                    <MessageBubble
-                      key={m.id}
-                      msg={m}
-                      layout={layout}
-                      onRate={(r) => onRate(m.id, r)}
-                      selected={selectedMsgId === m.id}
-                      onSelect={onSelectMessage}
-                    />
-                  </div>
-                );
-              })}
-            </>
-          );
-        }
-        
-        // 未折叠时渲染全部消息
-        return messages.map((m) => {
-          const time = m.createdAt || 0;
-          const showDivider = !!(time && time - lastTime > 5 * 60 * 1000);
-          if (time) lastTime = time;
-          return (
-            <div key={m.id}>
-              {showDivider && (
-                <div className="chat-time-divider">
-                  <span>{new Date(time).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
-                </div>
-              )}
-              <MessageBubble
-                key={m.id}
-                msg={m}
-                layout={layout}
-                onRate={(r) => onRate(m.id, r)}
-                selected={selectedMsgId === m.id}
-                onSelect={onSelectMessage}
-              />
+      {shouldCollapse && collapsedMessages.length > 0 ? (
+        <>
+          {/* 折叠按钮 */}
+          <div className="chat-collapse-zone">
+            <button
+              type="button"
+              className="chat-collapse-btn"
+              onClick={() => setExpanded(true)}
+            >
+              ▲ 展开 {collapsedMessages.length} 条更早的消息
+            </button>
+          </div>
+
+          {/* 折叠后的时间分隔线：判断折叠区最后一条与最近区第一条的时间间隔 */}
+          {(() => {
+            const lastCollapsedTime = collapsedMessages[collapsedMessages.length - 1]?.createdAt || 0;
+            const firstRecentTime = recentMessages[0]?.createdAt || 0;
+            return !!(firstRecentTime && lastCollapsedTime &&
+              firstRecentTime - lastCollapsedTime > 5 * 60 * 1000);
+          })() && (
+            <div className="chat-time-divider">
+              <span>{new Date(recentMessages[0]?.createdAt || 0).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
-          );
-        });
-      })()}
+          )}
+
+          {/* 最近消息 */}
+          {renderMessages(recentMessages)}
+        </>
+      ) : (
+        renderMessages(messages)
+      )}
       {isStreaming && stream && (
         <div className={`chat-msg ${layout === 'observe' ? 'chat-msg--observe-ai' : 'chat-msg--ai'}`} data-layout={layout}>
           {/* V8：流式占位与正式消息保持头像一致性；observe 模式下用 observe-ai class 居左 */}

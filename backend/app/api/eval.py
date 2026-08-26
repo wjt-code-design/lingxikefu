@@ -13,7 +13,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import require_admin
@@ -30,19 +30,37 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
+#: 后台评测任务引用集合（P3-⑭）：create_task 返回的任务若不持有引用，
+#: 事件循环可能随时 GC 中断执行（后台评测静默失效）；挂到模块级 set，
+#: 任务完成/异常后由 done_callback 移除，防 GC 中杀 + 防集合泄漏。
+_eval_tasks: set[asyncio.Task] = set()
+
 
 @router.get("/eval/history")
 def eval_history(
     _: dict = Depends(require_admin),
     db: OrmSession = Depends(get_db),
 ) -> EvalHistoryResp:
-    """评测历史（最近 30 次运行，按 run_id 聚合）。"""
-    rows = db.scalars(
-        select(EvalResult)
-        .order_by(desc(EvalResult.created_at))
-        .limit(200)
-    ).all()
-    items = [EvalResultItem.model_validate(r) for r in rows]
+    """评测历史：按 run_id 聚合返回最近 30 次运行（同一次运行的全部指标行不分离）。
+
+    P3-⑭：docstring 如实 vs 行为——此前只取最近 200 行的"裸行"，
+    与"按 run_id 聚合"的描述不符；现按 (run_id, 最近运行时间) 分组取前 30 次运行
+    的全部指标行（SQL 聚合，PG/SQLite 双兼容）。
+    """
+    run_ids = db.execute(
+        select(EvalResult.run_id)
+        .group_by(EvalResult.run_id)
+        .order_by(desc(func.max(EvalResult.created_at)))
+        .limit(30)
+    ).scalars().all()
+    items: list[EvalResultItem] = []
+    if run_ids:
+        rows = db.scalars(
+            select(EvalResult)
+            .where(EvalResult.run_id.in_(run_ids))
+            .order_by(desc(EvalResult.created_at))
+        ).all()
+        items = [EvalResultItem.model_validate(r) for r in rows]
     return EvalHistoryResp(items=items)
 
 
@@ -112,8 +130,11 @@ async def run_eval(
     """
     run_id = f"manual-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
-    # 后台异步执行（不阻塞 HTTP 响应）
-    asyncio.create_task(_do_eval(run_id, req.limit, req.kb_name))
+    # 后台异步执行（不阻塞 HTTP 响应）；P3-⑭：持有引用防 GC 中杀，完成即释放
+    task = asyncio.create_task(_do_eval(run_id, req.limit, req.kb_name))
+    task.set_name(f"eval-{run_id}")
+    _eval_tasks.add(task)
+    task.add_done_callback(_eval_tasks.discard)
 
     return EvalTriggerResp(
         run_id=run_id,
@@ -126,81 +147,73 @@ async def _do_eval(run_id: str, limit: int = 0, kb_name: str | None = None) -> N
     """后台评测执行器。
 
     复用 scripts/ 里的评测逻辑，结果写入 EvalResult 表。
+    P3-⑭：评测脚本导入失败 / 执行异常均落 FAILED 记录并日志明示，不静默。
     """
     from app.core.database import SessionLocal
 
     db = SessionLocal()
     try:
-        # 调用评测脚本
-        from scripts.eval_faithfulness import run_faithfulness_eval
-
-        # faithfulness
+        # faithfulness（P3-⑭：脆弱导入显式兜底——缺脚本时落 FAILED，日志明示根因）
         try:
-            result = await run_faithfulness_eval(db, limit=limit, kb_name=kb_name)
-            for metric, score, total, passed in result:
-                db.add(
-                    EvalResult(
-                        run_id=run_id,
-                        metric=metric,
-                        score=score,
-                        total=total,
-                        passed=passed,
-                        status=EvalStatus.DONE,
-                        source="manual",
-                    )
-                )
+            from scripts.eval_faithfulness import run_faithfulness_eval
+        except ImportError:
+            logger.exception("import scripts.eval_faithfulness 失败（模块缺失/损坏），faithfulness 不可用")
+            db.add(_failed_eval_row(run_id, "faithfulness"))
             db.commit()
-        except Exception:
-            logger.exception("faithfulness eval failed")
-            db.add(
-                EvalResult(
-                    run_id=run_id,
-                    metric="faithfulness",
-                    score=0.0,
-                    total=0,
-                    passed=0,
-                    status=EvalStatus.FAILED,
-                    source="manual",
-                )
+        else:
+            await _run_stage(
+                db, run_id, "faithfulness", run_faithfulness_eval(db, limit=limit, kb_name=kb_name)
             )
-            db.commit()
 
-        # recall（检索召回：recall@5 + 诚实性未命中率）
-        from scripts.eval_recall import run_recall_eval
-
+        # recall（同步脚本经 to_thread 执行，避免阻塞事件循环）
         try:
-            recall_rows = await asyncio.to_thread(
-                run_recall_eval, db, limit=limit, kb_name=kb_name
-            )
-            for metric, score, total, passed in recall_rows:
-                db.add(
-                    EvalResult(
-                        run_id=run_id,
-                        metric=metric,
-                        score=score,
-                        total=total,
-                        passed=passed,
-                        status=EvalStatus.DONE,
-                        source="manual",
-                    )
-                )
+            from scripts.eval_recall import run_recall_eval
+        except ImportError:
+            logger.exception("import scripts.eval_recall 失败（模块缺失/损坏），recall 不可用")
+            db.add(_failed_eval_row(run_id, "recall"))
             db.commit()
-        except Exception:
-            logger.exception("recall eval failed")
-            db.add(
-                EvalResult(
-                    run_id=run_id,
-                    metric="recall",
-                    score=0.0,
-                    total=0,
-                    passed=0,
-                    status=EvalStatus.FAILED,
-                    source="manual",
-                )
+        else:
+            await _run_stage(
+                db, run_id, "recall", asyncio.to_thread(run_recall_eval, db, limit=limit, kb_name=kb_name)
             )
-            db.commit()
 
     except Exception:
         logger.exception("eval run %s failed", run_id)
     finally:
         db.close()
+
+
+def _failed_eval_row(run_id: str, metric: str) -> EvalResult:
+    """评测阶段失败占位记录（score=0, status=FAILED）。"""
+    return EvalResult(
+        run_id=run_id,
+        metric=metric,
+        score=0.0,
+        total=0,
+        passed=0,
+        status=EvalStatus.FAILED,
+        source="manual",
+    )
+
+
+async def _run_stage(db: OrmSession, run_id: str, metric: str, awaitable) -> None:
+    """执行单阶段评测并落表；异常 → 该阶段 FAILED 记录（P3-⑭ 显式兜底，不静默）。"""
+    try:
+        result = await awaitable
+        for m, score, total, passed in result:
+            db.add(
+                EvalResult(
+                    run_id=run_id,
+                    metric=m,
+                    score=score,
+                    total=total,
+                    passed=passed,
+                    status=EvalStatus.DONE,
+                    source="manual",
+                )
+            )
+        db.commit()
+    except Exception:
+        logger.exception("%s eval stage failed (run=%s)", metric, run_id)
+        db.add(_failed_eval_row(run_id, metric))
+        db.commit()

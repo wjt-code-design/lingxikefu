@@ -323,8 +323,9 @@ def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
         json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
         headers=_headers(),
     )
-    assert r.status_code == 200
-    assert "QUOTA_EXCEEDED" in r.text
+    # P4：超额统一走 HTTP 429 + detail（不再 HTTP200+SSE error 双面不一致）；未调 LLM
+    assert r.status_code == 429
+    assert "今日问答额度已用完" in r.text
     assert called == []  # 未调 LLM
 
 

@@ -67,4 +67,35 @@ describe('TicketStatusBadge 轮询纪律', () => {
     expect(mocked.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(screen.getByText('处理中')).toBeInTheDocument();
   });
+
+  it('同一 ticketId 多角标共享一个轮询（不重复发请求）', async () => {
+    mocked.mockResolvedValue(ticket('processing'));
+    render(
+      <>
+        <TicketStatusBadge ticketId="t-1" />
+        <TicketStatusBadge ticketId="t-1" />
+      </>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11_000);
+    });
+    // P4：共享轮询 → 两角标只产生 1 条轮询链（初始 1 次 + 5s/10s 各 1 次 = 3 次），非各自 6 次
+    expect(mocked.mock.calls.length).toBe(3);
+    expect(screen.getAllByText('处理中')).toHaveLength(2);
+  });
+
+  it('不同 ticketId 各自独立轮询', async () => {
+    mocked.mockResolvedValue(ticket('processing'));
+    render(
+      <>
+        <TicketStatusBadge ticketId="t-1" />
+        <TicketStatusBadge ticketId="t-2" />
+      </>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(11_000);
+    });
+    // 两条独立轮询链：每条 3 次，共 6 次
+    expect(mocked.mock.calls.length).toBe(6);
+  });
 });

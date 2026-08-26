@@ -20,7 +20,8 @@ class RegisterReq(BaseModel):
         min_length=8,
         description="至少 8 位，且同时包含字母和数字（D1 密码强度）",
     )
-    role: UserRole | None = None
+    # P4：无 role 字段——注册恒为 user，不向调用方暴露可"提权"的假入口
+    # （旧版曾声明 role 再拒绝；如今直接不声明，注入即被 pydantic 忽略）
 
     @field_validator("password")
     @classmethod

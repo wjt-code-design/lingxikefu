@@ -37,9 +37,16 @@ export function WorkbenchLayout() {
   }, []);
   // A+：历史/溯源默认收起，由对话工具栏图标触发抽屉（桌面/移动统一）；panel 取代原 mobilePanel
   const [panel, setPanel] = useState<'history' | 'source' | null>(null);
-  // P1-3：Composer 的"填入输入框"能力注册到这里，快捷话术点击时调用
+  // P1-3：Composer 的"填入输入框"能力注册到这里，快捷话术点击时调用；
+  // 返回注销函数（P4：Composer 卸载时清空，避免点击写入已卸载实例）
   const [fillReply, setFillReply] = useState<((t: string) => void) | null>(null);
-  const onRegisterFill = useCallback((fill: (t: string) => void) => setFillReply(() => fill), []);
+  const onRegisterFill = useCallback(
+    (fill: (t: string) => void): (() => void) => {
+      setFillReply(() => fill);
+      return () => setFillReply(null);
+    },
+    [],
+  );
 
   return (
     <div className="wb">

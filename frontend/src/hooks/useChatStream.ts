@@ -121,11 +121,30 @@ export function useChatStream() {
         }
         resp = await doFetch(newToken);
       }
-      if (!resp.ok || !resp.body) {
+      if (!resp.ok) {
+        // P4：HTTP 错误优先透出后端 detail（如 429 配额「今日问答额度已用完」），
+        // 而非一律「请求失败（HTTP xxx）请稍后重试」误导为网络问题
+        let detail = '';
+        try {
+          const j = (await resp.json()) as { detail?: string };
+          detail = j.detail ?? '';
+        } catch {
+          /* 非 JSON 错误体：回退通用文案 */
+        }
         setState((s) => ({
           ...s,
           stage: 'error',
-          error: { code: 'HTTP', message: `请求失败（HTTP ${resp.status}），请稍后重试` },
+          error: detail
+            ? { code: String(resp.status), message: detail }
+            : { code: 'HTTP', message: `请求失败（HTTP ${resp.status}），请稍后重试` },
+        }));
+        return;
+      }
+      if (!resp.body) {
+        setState((s) => ({
+          ...s,
+          stage: 'error',
+          error: { code: 'HTTP', message: '响应体为空，请稍后重试' },
         }));
         return;
       }

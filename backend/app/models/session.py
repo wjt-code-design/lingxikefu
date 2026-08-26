@@ -5,9 +5,15 @@ import uuid
 from datetime import datetime
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, tenant_id_column
+
+#: P4：conv_state 统一 JSONB（与 messages.meta 一致，PG 可 json 路径查询/部分更新）。
+#: SQLite 无 JSONB 类（模型若无变体则 SQLite DDL 编译崩——同一约定见 Message.meta 测试
+#: 建表前替换类型）；用 with_variant 让两种方言各取所需，测试零改动。
+_JSONB = JSONB().with_variant(sa.JSON(), "sqlite")
 
 
 class Session(Base):
@@ -41,7 +47,7 @@ class Session(Base):
     )
     # 批次B（2026-08-24）：会话状态机——阶段+槽位跨轮持久化（conversation_state.py 管结构）
     conv_state: Mapped[dict | None] = mapped_column(
-        sa.JSON,
+        _JSONB,  # P4：与 messages.meta 统一 JSONB（PG=JSONB，SQLite=JSON 变体）
         nullable=True,
         default=None,
         comment="会话状态机：{stage, topic, slots, clarify_count}（app/services/conversation_state.py）",

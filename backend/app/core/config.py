@@ -8,10 +8,15 @@
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: 上传图片目录（P4：默认绝对路径——相对路径随进程 CWD 漂移，容器/服务化下会写到
+#: 不可预期目录；以本文件（backend/app/core/）为锚点定位到 backend/uploads/images）
+_IMG_DIR = Path(__file__).resolve().parents[2] / "uploads" / "images"
 
 #: JWT_SECRET / LITELLM_MASTER_KEY 的占位值；validate() 遇到该值即拒绝启动，
 #: 防止 aegisdesk-ai 那种「默认值三处自相矛盾 / 占位密钥泄漏」的坑。
@@ -113,7 +118,7 @@ class Settings(BaseSettings):
     VOLCENGINE_CHAT_MODEL: str = "ep-m-20260811130634-mnpgq"
     # B1（安全）：聊天图片上传白名单目录——ImageAgent 仅允许读取该目录内的图片。
     # 客户端传来的 image_paths 是服务器路径，不做白名单校验可读任意文件（经视觉模型外泄）。
-    IMAGE_UPLOAD_DIR: str = "uploads/images"
+    IMAGE_UPLOAD_DIR: str = str(_IMG_DIR)  # P4：绝对路径（防 CWD 漂移）
     # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境）；bailian=百炼 text-embedding
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"

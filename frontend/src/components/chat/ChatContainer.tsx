@@ -157,8 +157,8 @@ export function ChatContainer({
   onSourcesChange?: (s: MessageSource[]) => void;
   /** 快捷话术回答标记推送（done.answer_source，每轮 finalize 覆盖；SourcePanel 区分空态用） */
   onAnswerSourceChange?: (v: string | undefined) => void;
-  /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel） */
-  onRegisterFill?: (fill: (text: string) => void) => void;
+  /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel）返回注销函数 */
+  onRegisterFill?: (fill: (text: string) => void) => (() => void) | undefined;
   /** 溯源选中（2026-08-25）：当前被右栏面板查看的 AI 回复 id（来自 WorkbenchLayout，气泡高亮用） */
   selectedMsgId?: string | null;
   /** 点击 AI 回复 → 右栏溯源面板切换（点哪条看哪条；answerSource 透出选中消息的快捷话术标记） */
@@ -218,9 +218,14 @@ export function ChatContainer({
     onSelectMessageRef.current = onSelectMessage;
   }, [onSelectMessage]);
   const registerFill = useCallback(
-    (f: (t: string) => void) => {
+    (f: (t: string) => void): (() => void) => {
       fillRef.current = f;
-      onRegisterFill?.(f);
+      const unregister = onRegisterFill?.(f);
+      // P4：返回注销函数——Composer 卸载后清空本地引用与父组件回调，避免残留
+      return () => {
+        fillRef.current = null;
+        unregister?.();
+      };
     },
     [onRegisterFill],
   );
