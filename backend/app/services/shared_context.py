@@ -21,6 +21,7 @@ class SharedContext:
     """单次请求的所有 Agent 共享上下文。"""
 
     # 输入（chat 层写入）
+    trace_id: str = ""  # P0-1：入口 request_id 贯通业务链路（日志 / SSE done 透出）
     query: str = ""
     kb_id: UUID | None = None
     kb_version: str | None = None
@@ -55,6 +56,7 @@ class SharedContext:
 # 写入权限表（约定级；新增字段必须在此登记）：
 # | 字段                                  | 写入方      | 读取方              |
 # |---------------------------------------|-------------|---------------------|
+# | trace_id                              | chat 层     | Router、各 Agent、日志、SSE done |
 # | 输入区（query/kb_*/session_*/history） | chat 层     | Router、各 Agent     |
 # | intent / agents_invoked / degraded    | Router      | 各 Agent、chat 层    |
 # | image_desc / fused_query              | Image Agent | QA Agent、Router     |

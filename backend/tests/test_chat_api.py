@@ -159,6 +159,28 @@ def test_chat_stream_events_and_persist(client, monkeypatch):
     assert calls["consumed"] == 1
 
 
+def test_chat_stream_done_carries_trace_id(client, monkeypatch):
+    """P0-1 trace_id：HTTP 层 request_id 贯通到 SSE done（业务链路可观测）。
+
+    断言：响应头 X-Request-ID 与 done 事件 trace_id 同源——证明入口生成的
+    request_id 已接入业务链路（此前只到错误模型，不进 SSE）。
+    """
+    tc, _, _ = client
+    monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    request_id = r.headers.get("X-Request-ID")
+    assert request_id  # 中间件生成的请求 ID
+    events = [line[6:] for line in r.text.splitlines() if line.startswith("data: ")]
+    done = next(e for e in events if '"done"' in e)
+    assert '"trace_id"' in done and request_id in done
+
+
 def test_chat_cache_write_reuses_stream_rewritten_query(client, monkeypatch):
     """缓存回填采用 RAG 流提供的改写 key，不在 Chat 层重复调用 rewrite。"""
     tc, _, _ = client

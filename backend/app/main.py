@@ -40,6 +40,7 @@ from app.api import (
     tickets,
 )
 from app.core.config import settings
+from app.core.tracing import TraceIdFilter
 
 logger = logging.getLogger("lingxi")
 
@@ -49,10 +50,12 @@ def _configure_logging() -> None:
 
     此前无任何配置 → root logger 默认 WARNING，RAG 管线 INFO（含预热/检索日志）全部不可见，
     生产排障只能靠 uvicorn 默认。此处只给 lingxi logger 挂 handler，避免影响 uvicorn 日志。
+    P0-1：handler 挂 TraceIdFilter，日志统一带 [trace_id]（chat 请求可跨 RAG/Agent/工具追一条链）。
     """
     if not logger.handlers:  # 幂等：重复 import/重载不重复加 handler
         _h = logging.StreamHandler()
-        _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+        _h.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s [%(trace_id)s] %(message)s"))
+        _h.addFilter(TraceIdFilter())
         logger.addHandler(_h)
         logger.setLevel(logging.INFO)
 

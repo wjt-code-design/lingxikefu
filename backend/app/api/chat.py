@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session as OrmSession
 from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.tracing import set_trace_id
 from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
@@ -251,8 +252,14 @@ async def chat_stream(
     session_owner_id = s.user_id
     # 批次B：conv_state 读写同样走别名（`s` 在 gen 内被遮蔽，不能直接引用）
     session_obj = s
+    # P0-1 trace_id：复用 HTTP 中间件生成的 request_id，贯通业务链路（日志 / SSE done）。
+    # 同样在 gen 外捕获（gen 内 `s` 被 sources 迭代遮蔽，闭包引用会 UnboundLocalError）。
+    trace_id = getattr(request.state, "request_id", "") or uuid.uuid4().hex[:12]
 
     async def gen():
+        # P0-1：请求级 trace_id 注入 contextvar（RAG/Agent/工具日志统一带 trace_id；
+        # asyncio 自动传播到同请求协程，anyio 线程池 worker 复制 context 同样生效）
+        set_trace_id(trace_id)
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
         if await request.is_disconnected():
             logger.info("chat stream aborted: client disconnected (pre)")
@@ -298,6 +305,7 @@ async def chat_stream(
             history=history,
             db=db,  # 请求级会话：Ticket Agent 建单复用（同事务语义）
             image_paths=req.image_paths,  # v1.3 图片理解
+            trace_id=trace_id,  # P0-1：请求级 trace_id 贯通 Router/各 Agent
         )
         ctx = agent_router.route(ctx)
 
@@ -492,6 +500,7 @@ async def chat_stream(
                         "message_id": msg_id,
                         "ticket_id": ticket_id,
                         "user_message_id": str(user_msg.id),
+                        "trace_id": trace_id,  # P0-1：可选字段透出，前端排查可追同一条链路
                     }
                     if cache_hit:
                         done_data["cache_hit"] = True
