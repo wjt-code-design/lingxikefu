@@ -4,9 +4,9 @@
     python -m scripts.smoke_import
 
 验证点：
-1. 13 篇 kb + 5 个 pdf 全部导入成功（status=indexed）；
+1. kb/ 13 篇文档全部导入成功（status=indexed）；kb-pdf/ 存在时一并导入其中的 PDF（可选）；
 2. 重复上传同内容 → sha256 去重跳过（不重复导入）；
-3. PDF 解析成功（chunk_count>0，修 AegisDesk 坑）；
+3. PDF 解析成功（chunk_count>0，修 AegisDesk 坑；kb-pdf 缺失时跳过并告警，不阻塞）；
 4. Qdrant 向量数 == PG chunks 总数（导入成功≠可检索，代理目标检查）。
 
 导入走服务层 import_document（与 worker 同一函数，不经 Celery），
@@ -44,7 +44,11 @@ def main() -> int:
     else:
         print(f"[KB] 复用已有 {kb.name} ({kb.id})")
 
-    files = sorted(KB_DIR.iterdir()) + sorted(PDF_DIR.iterdir())
+    files = sorted(KB_DIR.iterdir())
+    if PDF_DIR.is_dir():
+        files += sorted(PDF_DIR.iterdir())
+    else:
+        print(f"[WARN] kb-pdf 目录不存在（{PDF_DIR}），跳过 PDF 导入（可选验证）")
     print(f"[INPUT] {len(files)} files")
 
     imported, skipped, failed = 0, 0, 0
