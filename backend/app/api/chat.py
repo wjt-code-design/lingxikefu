@@ -50,7 +50,12 @@ from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
 from app.services.rag_service import stream_answer
 from app.services.shared_context import SharedContext
-from app.services.tools import order_tool
+
+# 保留 order_tool 命名空间绑定：既有测试 mock 目标 app.api.chat.order_tool.*
+from app.services.tools import (
+    TOOL_REGISTRY,
+    order_tool,  # noqa: F401
+)
 from app.services.user_profile_service import (
     get_profile,
     merge_profile,
@@ -316,10 +321,12 @@ async def chat_stream(
         # 批次D：订单工具分支——槽位有订单号 + 订单类主题 → 查单模板回答（零 LLM，
         # 事实型查询不冒幻觉）；查不到/异常回落 RAG（fail-open，不阻断）
         order_info = None
+        # P0-2：经注册表取工具描述（元数据 + 执行函数），不再直接依赖具体模块
+        order_tool_desc = TOOL_REGISTRY.get("order_query")
         _order_slot = (conv_state or {}).get("slots", {}).get(conversation_state.SLOT_ORDER_NO)
-        if _order_slot and (conv_state or {}).get("topic") in order_tool.ORDER_TOPICS:
+        if _order_slot and order_tool_desc and (conv_state or {}).get("topic") in order_tool_desc.topics:
             try:
-                order_info = await run_in_threadpool(order_tool.query_order, _order_slot)
+                order_info = await run_in_threadpool(order_tool_desc.executor, _order_slot)
             except Exception:  # noqa: BLE001 - 工具异常回落 RAG
                 logger.exception("订单工具查询失败（回落 RAG）")
                 order_info = None
