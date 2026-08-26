@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 from datetime import date
 
@@ -57,47 +58,54 @@ class QuotaService:
     def left_today(self, user_id: str) -> int:
         return max(0, self.daily_limit() - self.used_today(user_id))
 
-    def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None) -> tuple[bool, int]:
-        """原子扣减闸门：INCR 后比对上限，超额回滚并拒绝。
+    def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None) -> tuple[bool, int]:
+        """原子扣减闸门（P1-①）：INCR + expire + set(marker) 并入 MULTI pipeline 原子执行。
 
-        R2 幂等：同一 ``idem_key`` 已被扣过（重试）→ 直接放行且不重复扣费。
+        R2 幂等指纹：marker 绑定 ``sha256(user_id:content)``（``content=None`` 退化为
+        ``sha256(user_id:idem_key)`` 兼容旧调用）——跨用户复用 idem_key / 同用户换
+        content 均不再共享幂等标记，杜绝裸 marker 免费放行。
 
-        返回 (allowed, used)：
-        - allowed=True 表示扣减成功（已计入用量）或幂等命中（本次不重复扣）；
-        - allowed=False 表示超额，已回滚，调用方应拒绝本次问答。
-        Redis 不可用时 fail-closed 返回 (False, 0)。
+        返回 (allowed, used)：见模块 docstring。
+        Redis / pipeline 不可用时 fail-closed 返回 (False, 0)（不产生半步脏状态）。
         """
         try:
             r = self.redis
+            marker = None
             if idem_key:
-                marker = self._idem_key(idem_key)
+                material = content if content else idem_key
+                fingerprint = hashlib.sha256(f"{user_id}:{material}".encode()).hexdigest()
+                marker = self._idem_key(fingerprint)
                 if r.get(marker) is not None:
-                    # 幂等命中：本次请求此前已扣过费（重试），不重复扣
+                    # 幂等命中：同用户同内容此前已扣过费（重试），本次不重复扣
                     return True, self.used_today(user_id)
-            used = r.incr(self._key(user_id), n)
-            if used == n:  # 首次写入，设置 TTL
-                r.expire(self._key(user_id), 60 * 60 * 48)
+            key = self._key(user_id)
+            pipe = r.pipeline()
+            pipe.incr(key, n)
+            pipe.expire(key, 60 * 60 * 48)
+            used = int(pipe.execute()[0])
             if used > self.daily_limit():
-                r.decr(self._key(user_id), n)  # 回滚，避免超额占用
+                r.decr(key, n)  # 超额回滚，避免占用配额
                 return False, used - n
-            if idem_key:
-                r.set(self._idem_key(idem_key), "1", ex=_IDEM_TTL_SECONDS)
+            if marker:
+                r.set(marker, "1", ex=_IDEM_TTL_SECONDS)
             return True, used
         except Exception:  # noqa: BLE001 - Redis 不可用：fail-closed 拒绝而非放行
             logger.warning("quota try_consume: redis 不可用，fail-closed 拒绝")
             return False, 0
 
-    def refund(self, user_id: str, n: int = 1, idem_key: str | None = None) -> None:
-        """失败回滚：断连/知识库为空/系统异常时退回已扣配额（R2 解决白扣）。
+    def refund(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None) -> None:
+        """失败回滚（P1-①）：按与 try_consume 相同的指纹定位标记并清除，回滚已扣配额。
 
-        有幂等标记才回滚（标记存在 = 本次已扣费）；回滚后删除幂等标记，
-        重试（同一 idem_key）将重新正常扣费。
+        回滚入参（含 content）与扣费入参一致才命中同一枚标记；回滚后删除标记，
+        重试（同一请求）将重新正常扣费。marker 不存在 = 未扣费，无动作。
         Redis 不可达时 fail-open（不阻塞主流程）。
         """
         try:
             r = self.redis
             if idem_key:
-                marker = self._idem_key(idem_key)
+                material = content if content else idem_key
+                fingerprint = hashlib.sha256(f"{user_id}:{material}".encode()).hexdigest()
+                marker = self._idem_key(fingerprint)
                 if r.get(marker) is None:
                     return  # 未扣费（或已回滚）→ 无动作
                 r.decr(self._key(user_id), n)

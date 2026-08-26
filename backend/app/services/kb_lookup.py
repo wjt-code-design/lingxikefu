@@ -18,21 +18,27 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
-from app.core.tenant import get_current_tenant
+from app.core.config import settings
 from app.models.knowledge import Document, KnowledgeBase
 
-#: 最新 KB id 缓存（L7 + R-5 + B4）：按租户分桶，60s TTL 内复用避免每请求查 DB。
-_kb_cache: dict[str, tuple[float, uuid.UUID]] = {}
+#: 最新 KB id 缓存（L7 + R-5 + B4 + P1-②）：租户恒为 TENANT_DEFAULT → key 恒定，
+#: 单条目即可（天然有界），60s TTL 内复用避免每请求查 DB。
+_kb_cache: tuple[float, uuid.UUID] | None = None
 _kb_lock = threading.Lock()
 _KB_CACHE_TTL = 60.0
 
 
 def get_latest_kb_id(db: OrmSession) -> uuid.UUID | None:
-    """MVP 单知识库：当前租户最新创建的 KB（按租户分桶短 TTL 缓存，L7/R-5/B4）。"""
-    tenant = get_current_tenant()
+    """MVP 单知识库：TENANT_DEFAULT 租户最新创建的 KB（单条目 60s TTL 缓存，L7/R-5/B4）。
+
+    P1-②：与全局鉴权一致读 ``settings.TENANT_DEFAULT``，不采信可伪造 ContextVar 租户，
+    消除鉴权(default)与 KB 查询(伪造)读写错位。
+    """
+    tenant = settings.TENANT_DEFAULT
+    global _kb_cache
     with _kb_lock:
         now = time.time()
-        hit = _kb_cache.get(tenant)
+        hit = _kb_cache
         if hit and now - hit[0] < _KB_CACHE_TTL:
             return hit[1]
         kb = db.scalar(
@@ -47,9 +53,9 @@ def get_latest_kb_id(db: OrmSession) -> uuid.UUID | None:
             kb_id = uuid.UUID(str(kb_id))
         # 仅在确有 KB 时缓存；无 KB 不缓存 → 新建后立即生效
         if kb_id is not None:
-            _kb_cache[tenant] = (now, kb_id)
+            _kb_cache = (now, kb_id)
         else:
-            _kb_cache.pop(tenant, None)
+            _kb_cache = None
         return kb_id
 
 
