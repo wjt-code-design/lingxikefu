@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from sqlalchemy import update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -31,7 +31,7 @@ from app.repositories.document_repo import (
     ChunkRepository,
     DocumentRepository,
 )
-from app.services import vector_service
+from app.services import answer_cache, vector_service
 from app.services.vector_service import VectorStoreError
 from app.utils.text_splitter import split_text
 
@@ -113,6 +113,8 @@ def import_document(doc_id: UUID, db: Session):
 
         doc_repo.mark_indexed(doc, len(chunk_rows))
         logger.info("文档 %s 导入完成: %s chunks", doc.name, len(chunk_rows))
+        # P2-⑨：KB 版本推进 → 清理该 KB 的旧版本语义缓存点（fail-open，不阻塞导入）
+        _evict_stale_cache_after_import(db, doc.kb_id)
         return doc
 
     except ImportError_ as e:
@@ -122,3 +124,22 @@ def import_document(doc_id: UUID, db: Session):
         logger.exception("文档 %s 导入异常", doc_id)
         doc_repo.set_status(doc, DocumentStatus.failed, error=f"导入异常: {e}")
         raise ImportError_(f"导入异常: {e}") from e
+
+
+def _evict_stale_cache_after_import(db: Session, kb_id: UUID) -> None:
+    """P2-⑨：导入成功后按新 kb_version 清理旧语义缓存点（fail-open，不阻塞导入）。"""
+    try:
+        cnt = (
+            db.scalar(
+                select(func.count(Document.id)).where(
+                    Document.kb_id == kb_id,
+                    Document.status == "indexed",
+                )
+            )
+            or 0
+        )
+        latest = db.scalar(select(func.max(Document.created_at)).where(Document.kb_id == kb_id))
+        version = f"{cnt}:{latest.isoformat() if latest else ''}"
+        answer_cache.evict_stale_kb(str(kb_id), version)
+    except Exception:  # noqa: BLE001 - fail-open：缓存清理失败不影响导入结果
+        logger.exception("KB 版本推进缓存清理失败（不阻塞导入）")

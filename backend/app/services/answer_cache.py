@@ -26,12 +26,19 @@ logger = logging.getLogger(__name__)
 COLLECTION = "answer_cache"
 _EXACT_PREFIX = "answer_cache_exact:"
 
+#: P2-⑨：集合创建一次即记（进程内只建一次，消除每次 get/put 的 get_collections RPC）；
+#: 集合若被外部删除，重建依赖 fail-open 的检索降级，不自动追认（符合单进程语义）。
+_ensured = False
+
 
 def _normalize_key(query: str) -> str:
     return hashlib.sha256(query.strip().encode("utf-8")).hexdigest()
 
 
 def _ensure_collection() -> None:
+    global _ensured
+    if _ensured:
+        return
     client = get_qdrant_client()
     names = {c.name for c in client.get_collections().collections}
     if COLLECTION not in names:
@@ -41,6 +48,7 @@ def _ensure_collection() -> None:
             vectors_config={"size": dim, "distance": "Cosine"},
         )
         logger.info("创建 answer_cache 集合 (dim=%s)", dim)
+    _ensured = True
 
 
 def _entities_ok(query: str, cached_question: str) -> bool:
@@ -134,3 +142,42 @@ def put(query: str, answer: str, sources: list[dict], doc_ids: list[str], kb_ver
         )
     except Exception:  # noqa: BLE001 - fail-open
         logger.exception("answer_cache.put 失败（降级不缓存）")
+
+
+def evict_stale_kb(kb_id: str, current_version: str) -> None:
+    """P2-⑨：KB 版本推进 → 删除该 KB 下旧版本语义缓存点（防集合无淘汰膨胀）。
+
+    挂在知识导入成功钩子上：kb_version 变化后旧答案已不可命中（版本校验 miss），
+    这里只是把陈旧点清出集合，控住存量。fail-open：清理失败不影响导入。
+
+    按过滤条件删除（FilterSelector，与 vector_service 同款）：must=kb_id 隔离租户库，
+    must_not=当前版本 → 只删该 KB 的旧版本点，单 RPC 完成（无需 scroll 分页收集）。
+    """
+    if not settings.ANSWER_CACHE_ENABLED:
+        return
+    try:
+        from qdrant_client.http.models import (
+            FieldCondition,
+            Filter,
+            FilterSelector,
+            MatchValue,
+        )
+
+        _ensure_collection()
+        client = get_qdrant_client()
+        client.delete(
+            collection_name=COLLECTION,
+            points_selector=FilterSelector(
+                filter=Filter(
+                    must=[FieldCondition(key="kb_id", match=MatchValue(value=kb_id))],
+                    must_not=[
+                        FieldCondition(
+                            key="kb_version", match=MatchValue(value=current_version)
+                        )
+                    ],
+                )
+            ),
+        )
+        logger.info("answer_cache 驱逐 kb=%s 旧版本语义缓存点（v!=%s）", kb_id, current_version)
+    except Exception:  # noqa: BLE001 - fail-open
+        logger.exception("answer_cache.evict_stale_kb 失败（降级不清理）")

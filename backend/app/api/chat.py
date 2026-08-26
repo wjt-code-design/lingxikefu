@@ -495,6 +495,8 @@ async def chat_stream(
                     if (
                         not cache_hit
                         and intent == "qa"
+                        and state_hint is None  # P2-③：会话状态影响回答 → 不进全局缓存
+                        and not user_profile  # P2-③：个性化用户不进精确层缓存（正确性优先）
                         and content
                         and isinstance(rewritten_query, str)
                         and rewritten_query

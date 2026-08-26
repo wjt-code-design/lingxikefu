@@ -203,6 +203,18 @@ def test_suggest_cache_hit(client, monkeypatch):
     assert fake.calls == 1  # 二次命中缓存，LLM 只调一次
 
 
+def test_suggest_cache_is_bounded_ttl_cache():
+    """P3-⑩：_suggest_cache 必须是有界 TTLCache（maxsize=512, ttl=60s）。
+
+    旧手写 dict 只读时检查过期、条目永不删除 → 无界增长；TTLCache 自动淘汰且限容。
+    """
+    from cachetools import TTLCache
+
+    assert isinstance(_suggest_cache, TTLCache), "必须为 TTLCache（有界+自动淘汰）"
+    assert _suggest_cache.maxsize == 512, f"maxsize 应为 512，实际 {_suggest_cache.maxsize}"
+    assert _suggest_cache.ttl == 60.0, f"ttl 应为 60s，实际 {_suggest_cache.ttl}"
+
+
 def test_suggest_refresh_bypasses_cache(client, monkeypatch):
     """refresh=true 绕过结果缓存：同 (session, question) 二次调用各打一次 LLM（重新生成）。"""
     fake = _FakeChatClient()

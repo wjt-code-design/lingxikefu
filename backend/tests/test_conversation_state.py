@@ -67,11 +67,16 @@ def test_topic_switch_follows_latest_message():
     assert s["topic"] == "配送/物流"
 
 
-def test_slots_accumulate_never_cleared():
-    """槽位只增不删：主题切换后旧槽位保留。"""
+def test_order_slot_replaced_old_moved_to_past():
+    """P3-⑬：新订单号替换旧槽位（保留最近一个、正在处理的那单），旧号移入 past_entities。
+
+    旧契约"首单不被覆盖"在多单逐单咨询时会让槽位停留在首单、坐席回答错单；
+    新契约为"新替旧 + 旧号可回溯"，多单场景逐单处理不串单。
+    """
     s = update(None, "SO2026080118 退款")
     s = update(s, "物流 XOZ-12345 到哪了")
-    assert s["slots"]["order_no"] == "SO2026080118"  # 首个订单号不被覆盖
+    assert s["slots"]["order_no"] == "XOZ-12345"  # 新订单号替换当前槽位
+    assert "SO2026080118" in s.get("past_entities", [])  # 旧号进过去实体供指代回溯
 
 
 def test_update_returns_new_dict_not_mutation():

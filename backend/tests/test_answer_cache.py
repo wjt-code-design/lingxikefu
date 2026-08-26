@@ -179,3 +179,50 @@ def test_semantic_hit_similar_question(monkeypatch):
 
     r = get("如何申请七天无理由退货？", "v1", kb_id="kb-a")
     assert r is not None and r["answer"] == "7天内可退"
+
+
+# --- P2-⑨ -------------------------------------------------------------------
+
+
+def test_evict_stale_kb_deletes_old_version_points(monkeypatch):
+    """P2-⑨：KB 版本推进 → 按过滤条件删除该 KB 旧版本点（must_not=当前版本，单 RPC）。"""
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    monkeypatch.setattr(answer_cache, "_ensured", True)  # 跳过集合 RPC（单进程内已建一次）
+
+    deletes: list[dict] = []
+
+    class _DeleteQdrant:
+        def delete(self, **kw):
+            deletes.append(kw)
+
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: _DeleteQdrant())
+
+    answer_cache.evict_stale_kb("kb-a", "v2")
+
+    assert len(deletes) == 1, f"应恰好一次删除 RPC，实际 {len(deletes)}"
+    selector = deletes[0]["points_selector"]
+    # FilterSelector 模型：filter.must / filter.must_not 里的 FieldCondition
+    must_conds = [c.key for c in selector.filter.must]
+    must_not_conds = [c.key for c in selector.filter.must_not]
+    assert "kb_id" in must_conds, f"must 应含 kb_id 隔离条件: {must_conds}"
+    kb_cond = next(c for c in selector.filter.must if c.key == "kb_id")
+    assert kb_cond.match.value == "kb-a"  # 只删目标 KB
+    assert "kb_version" in must_not_conds, f"must_not 应排除当前版本: {must_not_conds}"
+    ver_cond = next(c for c in selector.filter.must_not if c.key == "kb_version")
+    assert ver_cond.match.value == "v2", "必须保留当前版本的点"
+
+
+def test_evict_stale_kb_disabled_noop(monkeypatch):
+    """P2-⑨：开关关闭 → 直接返回，不触碰 Qdrant（零开销）。"""
+
+    def _should_not_touch():
+        raise AssertionError("开关关闭时不应触碰 Qdrant")
+
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {"ANSWER_CACHE_ENABLED": False})())
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", _should_not_touch)
+
+    answer_cache.evict_stale_kb("kb-a", "v2")  # 不抛异常即通过

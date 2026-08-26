@@ -209,6 +209,66 @@ def test_chat_cache_write_reuses_stream_rewritten_query(client, monkeypatch):
     assert writes and writes[0][0] == "规范化后的问题"
 
 
+def test_chat_cache_fill_skipped_when_state_hint(client, monkeypatch):
+    """P2-③：会话状态影响回答（state_hint 非空）→ 不进全局缓存（正确性优先）。"""
+    tc, _, _ = client
+    writes = []
+
+    async def _fake(*_a, **_k):
+        yield ("intent", {"intent": "qa"})
+        yield ("token", {"delta": "答复"})
+        yield ("sources", {"sources": []})
+        yield ("done", {"message_id": "", "rewritten_query": "q1"})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
+    monkeypatch.setattr("app.api.chat.cache_put", lambda *args: writes.append(args))
+    # 会话有主题（无订单号）→ to_prompt_hint 非 None → 回填被拦截
+    monkeypatch.setattr(
+        "app.api.chat._update_conv_state_locked",
+        lambda db, sid, msg: {"topic": "退款", "slots": {}, "clarify_count": 0, "stage": "collecting"},
+    )
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退款到账多久", "stream": True},
+        headers=_headers(),
+    )
+
+    assert r.status_code == 200
+    assert writes == [], f"state_hint 非空不应回填全局缓存: {writes}"
+
+
+def test_chat_cache_fill_skipped_when_user_profile(client, monkeypatch):
+    """P2-③：个性化用户（画像非空）→ 不进精确层全局缓存（正确性优先）。"""
+    tc, _, _ = client
+    writes = []
+
+    async def _fake(*_a, **_k):
+        yield ("intent", {"intent": "qa"})
+        yield ("token", {"delta": "答复"})
+        yield ("sources", {"sources": []})
+        yield ("done", {"message_id": "", "rewritten_query": "q2"})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
+    monkeypatch.setattr("app.api.chat.cache_put", lambda *args: writes.append(args))
+    from app.core.config import settings as cfg_settings
+
+    monkeypatch.setattr(cfg_settings, "USER_PROFILE_ENABLED", True)
+    monkeypatch.setattr(
+        "app.api.chat.get_profile",
+        lambda db, uid: {"topics": {"退款": 5}, "entities": ["SO2026080118"]},
+    )
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退款到账多久", "stream": True},
+        headers=_headers(),
+    )
+
+    assert r.status_code == 200
+    assert writes == [], f"用户画像非空不应回填全局缓存: {writes}"
+
+
 def test_chat_quick_answer_marks_source_and_honest_stage(client, monkeypatch):
     """快捷话术短路可辨 + stage 诚实（2026-08-25 溯源空面板排查）。
 

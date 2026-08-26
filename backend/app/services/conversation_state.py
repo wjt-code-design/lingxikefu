@@ -61,12 +61,19 @@ def update(state: dict | None, message: str) -> dict:
     if topics:
         s["topic"] = topics[0]
 
-    # 2) 槽位：提取订单号，只增不删（首个值保留，后续订单号不覆盖——多单场景批次D再议）
+    # 2) 槽位：订单号——新替旧（P3-⑬）：识别到新订单号时替换当前槽位（保留最近一个、
+    #    正在处理的那单），旧号移入 past_entities 供指代回溯/交接（多单咨询逐单处理）。
     for m in _ORDER_RE.finditer(message):
         order_no = m.group(0).strip()
-        if order_no and SLOT_ORDER_NO not in slots:
+        if order_no:
+            prev = slots.get(SLOT_ORDER_NO)
             slots[SLOT_ORDER_NO] = order_no
-            break  # 首个订单号即槽位值
+            if prev and prev != order_no:
+                past = list(s.get("past_entities") or [])
+                if prev not in past:
+                    past.append(prev)
+                s["past_entities"] = past
+            break  # 每轮只采纳最新订单号
     s["slots"] = slots
 
     # 3) 阶段推进

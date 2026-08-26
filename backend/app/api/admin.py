@@ -4,8 +4,10 @@ from __future__ import annotations
 import re
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from typing import Any
 from uuid import UUID
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import func, select
@@ -285,13 +287,6 @@ def list_feedback(
     return FeedbackListResp(items=items, total=total)
 
 
-def _day_key(dt) -> str:
-    """统一日期键（兼容 sqlite naive / pg tz-aware）。"""
-    if getattr(dt, "tzinfo", None) is not None:
-        dt = dt.astimezone()
-    return dt.date().isoformat()
-
-
 @router.get("/stats/trend", response_model=StatsTrendResp)
 def get_stats_trend(
     days: int = Query(14, ge=7, le=90),
@@ -300,62 +295,77 @@ def get_stats_trend(
 ) -> StatsTrendResp:
     """运营趋势（P1）：近 N 天会话/消息/工单按日计数。
 
-    - Python 侧聚合（数据量小，与 stats 的 latency 聚合同风格，兼容 sqlite/pg）；
+    - P2-⑧：SQL 聚合（按日分组，PG/SQLite 双兼容）替代全量拉取 Python 分桶；
     - 无数据日期补 0，保证折线图连续。
     """
     tenant = settings.TENANT_DEFAULT
     since = datetime.now(UTC) - timedelta(days=days - 1)
     axis = [(since + timedelta(days=i)).date().isoformat() for i in range(days)]
 
-    s_dates = db.scalars(
-        select(Session.created_at).where(Session.tenant_id == tenant, Session.created_at >= since)
+    def _day(col: Any) -> Any:
+        """'YYYY-MM-DD' 分组表达式（cast to text 再取前 10 位）。
+
+        P2-⑧：`cast(col, Date)` 在 SQLite 走 NUMERIC 亲和返回非 str、Date 处理器
+        fromisoformat 崩（实测 TypeError），PG 无内置 date() 函数——substr 方案双库兼容。
+        """
+        return sa.func.substr(sa.cast(col, sa.String), 1, 10)
+
+    # P2-⑧：SQL 聚合（按日分组）替代全量拉取 Python 分桶
+    s_rows = db.execute(
+        select(_day(Session.created_at), func.count())
+        .where(Session.tenant_id == tenant, Session.created_at >= since)
+        .group_by(_day(Session.created_at))
     ).all()
-    m_dates = db.scalars(
-        select(Message.created_at).where(Message.tenant_id == tenant, Message.created_at >= since)
+    m_rows = db.execute(
+        select(_day(Message.created_at), func.count())
+        .where(Message.tenant_id == tenant, Message.created_at >= since)
+        .group_by(_day(Message.created_at))
     ).all()
-    t_dates = db.scalars(
-        select(Ticket.created_at).where(Ticket.tenant_id == tenant, Ticket.created_at >= since)
+    t_rows = db.execute(
+        select(_day(Ticket.created_at), func.count())
+        .where(Ticket.tenant_id == tenant, Ticket.created_at >= since)
+        .group_by(_day(Ticket.created_at))
     ).all()
 
-    # T1.3：工具回答 (created_at, tool) 对 + 澄清轮日期（口径与 stats 聚合一致：
+    # T1.3：工具回答按 (日, tool) 分组 + 澄清轮按日分组（口径与 stats 聚合一致：
     # 仅 assistant、tool 非空串；clarify 为 meta.clarify=True）
     tool_col = Message.meta["tool"].as_string()
     tool_rows = db.execute(
-        select(Message.created_at, tool_col).where(
+        select(_day(Message.created_at), tool_col, func.count())
+        .where(
             Message.tenant_id == tenant,
             Message.role == MessageRole.assistant,
             Message.created_at >= since,
             tool_col.isnot(None),
         )
+        .group_by(_day(Message.created_at), tool_col)
     ).all()
     clarify_col = Message.meta["clarify"].as_boolean()
-    c_dates = db.scalars(
-        select(Message.created_at).where(
+    c_rows = db.execute(
+        select(_day(Message.created_at), func.count())
+        .where(
             Message.tenant_id == tenant,
             Message.role == MessageRole.assistant,
             Message.created_at >= since,
             clarify_col.is_(True),
         )
+        .group_by(_day(Message.created_at))
     ).all()
 
     def bucket(rows) -> dict[str, int]:
-        c: dict[str, int] = {}
-        for r in rows:
-            k = _day_key(r)
-            c[k] = c.get(k, 0) + 1
-        return c
+        return {k: int(c) for k, c in rows}
 
-    sb, mb, tb = bucket(s_dates), bucket(m_dates), bucket(t_dates)
+    sb, mb, tb = bucket(s_rows), bucket(m_rows), bucket(t_rows)
 
     # 按日聚合工具分布：{date: {tool: count}}，空串工具名不计
     tool_by_day: dict[str, dict[str, int]] = {}
-    for dt, tool in tool_rows:
+    for day, tool, cnt in tool_rows:
         if not tool:
             continue
-        k = _day_key(dt)
+        k = str(day)  # _day 表达式已产出 'YYYY-MM-DD'
         tool_by_day.setdefault(k, {})
-        tool_by_day[k][tool] = tool_by_day[k].get(tool, 0) + 1
-    cb = bucket(c_dates)
+        tool_by_day[k][tool] = tool_by_day[k].get(tool, 0) + int(cnt)
+    cb = bucket(c_rows)
 
     return StatsTrendResp(
         days=[

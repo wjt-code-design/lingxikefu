@@ -7,10 +7,11 @@ from __future__ import annotations
 
 import logging
 import threading
-import time
 import uuid
 from datetime import UTC, datetime
 
+# P3-⑩：_suggest_cache 有界 TTL 缓存（取代手写 dict 的过期条目永不删除 → 无界增长）
+from cachetools import TTLCache
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
@@ -428,11 +429,11 @@ class SuggestResp(BaseModel):
     sources: list[SessionMessageSource] = Field(default_factory=list)
 
 
-#: 60s 结果缓存：连点/重开不重复调 LLM（key=(session_id, question)；仅缓存成功结果，
-#: 瞬时失败不粘滞）。线程锁 + 按值分桶，对齐 chat._kb_cache 模式（B4 同款纪律）。
-_suggest_cache: dict[tuple[str, str], tuple[float, dict]] = {}
+#: 坐席建议 60s 结果缓存：连点/重开不重复调 LLM（key=(session_id, question)，仅缓存成功结果。
+#: P3-⑩：TTLCache 有界（maxsize=512）+ TTL 自动淘汰，取代手写 dict 只读时检查、过期条目
+#: 永不删除导致的无界增长；60s TTL 语义不变。线程锁保持（TTLCache 非线程安全，瞬时失败不粘滞）。
+_suggest_cache: TTLCache = TTLCache(maxsize=512, ttl=60)
 _suggest_lock = threading.Lock()
-_SUGGEST_CACHE_TTL = 60.0
 
 
 def _doc_titles(db: OrmSession, doc_ids: set[str]) -> dict[str, str]:
@@ -476,13 +477,13 @@ async def suggest_reply(
     if not question:
         raise HTTPException(status_code=422, detail="no user message to suggest for")
 
-    # 结果缓存命中直接返回（成功结果才有缓存条目）；refresh=True 跳过读取强制重新生成
+    # 结果缓存命中直接返回（成功结果才有缓存条目；TTLCache 自动处理过期）；refresh=True 跳过读取强制重新生成
     cache_key = (str(session_id), question)
     if not body.refresh:
         with _suggest_lock:
             hit = _suggest_cache.get(cache_key)
-            if hit and time.time() - hit[0] < _SUGGEST_CACHE_TTL:
-                return SuggestResp(**hit[1])
+            if hit:
+                return SuggestResp(**hit)
 
     try:
         kb_id = await run_in_threadpool(_latest_kb_id, db)
@@ -530,7 +531,7 @@ async def suggest_reply(
         resp = SuggestResp(text=text, sources=sources)
         if text:
             with _suggest_lock:
-                _suggest_cache[cache_key] = (time.time(), resp.model_dump())
+                _suggest_cache[cache_key] = resp.model_dump()
         return resp
     except Exception:  # noqa: BLE001 - fail-open：建议失败绝不打断客服工作
         logger.exception("agent assist suggest failed (session=%s)", session_id)

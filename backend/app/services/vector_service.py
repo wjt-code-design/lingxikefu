@@ -111,7 +111,9 @@ def ensure_collection() -> int:
     except VectorStoreError:
         raise
     except Exception as e:  # noqa: BLE001 - 统一包装为领域错误
-        raise VectorStoreError(f"Qdrant 不可达/操作失败（{settings.QDRANT_URL}）: {e}") from e
+        # P2-④：不向调用方泄漏内部 QDRANT_URL；详情走日志
+        logger.exception("ensure_collection 失败（qdrant url=%s）", settings.QDRANT_URL)
+        raise VectorStoreError(f"Qdrant 不可达/操作失败: {e}") from e
 
 
 def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[list[float]]) -> int:
