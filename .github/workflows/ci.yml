@@ -327,8 +327,10 @@ jobs:
       # 落盘后 smoke_import 内 setdefault 设离线可命中缓存。注意本 step 不得设置 HF_HUB_OFFLINE。
       - name: Pre-download embedding model (bge-base-zh-v1.5)
         run: python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-zh-v1.5'); print('bge model cached OK')"
+        # run#3 实证：hf-mirror.com 国内镜像在 GitHub 海外 runner 上 6s 超时失败；
+        # 移除 HF_ENDPOINT，走默认直连 huggingface.co（海外 runner 可达），下载 bge 落缓存
         env:
-          HF_ENDPOINT: https://hf-mirror.com
+          HF_HUB_DOWNLOAD_TIMEOUT: "60"
       # 导入评测知识库（eval-and-samples/kb/ + kb-pdf/，sha256 幂等）。
       # smoke_import 建库名为「星河智家·官方政策库」，评测脚本经 --kb-name 对齐。
       - name: Import eval KB (kb/ + kb-pdf/)

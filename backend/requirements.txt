@@ -41,3 +41,6 @@ sentence-transformers>=2.7,<4.0
 pytest>=8.0,<9.0
 pytest-cov>=4.0,<7.0
 ruff>=0.4,<1.0
+# pytest-asyncio 必须与 pyproject.toml asyncio_mode=auto 配套：CI 若缺失，
+# 全部 async def test_* 直接 Failed（pytest 不原生支持 async）→ Unit tests 整段红
+pytest-asyncio>=0.23,<2.0
