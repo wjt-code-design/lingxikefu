@@ -18,3 +18,4 @@ build/
 backend-test-results.xml
 coverage.xml
 .superpowers/
+.zcode/
