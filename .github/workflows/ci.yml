@@ -10,12 +10,12 @@ on:
   push:
     branches: [master]
   pull_request:
-  # 手动全量评测入口：full_eval=true 时 eval job 跑全量 100 题 faithfulness（约 1-2h，
+  # 手动全量评测入口：full_eval=true 时 eval job 跑全量 100 题 faithfulness（约 1h，
   # 仅手动触发，不改变 push 的 20 题抽样门禁）。用于拿全量基线/验证抽样代表性。
   workflow_dispatch:
     inputs:
       full_eval:
-        description: "全量 100 题 faithfulness 评测（约 1-2h，仅手动）"
+        description: "全量 100 题 faithfulness 评测（约 1h，仅手动）"
         type: boolean
         default: false
 
@@ -367,11 +367,10 @@ jobs:
       # faithfulness：真实 LLM 调用（智谱 GLM，走 CHAT_PROVIDER=zhipu）。
       # 硬门禁：未达阈值脚本 exit 1 → step 失败 → 阻断 CI。
       # CI 用确定性均匀抽样 20 题（跨位置覆盖各主题、每次同一批可对比）；
-      # 全量 100 题在智谱上单轮 2h+ 不可行（2026-08-27 实测取消），
-      # 全量评测保留手动：python -m scripts.eval_faithfulness --kb-name "$EVAL_KB_NAME"
+      # 全量 100 题约 1h（2026-08-27 实测），仅适合手动触发（workflow_dispatch full_eval=true）。
       - name: Faithfulness eval (qa >= 85% / refuse >= 90%, sample 20)
         if: env.ZHIPU_API_KEY != ''
-        # push 默认 20 题抽样（~20min）；workflow_dispatch 传 full_eval=true 时跑全量 100 题（~1-2h）。
+        # push 默认 20 题抽样（~20min）；workflow_dispatch 传 full_eval=true 时跑全量 100 题（~1h）。
         # ${{ github.event.inputs.full_eval }} 在 push 事件中为空（空 → 0 → 走 sample 20）。
         # 若 inputs.full_eval 的字面值为 true → runner 无法解析布尔比较，用字符串比较绕过。
         run: |
