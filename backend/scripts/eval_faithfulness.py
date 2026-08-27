@@ -6,8 +6,8 @@
   - 诚实性题（**拒答** 标注）：回答须含拒答标志词（未收录/转人工/暂未等）且不含具体政策数字 → 判拒答正确；
   - 转人工/闲聊：检查引导标志（intent 短路是否生效）。
 - 生成 ≠ 验证：被测回答来自真实 RAG+LLM 管线，金标来自冻结 ground-truth（sha256 存档）。
-- 用法（backend/ 下）：python -m scripts.eval_faithfulness [--limit N] [--kb-name 星河智家冒烟库]
-"""
+- 用法（backend/ 下）：python -m scripts.eval_faithfulness [--limit N] [--sample N] [--kb-name 星河智家冒烟库]
+  --sample 为确定性均匀抽样（跨位置覆盖各主题），CI 硬门禁用它控制耗时；全量评测用于手动/定时。"""
 from __future__ import annotations
 
 import argparse
@@ -352,6 +352,13 @@ async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="仅评测前 N 题（0=全部）")
     ap.add_argument("--offset", type=int, default=0, help="跳过前 N 题（续跑用）")
+    ap.add_argument(
+        "--sample",
+        type=int,
+        default=0,
+        help="确定性均匀抽样 N 题（按列表位置步长取，覆盖各主题；0=全量）。"
+        "CI 硬门禁用它控制耗时（全量 100 题在智谱上单轮 2h+，2026-08-27 实测）",
+    )
     ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
     args = ap.parse_args()
 
@@ -362,6 +369,10 @@ async def main() -> int:
         questions = questions[args.offset:]
     if args.limit:
         questions = questions[: args.limit]
+    if args.sample:
+        step = max(1, len(questions) // args.sample)
+        questions = questions[::step][: args.sample]
+        print(f"[SAMPLE] 均匀抽样 {len(questions)} 题（步长 {step}，确定性）")
 
     db = SessionLocal()
     try:

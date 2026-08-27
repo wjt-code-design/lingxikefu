@@ -355,9 +355,12 @@ jobs:
         run: python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME"
       # faithfulness：真实 LLM 调用（智谱 GLM，走 CHAT_PROVIDER=zhipu）。
       # 硬门禁：未达阈值脚本 exit 1 → step 失败 → 阻断 CI。
-      - name: Faithfulness eval (qa >= 85% / refuse >= 90%)
+      # CI 用确定性均匀抽样 20 题（跨位置覆盖各主题、每次同一批可对比）；
+      # 全量 100 题在智谱上单轮 2h+ 不可行（2026-08-27 实测取消），
+      # 全量评测保留手动：python -m scripts.eval_faithfulness --kb-name "$EVAL_KB_NAME"
+      - name: Faithfulness eval (qa >= 85% / refuse >= 90%, sample 20)
         if: env.ZHIPU_API_KEY != ''
-        run: python -m scripts.eval_faithfulness --kb-name "$EVAL_KB_NAME"
+        run: python -m scripts.eval_faithfulness --sample 20 --kb-name "$EVAL_KB_NAME"
       # 未配置 LLM Key = 门禁无法执行 = 显式失败（fail-closed，杜绝"没跑算过"假绿）
       - name: Faithfulness skipped (missing ZHIPU_API_KEY) => FAIL
         if: env.ZHIPU_API_KEY == ''
