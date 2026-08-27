@@ -21,7 +21,6 @@ def make_settings(**overrides: object) -> Settings:
         "REDIS_URL": "redis://localhost:6379/0",
         "QDRANT_URL": "http://localhost:6333",
         "JWT_SECRET": "unit-test-secret",
-        "LITELLM_MASTER_KEY": "unit-test-litellm-key",
         "CORS_ORIGINS": ["http://localhost:5173"],
     }
     defaults.update(overrides)
@@ -38,13 +37,6 @@ def test_validate_rejects_placeholder_jwt_secret(secret: str) -> None:
     """JWT_SECRET 为占位符 __CHANGE_ME__ 或空 → validate() 必须抛错（防占位泄漏）。"""
     settings = make_settings(JWT_SECRET=secret)
     with pytest.raises(ValueError, match="JWT_SECRET"):
-        settings.validate()
-
-
-def test_validate_rejects_placeholder_litellm_key() -> None:
-    """LITELLM_MASTER_KEY 为占位符 → validate() 必须抛错。"""
-    settings = make_settings(LITELLM_MASTER_KEY=PLACEHOLDER_SECRET)
-    with pytest.raises(ValueError, match="LITELLM_MASTER_KEY"):
         settings.validate()
 
 
@@ -81,7 +73,6 @@ def test_missing_env_key_fails(monkeypatch: pytest.MonkeyPatch) -> None:
     """环境变量全部缺失时（单测跑在干净环境），validate() 必须抛错。"""
     for key in (
         "JWT_SECRET",
-        "LITELLM_MASTER_KEY",
         "POSTGRES_HOST",
         "POSTGRES_USER",
         "POSTGRES_PASSWORD",

@@ -16,7 +16,6 @@ x-api-environment: &api-env
   QDRANT_URL: http://qdrant:6333
   QDRANT_API_KEY: ${QDRANT_API_KEY:-}
   JWT_SECRET: ${JWT_SECRET:-__CHANGE_ME__}
-  LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-__CHANGE_ME__}
   # chat provider：仅 longcat（2026-08-27 全面取消百炼/智谱）
   CHAT_PROVIDER: ${CHAT_PROVIDER:-longcat}
   LONGCAT_BASE_URL: ${LONGCAT_BASE_URL:-https://api.longcat.chat/openai}

@@ -17,7 +17,6 @@ import pytest
 
 _TEST_ENV: dict[str, str] = {
     "JWT_SECRET": "unit-test-secret",
-    "LITELLM_MASTER_KEY": "unit-test-litellm-key",
     "POSTGRES_HOST": "localhost",
     "POSTGRES_PORT": "5432",
     "POSTGRES_USER": "lingxi",

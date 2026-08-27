@@ -2,7 +2,7 @@
 
 决策（2026-08-15）：MVP 不做 rerank——小知识库 dense+sparse+RRF 已够，省成本与时延；
 管线预留节点，M3 评测 recall@5 不达标再启用（RAG_ENABLE_RERANK=true）。
-启用后实现：百炼 gte-rerank-v2（litellm 调 compatible-mode），或本地 cross-encoder。
+启用后实现：本地 cross-encoder（对话/评测模型已全面收敛 LongCat，不再走外部网关 rerank）。
 """
 from __future__ import annotations
 

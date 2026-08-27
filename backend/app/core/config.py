@@ -18,7 +18,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: 不可预期目录；以本文件（backend/app/core/）为锚点定位到 backend/uploads/images）
 _IMG_DIR = Path(__file__).resolve().parents[2] / "uploads" / "images"
 
-#: JWT_SECRET / LITELLM_MASTER_KEY 的占位值；validate() 遇到该值即拒绝启动，
+#: JWT_SECRET 的占位值；validate() 遇到该值即拒绝启动,
 #: 防止 aegisdesk-ai 那种「默认值三处自相矛盾 / 占位密钥泄漏」的坑。
 PLACEHOLDER_SECRET = "__CHANGE_ME__"
 
@@ -95,10 +95,7 @@ class Settings(BaseSettings):
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
 
-    # --- LiteLLM 网关（百炼 Key 由网关 env/KMS 注入，禁止直写真实值） ---
-    LITELLM_MASTER_KEY: str = PLACEHOLDER_SECRET
-
-    # --- 模型（2026-08-27 全面收敛：对话模型只用 LongCat；embedding 本地 bge） ---
+    # --- 模型（2026-08-27 全面收敛：对话/评测只用 LongCat；embedding 本地 bge） ---
     # chat provider：仅 longcat（已全面取消百炼/智谱）
     CHAT_PROVIDER: str = "longcat"
     # LongCat API（OpenAI 兼容端点）；CHAT_PROVIDER=longcat 时生效。Key 只经 env 注入，严禁提交。
@@ -112,7 +109,7 @@ class Settings(BaseSettings):
     # B1（安全）：聊天图片上传白名单目录——ImageAgent 仅允许读取该目录内的图片。
     # 客户端传来的 image_paths 是服务器路径，不做白名单校验可读任意文件（经视觉模型外泄）。
     IMAGE_UPLOAD_DIR: str = str(_IMG_DIR)  # P4：绝对路径（防 CWD 漂移）
-    # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境）；bailian=百炼 text-embedding
+    # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境；已取消百炼 embedding）
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"
     # rerank：MVP 关闭（管线预留节点，评测 recall@5 不达标再开）
@@ -164,7 +161,7 @@ class Settings(BaseSettings):
     def validate(self) -> None:
         """启动校验（fail-closed）：任一检查失败即抛 ValueError。
 
-        - JWT_SECRET / LITELLM_MASTER_KEY 必须为真实值，禁止占位符；
+        - JWT_SECRET 必须为真实值，禁止占位符；
         - PostgreSQL / Redis / Qdrant 必填项不得为空；
         - POSTGRES_PORT 必须为合法端口。
         """
@@ -173,10 +170,6 @@ class Settings(BaseSettings):
         if not self.JWT_SECRET or self.JWT_SECRET == PLACEHOLDER_SECRET:
             errors.append(
                 "JWT_SECRET 未配置或仍为占位值 __CHANGE_ME__（请生成随机密钥并注入环境变量）"
-            )
-        if not self.LITELLM_MASTER_KEY or self.LITELLM_MASTER_KEY == PLACEHOLDER_SECRET:
-            errors.append(
-                "LITELLM_MASTER_KEY 未配置或仍为占位值 __CHANGE_ME__（请由 LiteLLM 网关 secret 注入）"
             )
 
         # M5：生产环境强制强密钥 —— 禁止开发默认密钥、要求 >=32 位随机值

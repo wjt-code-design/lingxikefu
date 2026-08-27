@@ -28,12 +28,11 @@ celery[redis]>=5.3,<6.0
 # --- 内存缓存工具（P3-⑩：_suggest_cache 有界 TTL 缓存） ---
 cachetools>=5.3,<6.0
 
-# --- 向量库 / 模型网关 ---
+# --- 向量库 / 模型推理 ---
 # qdrant-client 必须与 server 匹配：compose 用 qdrant:v1.9.1，client 锁 1.9.x
 # （>1.10 的 client 走 /points/query 新 API，server 1.9 不支持 → 检索 404）
 qdrant-client>=1.9,<1.10
-litellm>=1.40,<2.0
-# chat 客户端 httpx 直连 OpenAI 兼容端点（双 provider），运行时核心依赖
+# chat 客户端 httpx 直连 OpenAI 兼容端点（唯一 provider LongCat），运行时核心依赖
 httpx>=0.27,<1.0
 pdfplumber>=0.11,<1.0
 # 本地 embedding 模型（bge-base-zh-v1.5）；容器/部署环境必须显式声明，

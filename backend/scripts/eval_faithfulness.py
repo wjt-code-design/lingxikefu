@@ -244,7 +244,7 @@ async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
 async def eval_one_retry(db, kb_id: uuid.UUID, q: dict, gt: dict | None, retries: int = 5) -> dict:
     """LLM 偶发 429 限流 / 超时重试，避免单题拖垮整批。
 
-    - 429 限流退避更长（10s×attempt，智谱免费档 QPS 较紧）；
+    - 429 限流退避更长（10s×attempt，LongCat 档位 QPS 较紧）；
     - 超时（ReadTimeout/ConnectTimeout）短退避（2s×attempt）；
     - 其他 HTTP 错误（401/404/500）**不重试**，立即暴露配置/端点错误，不白等。
     """
@@ -370,7 +370,7 @@ async def main() -> int:
         type=int,
         default=0,
         help="确定性均匀抽样 N 题（按列表位置步长取，覆盖各主题；0=全量）。"
-        "CI 硬门禁用它控制耗时（全量 100 题在智谱上单轮 2h+，2026-08-27 实测）",
+        "CI 硬门禁默认 sample 20 控制耗时；需全量请用 workflow_dispatch（full_eval=true）",
     )
     ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
     args = ap.parse_args()

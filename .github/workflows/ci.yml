@@ -85,10 +85,9 @@ jobs:
       POSTGRES_DB: lingxi
       REDIS_URL: redis://localhost:6379/0
       QDRANT_URL: http://localhost:6333
-      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET/LITELLM_MASTER_KEY 非空非占位符，
+      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET 非空非占位符，
       # 缺失会导致 app.main import 即抛 ValueError，pytest collection 崩（run#2 已实证）
       JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
-      LITELLM_MASTER_KEY: ci-test-litellm-master-key-0123456789abcdef0123456789abcdef
     defaults:
       run:
         working-directory: backend
@@ -218,7 +217,7 @@ jobs:
           env_example = pathlib.Path("backend/.env.example")
           if env_example.exists():
               text = env_example.read_text(encoding="utf-8")
-              for key in ("JWT_SECRET", "LITELLM_MASTER_KEY"):
+              for key in ("JWT_SECRET",):
                   bad = [ln for ln in text.splitlines()
                          if ln.startswith(f"{key}=") and not ln.endswith("__CHANGE_ME__")]
                   if bad:
@@ -324,9 +323,8 @@ jobs:
       POSTGRES_DB: lingxi
       REDIS_URL: redis://localhost:6379/0
       QDRANT_URL: http://localhost:6333
-      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET/LITELLM_MASTER_KEY 非空非占位符
+      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET 非空非占位符
       JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
-      LITELLM_MASTER_KEY: ci-test-litellm-master-key-0123456789abcdef0123456789abcdef
       LONGCAT_API_KEY: ${{ secrets.LONGCAT_API_KEY }}
       # 评测 LLM 固定走 LongCat（2026-08-27 从智谱切来；key 经 GitHub Secrets(LONGCAT_API_KEY) 注入）
       CHAT_PROVIDER: longcat

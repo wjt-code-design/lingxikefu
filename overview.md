@@ -70,7 +70,7 @@ backend/scripts/eval_recall.py        ← sys.path 引导（容器内直跑）
 
 | 阻塞项 | 原因 | 下一步 |
 |---|---|---|
-| 评测基线 faithfulness/recall | 需 PostgreSQL + Qdrant + 百炼/zhipu KB 数据 | 在 docker compose 环境或腾讯云服务器上执行 |
+| 评测基线 faithfulness/recall | 需 PostgreSQL + Qdrant + LongCat 评测模型（LONGCAT_API_KEY） | 在 docker compose 环境或腾讯云服务器上执行 |
 | 全量 pytest 本地通过 | 需启动 PG/Redis/Qdrant（docker compose up） | docker 环境就绪后重跑 |
 | 未提交代码 | 用户自行决定 commit/push 时机 | 建议 `git add` 后 commit |
 
