@@ -247,8 +247,7 @@ async def stream_answer(
             profile=user_profile,
         )
         client = get_chat_client()
-        # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（provider-aware），
-        # 避免 provider=zhipu 时把 settings.CHAT_MODEL（百炼名）打到智谱端点 → modelCode 不存在 → 400
+        # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（唯一 provider longcat，模型名单一真源）
         async for delta in client.stream(messages):
             yield ("token", {"delta": delta})
         yield ("sources", {"sources": _to_sources(result.chunks)})

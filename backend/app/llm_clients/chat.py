@@ -1,8 +1,6 @@
-"""Chat 客户端：OpenAI 兼容端点直连（百炼 / 智谱 / LongCat 多 provider，httpx 实现）。
+"""Chat 客户端：OpenAI 兼容端点直连（LongCat，httpx 实现）。
 
-- ``CHAT_PROVIDER=bailian``：通义千问 qwen3.7-flash，Key 读 DASHSCOPE_API_KEY；
-- ``CHAT_PROVIDER=zhipu``：智谱 GLM（glm-4.7），Key 读 ZHIPU_API_KEY（历史备选）；
-- ``CHAT_PROVIDER=longcat``：LongCat LongCat-2.0，Key 读 LONGCAT_API_KEY（当前主用）。
+- ``CHAT_PROVIDER=longcat``：LongCat LongCat-2.0，Key 读 LONGCAT_API_KEY。
 - 用 httpx 直连（不用 litellm）：litellm 在 Windows 对中文消息序列化有 ascii codec bug；
   httpx 显式 ``content=json.dumps(..., ensure_ascii=False).encode('utf-8')`` 保证 UTF-8。
 - Key 缺失时抛可操作错误（不静默）。
@@ -22,9 +20,6 @@ from app.llm_clients.base import ChatClient, ModelNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
-# provider 白名单：新增 provider 必须同时更新此处与 config 注释
-_VALID_PROVIDERS = ("bailian", "zhipu", "longcat")
-
 #: 流式默认 60s（边收边发足够）；非流式 complete 用 120s（推理模型长回答 + 慢网络兜底）
 _TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 _COMPLETE_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
@@ -33,45 +28,20 @@ _RETRY_STATUS = {429, 500, 502, 503}
 
 
 class OpenAILikeChatClient(ChatClient):
-    """OpenAI 兼容端点客户端（流式/非流式），provider 参数化。"""
+    """OpenAI 兼容端点客户端（流式/非流式），固定 LongCat provider。"""
 
-    def __init__(self, provider: str) -> None:
-        # provider 必须显式传入（配置单一真源，禁止代码内第二份默认值）；
-        # 非法值 fail-closed，避免 else 分支把未知 provider 静默当 bailian。
-        if provider not in _VALID_PROVIDERS:
-            raise ModelNotConfiguredError(
-                f"chat provider 非法值: {provider!r}（可选: {' / '.join(_VALID_PROVIDERS)}，由 CHAT_PROVIDER 配置）"
-            )
-        self.provider = provider
-
-    # --- provider 配置 ---
     def _api_key(self) -> str:
-        if self.provider == "zhipu":
-            key, env = settings.ZHIPU_API_KEY, "ZHIPU_API_KEY"
-        elif self.provider == "longcat":
-            key, env = settings.LONGCAT_API_KEY, "LONGCAT_API_KEY"
-        else:
-            key, env = settings.DASHSCOPE_API_KEY, "DASHSCOPE_API_KEY"
-        if not key:
+        if not settings.LONGCAT_API_KEY:
             raise ModelNotConfiguredError(
-                f"chat(provider={self.provider}) 需要配置 {env}（后端 .env 的 {env}= 一行），当前为空"
+                "chat(provider=longcat) 需要配置 LONGCAT_API_KEY（后端 .env 的 LONGCAT_API_KEY= 一行），当前为空"
             )
-        return key
+        return settings.LONGCAT_API_KEY
 
     def _api_url(self) -> str:
-        base = {
-            "zhipu": settings.ZHIPU_BASE_URL,
-            "longcat": settings.LONGCAT_BASE_URL,
-            "bailian": settings.DASHSCOPE_BASE_URL,
-        }[self.provider]
-        return base.rstrip("/") + "/chat/completions"
+        return settings.LONGCAT_BASE_URL.rstrip("/") + "/chat/completions"
 
     def _default_model(self) -> str:
-        return {
-            "zhipu": settings.ZHIPU_CHAT_MODEL,
-            "longcat": settings.LONGCAT_CHAT_MODEL,
-            "bailian": settings.CHAT_MODEL,
-        }[self.provider]
+        return settings.LONGCAT_CHAT_MODEL
 
     def _request(self, payload: dict) -> tuple[dict, bytes]:
         """统一请求头与 UTF-8 请求体（stream/complete 共用）。
@@ -164,62 +134,12 @@ class OpenAILikeChatClient(ChatClient):
             raise last_err
 
 
-class FallbackChatClient(ChatClient):
-    """主 client 额度类失败（HTTP 402/403）时自动降级到备选 client。
-
-    场景：百炼每个模型 100 万 token 免费额度，一次性用完即止不重置，耗尽返回 403。
-    若 CHAT_PROVIDER=bailian 且百炼 403，自动切到备选（智谱）重试一次，
-    无需手动改环境变量；备选也失败则原样抛错（fail-closed，不静默吞）。
-    """
-
-    def __init__(self, primary: ChatClient, fallback: ChatClient) -> None:
-        self.primary = primary
-        self.fallback = fallback
-
-    @staticmethod
-    def _is_quota_error(err: BaseException) -> bool:
-        """额度类错误判定：HTTP 402(需要付款)/403(禁止，额度耗尽) 属一次性额度耗尽，可降级。"""
-        return isinstance(err, httpx.HTTPStatusError) and err.response.status_code in (402, 403)
-
-    async def stream(self, messages: list[dict], model: str | None = None, **kwargs) -> AsyncGenerator[str, None]:
-        try:
-            async for delta in self.primary.stream(messages, model=model, **kwargs):
-                yield delta
-        except BaseException as e:  # noqa: BLE001 —— 需先判定额度错误再决定是否降级
-            if not self._is_quota_error(e):
-                raise
-            logger.warning(
-                "chat provider=%s 额度失败(%s)，自动降级到备选 provider",
-                getattr(self.primary, "provider", "?"),
-                e,
-            )
-            async for delta in self.fallback.stream(messages, model=model, **kwargs):
-                yield delta
-
-    async def complete(self, messages: list[dict], model: str | None = None, **kwargs) -> str:
-        try:
-            return await self.primary.complete(messages, model=model, **kwargs)
-        except BaseException as e:  # noqa: BLE001 —— 需先判定额度错误再决定是否降级
-            if not self._is_quota_error(e):
-                raise
-            logger.warning(
-                "chat provider=%s 额度失败(%s)，自动降级到备选 provider",
-                getattr(self.primary, "provider", "?"),
-                e,
-            )
-            return await self.fallback.complete(messages, model=model, **kwargs)
-
-
 @lru_cache(maxsize=1)
 def get_chat_client() -> ChatClient:
     provider = settings.CHAT_PROVIDER.lower()
-    if provider not in _VALID_PROVIDERS:
+    # 平台已收敛：仅 longcat 合法（2026-08-27 全面取消百炼/智谱）；fail-closed 防配置漂移
+    if provider != "longcat":
         raise ModelNotConfiguredError(
-            f"CHAT_PROVIDER 非法值: {provider!r}（可选: {' / '.join(_VALID_PROVIDERS)}）"
+            f"CHAT_PROVIDER 非法值: {provider!r}（当前仅支持 longcat）"
         )
-    primary = OpenAILikeChatClient(provider)
-    if provider == "bailian":
-        # 百炼免费额度（每模型 100 万 token，用完即止不重置）耗尽返回 403，
-        # 自动降级到智谱续命（保留 zhipu key 缺失时的可操作报错），无需手动改 CHAT_PROVIDER。
-        return FallbackChatClient(primary, OpenAILikeChatClient("zhipu"))
-    return primary
+    return OpenAILikeChatClient()

@@ -277,10 +277,10 @@ jobs:
   # 诚实性拒答率 ≥ 90%（eval_faithfulness）；任一未达或 step 未执行 → job 失败 → 阻断 CI。
   # 历史教训（2026-08-27）：曾用 continue-on-error + `|| echo 警告` 吞错，导致
   # faithfulness 在 CI 全题 ModelNotConfiguredError（CHAT_PROVIDER 默认 bailian 缺
-  # DASHSCOPE_API_KEY）也显示"绿"——假绿。故转硬门禁时固定 CHAT_PROVIDER=zhipu 并去吞错。
+  # DASHSCOPE_API_KEY）也显示"绿"——假绿。故转硬门禁时固定 CHAT_PROVIDER 并去吞错。
   # 数据源全在仓库内：eval-and-samples/（评测集）+ kb/ + kb-pdf/（知识库），
-  # 与生产 KB 同源（smoke_import 导入）。LLM 走智谱 GLM，Key 经 GitHub
-  # Secrets(ZHIPU_API_KEY) 注入；未配置 key 时 faithfulness step 显式失败（没跑=不过）。
+  # 与生产 KB 同源（smoke_import 导入）。LLM 走 LongCat LongCat-2.0，Key 经 GitHub
+  # Secrets(LONGCAT_API_KEY) 注入；未配置 key 时 faithfulness step 显式失败（没跑=不过）。
   eval:
     name: Eval gate (hard)
     runs-on: ubuntu-latest
@@ -327,13 +327,9 @@ jobs:
       # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET/LITELLM_MASTER_KEY 非空非占位符
       JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
       LITELLM_MASTER_KEY: ci-test-litellm-master-key-0123456789abcdef0123456789abcdef
-      ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
-      # 评测 LLM 固定走智谱（默认 bailian 需 DASHSCOPE_API_KEY，CI 仅有 ZHIPU_API_KEY，
-      # 此前全题 ModelNotConfiguredError 被吞成假绿——2026-08-27 修复）
-      CHAT_PROVIDER: zhipu
-      # 显式指定智谱模型：glm-5.1（代码默认）在评测时全量 429（额度/模型档位不可用，2026-08-27 实测），
-      # 按对话文档约定改用 glm-4.7 试跑
-      ZHIPU_CHAT_MODEL: "glm-4.7"
+      LONGCAT_API_KEY: ${{ secrets.LONGCAT_API_KEY }}
+      # 评测 LLM 固定走 LongCat（2026-08-27 从智谱切来；key 经 GitHub Secrets(LONGCAT_API_KEY) 注入）
+      CHAT_PROVIDER: longcat
       EVAL_KB_NAME: "星河智家·官方政策库"
     defaults:
       run:
@@ -364,12 +360,12 @@ jobs:
       # recall@5：检索层，无 LLM，不依赖 key。契约阈值 recall@5 >= 85%。
       - name: Recall eval (recall@5 >= 85%)
         run: python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME"
-      # faithfulness：真实 LLM 调用（智谱 GLM，走 CHAT_PROVIDER=zhipu）。
+      # faithfulness：真实 LLM 调用（LongCat LongCat-2.0，走 CHAT_PROVIDER=longcat）。
       # 硬门禁：未达阈值脚本 exit 1 → step 失败 → 阻断 CI。
       # CI 用确定性均匀抽样 20 题（跨位置覆盖各主题、每次同一批可对比）；
       # 全量 100 题约 1h（2026-08-27 实测），仅适合手动触发（workflow_dispatch full_eval=true）。
       - name: Faithfulness eval (qa >= 85% / refuse >= 90%, sample 20)
-        if: env.ZHIPU_API_KEY != ''
+        if: env.LONGCAT_API_KEY != ''
         # push 默认 20 题抽样（~20min）；workflow_dispatch 传 full_eval=true 时跑全量 100 题（~1h）。
         # ${{ github.event.inputs.full_eval }} 在 push 事件中为空（空 → 0 → 走 sample 20）。
         # 若 inputs.full_eval 的字面值为 true → runner 无法解析布尔比较，用字符串比较绕过。
@@ -381,8 +377,8 @@ jobs:
           fi
           python -m scripts.eval_faithfulness $SAMPLE_FLAG --kb-name "$EVAL_KB_NAME"
       # 未配置 LLM Key = 门禁无法执行 = 显式失败（fail-closed，杜绝"没跑算过"假绿）
-      - name: Faithfulness skipped (missing ZHIPU_API_KEY) => FAIL
-        if: env.ZHIPU_API_KEY == ''
+      - name: Faithfulness skipped (missing LONGCAT_API_KEY) => FAIL
+        if: env.LONGCAT_API_KEY == ''
         run: |
-          echo "::error::未配置 GitHub Secrets ZHIPU_API_KEY，faithfulness 门禁未执行（fail-closed）"
+          echo "::error::未配置 GitHub Secrets LONGCAT_API_KEY，faithfulness 门禁未执行（fail-closed）"
           exit 1

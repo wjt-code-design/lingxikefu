@@ -34,10 +34,10 @@ def test_admin_settings_structure(client):
     for group in ("env", "model", "rag", "rate_limit", "quota"):
         assert group in data
     assert data["env"] == settings.ENV
-    # model 分组
+    # model 分组（2026-08-27 收敛：仅 LongCat，无备用模型）
     assert data["model"]["provider"] == settings.CHAT_PROVIDER
-    assert data["model"]["model"] == settings.CHAT_MODEL
-    assert data["model"]["fallback"] == settings.CHAT_MODEL_FALLBACK
+    assert data["model"]["model"] == settings.LONGCAT_CHAT_MODEL
+    assert data["model"]["fallback"] is None
     assert data["model"]["embedding_provider"] == settings.EMBEDDING_PROVIDER
     assert data["model"]["embedding_model"] == settings.EMBEDDING_MODEL
     # rag 分组

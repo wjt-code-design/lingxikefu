@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # 使用 setdefault（而非强覆盖）：已注入的 hostname env（如容器内 postgres/redis/qdrant）优先，
 # 否则回退本机 localhost。防脏 env 覆盖 .env 真实值；容器内也能一次跑通。
-# 密钥不进代码：ZHIPU_API_KEY 由 .env / 环境提供，缺失时 llm_clients 报
+# 密钥不进代码：LONGCAT_API_KEY 由 .env / 环境提供，缺失时 llm_clients 报
 # ModelNotConfiguredError（fail-loud，不静默用默认值跑错 Key）。
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")

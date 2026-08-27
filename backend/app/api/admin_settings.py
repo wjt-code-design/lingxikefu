@@ -23,8 +23,9 @@ def get_admin_settings(_: dict = Depends(require_admin)) -> AdminSettingsResp:
         env=settings.ENV,
         model=ModelSettings(
             provider=settings.CHAT_PROVIDER,
-            model=settings.CHAT_MODEL,
-            fallback=settings.CHAT_MODEL_FALLBACK,
+            # 2026-08-27 全面取消其他平台：对话模型仅 LongCat，无备用模型（fallback=None）
+            model=settings.LONGCAT_CHAT_MODEL,
+            fallback=None,
             embedding_provider=settings.EMBEDDING_PROVIDER,
             embedding_model=settings.EMBEDDING_MODEL,
         ),

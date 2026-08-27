@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # 本机直跑兜底（setdefault：已注入的容器/真实 env 优先）。密钥一律不进代码——
-# 缺 ZHIPU_API_KEY 时由 llm_clients 报 ModelNotConfiguredError（fail-loud）。
+# 缺 LONGCAT_API_KEY 时由 llm_clients 报 ModelNotConfiguredError（fail-loud）。
 os.environ.setdefault("POSTGRES_HOST", "localhost")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")

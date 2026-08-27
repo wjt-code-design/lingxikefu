@@ -1,22 +1,17 @@
-"""LLM 客户端：chat / embedding / rerank 三统一入口（经 LiteLLM→百炼/智谱 + 本地 bge）。
+"""LLM 客户端：chat / embedding / rerank 统一入口（LongCat + 本地 bge）。
 
-- embedding：默认本地 bge-base-zh-v1.5（0 成本、不出境），可切百炼 text-embedding；
-- chat：OpenAI 兼容双 provider——bailian 通义千问（默认 qwen3.7-flash）/ zhipu 智谱 GLM-4.7，Key 走 env 注入；
+- embedding：本地 bge-base-zh-v1.5（0 成本、不出境，2026-08-27 取消百炼 embedding）；
+- chat：OpenAI 兼容单 provider——LongCat LongCat-2.0，Key 走 env 注入；
 - rerank：MVP 关闭，管线预留节点。
 """
 from app.llm_clients.chat import OpenAILikeChatClient, get_chat_client
-from app.llm_clients.embedding import (
-    BailianEmbeddingClient,
-    LocalEmbeddingClient,
-    get_embedding_client,
-)
+from app.llm_clients.embedding import LocalEmbeddingClient, get_embedding_client
 from app.llm_clients.rerank import get_rerank_client
 
 __all__ = [
     "OpenAILikeChatClient",
     "get_chat_client",
     "LocalEmbeddingClient",
-    "BailianEmbeddingClient",
     "get_embedding_client",
     "get_rerank_client",
 ]

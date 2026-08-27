@@ -17,7 +17,7 @@ from uuid import UUID
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("POSTGRES_DB", "lingxi")
-os.environ.setdefault("CHAT_PROVIDER", "zhipu")
+os.environ.setdefault("CHAT_PROVIDER", "longcat")
 
 from app.models.knowledge import Document, KnowledgeBase  # noqa: E402
 from app.services.knowledge_import_service import import_document  # noqa: E402

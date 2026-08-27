@@ -17,11 +17,8 @@ x-api-environment: &api-env
   QDRANT_API_KEY: ${QDRANT_API_KEY:-}
   JWT_SECRET: ${JWT_SECRET:-__CHANGE_ME__}
   LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-__CHANGE_ME__}
-  # chat provider：bailian / zhipu / longcat（LongCat 当前主用，.env 已配 LONGCAT_API_KEY）
+  # chat provider：仅 longcat（2026-08-27 全面取消百炼/智谱）
   CHAT_PROVIDER: ${CHAT_PROVIDER:-longcat}
-  CHAT_MODEL: ${CHAT_MODEL:-qwen3.7-flash-2026-07-15}
-  ZHIPU_BASE_URL: ${ZHIPU_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
-  ZHIPU_CHAT_MODEL: ${ZHIPU_CHAT_MODEL:-glm-4.5-air}
   LONGCAT_BASE_URL: ${LONGCAT_BASE_URL:-https://api.longcat.chat/openai}
   LONGCAT_CHAT_MODEL: ${LONGCAT_CHAT_MODEL:-LongCat-2.0}
   TENANT_DEFAULT: ${TENANT_DEFAULT:-default}
