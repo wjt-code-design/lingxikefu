@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import re
 import uuid
 
 import pytest
@@ -190,6 +191,20 @@ def test_suggest_passes_short_timeout_to_llm(client, monkeypatch):
     r = client.post(f"{API}/sessions/{SID}/suggest", json={"question": "超时契约测试问题"}, headers=_agent_h())
     assert r.status_code == 200
     assert seen["timeout"] == 25
+
+
+def test_suggest_frontend_timeout_above_backend_max():
+    """P2-⑤ 跨端契约：前端请求超时(35s)必须恒大于后端 LLM 最大耗时(25s)，
+    否则后端慢时会变成前端先超时假失败。防任一侧漂移破坏契约。"""
+    from pathlib import Path
+
+    ts = Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "sessions.ts"
+    assert ts.exists(), f"前端契约文件缺失: {ts}"
+    m = re.search(r"timeout:\s*([\d_]+)", ts.read_text(encoding="utf-8"))
+    assert m, "frontend/src/api/sessions.ts 需显式设置请求 timeout（契约保护）"
+    frontend_ms: int = int(m.group(1).replace("_", ""))
+    assert frontend_ms >= 35_000, f"前端超时 {frontend_ms}ms 低于契约 35s，坐席辅助会假失败"
+    assert frontend_ms > 25_000, f"前端超时 {frontend_ms}ms 未大于后端 LLM 最大耗时 25s"
 
 
 def test_suggest_cache_hit(client, monkeypatch):
