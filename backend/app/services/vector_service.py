@@ -77,6 +77,7 @@ def ensure_collection() -> int:
 
     hybrid 模式创建 named vectors（dense+sparse），纯 dense 模式维持旧结构。
     """
+    global _COLLECTIONS_CACHE  # 必须在创建后刷新模块级缓存（Bug A；缺 global 曾静默失效，单测实证）
     dim = get_embedding_client().dim
     name = get_collection_name()
     try:
@@ -94,6 +95,9 @@ def ensure_collection() -> int:
                     vectors_config={"size": dim, "distance": "Cosine"},
                 )
             logger.info("创建 Qdrant 集合 %s (dim=%s, hybrid=%s)", name, dim, settings.RAG_ENABLE_HYBRID)
+            # Bug A（2026-08-27 修复）：创建成功后必须刷新集合缓存——否则 60s TTL 内
+            # 紧接的"以为集合还不存在"的 ensure 会重复 PUT create → 409（eval 导入 12 文档 FAIL-IMPORT）
+            _COLLECTIONS_CACHE = None
             return dim
         info = client.get_collection(name)
         vector_params = info.config.params.vectors

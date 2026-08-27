@@ -86,12 +86,16 @@ def main() -> int:
 
     # 验证 Qdrant 向量数 == PG chunks 总数（按当前 KB 过滤；集合跨 KB 共享，不能数全集）
     try:
+        # Bug B（2026-08-27 修复）：计数集合必须与导入写入一致（get_collection_name，
+        # 受 RAG_ENABLE_HYBRID 控制）——此前硬编码 QDRANT_COLLECTION 在 hybrid 模式
+        # 下 count 旧集合 → 404 → return 2，eval 导入被误判失败
+        from app.services.vector_service import get_collection_name
         from qdrant_client import QdrantClient
         from qdrant_client.http.models import FieldCondition, Filter, MatchValue
 
         client = QdrantClient(url=settings.QDRANT_URL)
         count = client.count(
-            collection_name=settings.QDRANT_COLLECTION,
+            collection_name=get_collection_name(),
             exact=True,
             count_filter=Filter(
                 must=[FieldCondition(key="kb_id", match=MatchValue(value=str(kb.id)))]
