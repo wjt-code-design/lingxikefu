@@ -7,7 +7,7 @@
 """
 from __future__ import annotations
 
-from scripts.eval_faithfulness import _is_llm_refusal
+from scripts.eval_faithfulness import _is_llm_refusal, judge_qa
 
 
 def test_true_refusal_detected():
@@ -25,3 +25,29 @@ def test_cited_answer_not_refusal():
 def test_bare_refuse_word_not_enough():
     """裸"转人工"出现（可/如需）但非整段拒答话术时不判自拒。"""
     assert not _is_llm_refusal("退款已受理，如需进度查询可转人工客服")
+
+
+# ---------- judge_qa：并列多断言完整性判据（Q056/Q082 漏断言回归，2026-08-27） ----------
+
+
+def test_judge_qa_all_parallel_claims_pass():
+    """并列两分句全答 → 忠实（Q082 期望行为：未实际使用/已安装使用 两条都给）。"""
+    claims = ["未实际使用可无理由退货", "已安装使用的仅质量问题可退"]
+    ok, why = judge_qa("未实际使用的大家电可无理由退货；已安装使用的仅质量问题可退。", claims)
+    assert ok, why
+
+
+def test_judge_qa_missing_parallel_claim_fails():
+    """只答与提问字面最匹配的一句、漏并列兄弟句 → 不忠实（Q082 现实行为）。"""
+    claims = ["未实际使用可无理由退货", "已安装使用的仅质量问题可退"]
+    ok, _ = judge_qa("已安装使用的空调仅质量问题可退。", claims)
+    assert not ok
+
+
+def test_judge_qa_invoice_parallel_claims():
+    """发票并列断言：全答绿，只答"个人抬头"漏"企业专票"红（Q056 期望 vs 现实）。"""
+    claims = ["个人抬头仅可开电子普通发票", "企业抬头可开专票"]
+    ok, why = judge_qa("个人抬头仅可开电子普通发票；企业抬头可开具增值税专用发票。", claims)
+    assert ok, why
+    ok2, _ = judge_qa("个人抬头仅可开电子普通发票。", claims)
+    assert not ok2
