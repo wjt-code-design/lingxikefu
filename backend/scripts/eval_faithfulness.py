@@ -34,10 +34,15 @@ GT_FILE = BASE / "ground-truth.md"
 
 #: 拒答标志词（诚实性题正确表现）
 REFUSE_MARKERS = ("未收录", "转人工", "暂未", "暂无", "未明确", "没有找到", "未提供", "尚未")
+#: 诚实性"如实否定"话术（资料未覆盖实际能力时，明确否定式回答同样算拒答正确，
+#: e.g. Q061"支持花呗吗"→"目前不支持花呗或分期付款"，GT 期望如实告知不支持）
+NEGATION_MARKERS = ("不支持", "不提供", "未提供该", "无法", "不可用", "暂未开通")
 #: 判定时忽略的弱词（避免子串误命中）
 STOPWORDS = {"该", "信息", "资料", "建议", "处理", "规则", "说明", "具体", "相关", "可能", "根据", "平台", "政策"}
 
 _NUM_RE = re.compile(r"¥?\d+(?:\.\d+)?\s*(?:个?月|天|年|小时|分钟|日|层|%|元)?")
+#: 带单位数字（编造信号专用）：强化"必须带政策单位才视为编造"，裸序号/纯数字（如"1."）不算
+_NUM_POLICY_RE = re.compile(r"\d+(?:\.\d+)?\s*(?:个月|天|年|小时|分钟|日|层|%)")
 _CN_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
 
 
@@ -128,11 +133,14 @@ def judge_qa(answer: str, claims: list[str]) -> tuple[bool, str]:
 
 
 def judge_refuse(answer: str) -> tuple[bool, str]:
-    """诚实性题：含拒答标志且不含具体数字政策 → 拒答正确。"""
+    """诚实性题：含拒答标志（或否定式如实回答）且不含带单位的编造数字 → 拒答正确。"""
     if not any(m in answer for m in REFUSE_MARKERS):
-        return False, f"未拒答(无标志词): {answer[:60]}"
-    # 若编造了具体数字政策（如"7 天可退""12 个月"）→ 判定编造
-    nums = _NUM_RE.findall(answer)
+        # 资料未覆盖实际能力时，明确否定式回答（"不支持X / 不提供Y"）同样算合格拒答
+        if not any(m in answer for m in NEGATION_MARKERS):
+            return False, f"未拒答(无标志词): {answer[:60]}"
+    # 若编造了具体数字政策（如"7 天可退""12 个月"）→ 判定编造；
+    # 带单位才触发（2026-08-27 修复：裸数字/序号如"1."不再误判）
+    nums = _NUM_POLICY_RE.findall(answer)
     if nums:
         return False, f"拒答但含数字政策(疑编造): {nums[:5]} {answer[:60]}"
     return True, ""
@@ -234,7 +242,9 @@ async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
             "ok": ok,
             "why": why,
             "answer": answer[:80],
-            "cit": (cit_good, cit_total) if not cit_all_ok else None,
+            # 引用统计必须全量累计（合法题同样计入分母）——此前只在整题全合法时
+            # 置 None，导致分母只含失败题，引用合法率被系统性高估/失真（2026-08-27 实测）。
+            "cit": (cit_good, cit_total, cit_all_ok),
         }
     # 闲聊/转人工：有引导词即可
     ok = any(m in answer for m in ("人工", "客服", "解答", "咨询", "帮助"))
@@ -314,10 +324,10 @@ async def _run_faithfulness(db, kb_id: uuid.UUID, questions: list[dict], gt: dic
         else:
             fails.append(f"{res['qid']} [{kind}] {res['why']}")
         if res.get("cit"):
-            g0, t0 = res["cit"]
+            g0, t0, all_ok = res["cit"]
             cit_good += g0
             cit_total += t0
-            if g0 < t0:
+            if not all_ok and g0 < t0:
                 fails.append(f"{res['qid']} [cite] 引用不合法 {g0}/{t0}")
         tag = "PASS" if res["ok"] else "FAIL"
         print(f"  [{tag}] {res['qid']} ({kind}) {res['answer'][:60]}")

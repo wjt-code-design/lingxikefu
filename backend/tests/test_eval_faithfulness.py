@@ -7,7 +7,14 @@
 """
 from __future__ import annotations
 
-from scripts.eval_faithfulness import _is_llm_refusal, judge_qa
+from scripts.eval_faithfulness import _is_llm_refusal, judge_citations, judge_qa, judge_refuse
+
+
+class _Chunk:
+    """最小 chunk 桩：judge_citations 只读 .text。"""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
 
 
 def test_true_refusal_detected():
@@ -25,6 +32,46 @@ def test_cited_answer_not_refusal():
 def test_bare_refuse_word_not_enough():
     """裸"转人工"出现（可/如需）但非整段拒答话术时不判自拒。"""
     assert not _is_llm_refusal("退款已受理，如需进度查询可转人工客服")
+
+
+def test_negation_answer_counts_as_refuse():
+    """否定式如实回答（不含拒答话术）也算拒答正确（Q061 期望：如实告知不支持）。"""
+    ok, _ = judge_refuse("目前不支持花呗或分期付款。")
+    assert ok
+    ok2, _ = judge_refuse("该功能暂未开通，建议转人工客服处理。")
+    assert ok2
+
+
+def test_refuse_with_bare_number_not_fabrication():
+    """拒答话术后跟序号/裸数字（如"1."）不算编造数字政策（Q071 回归）。"""
+    ok, _ = judge_refuse("该信息资料未收录，建议转人工客服处理。如需了解相关权利请继续告诉我。")
+    assert ok
+
+
+def test_refuse_with_policy_number_is_fabrication():
+    """拒答话术内包含带单位数字（"7 天可退"）判定为编造。"""
+    ok, why = judge_refuse("该信息资料未收录，建议转人工客服处理。目前支持 7 天无理由退货。")
+    assert not ok
+    assert "编造" in why
+
+
+def test_judge_citations_counts_all_cited_points():
+    """引用统计分母 = 答案中全部 [来源N] 点数（2026-08-27 修统计偏置回归）。
+
+    此前 eval_one 只在整题全合法时才返回 cit，导致合法题不进分母，
+    引用合法率被系统性低估（48.3% 实为失败题内部合法率）。本测试锁定
+    judge_citations 的 count 是全量计数语义：合法与非法点都计入 total。
+    """
+    chunks = [
+        _Chunk("未实际使用的大家电可无理由退货；已安装使用的仅质量问题可退。"),
+        _Chunk("个人抬头仅可开电子普通发票；企业抬头可开具增值税专用发票。"),
+    ]
+    # 2 个引用点：来源1合法、来源2非法（句子与 chunk2 无关）
+    answer = "未实际使用的大家电可无理由退货 [来源1]。最新科技曲线 [来源2]。"
+    all_ok, good, total = judge_citations(answer, chunks)
+    assert total == 2
+    assert good == 1
+    assert all_ok is False
 
 
 # ---------- judge_qa：并列多断言完整性判据（Q056/Q082 漏断言回归，2026-08-27） ----------
