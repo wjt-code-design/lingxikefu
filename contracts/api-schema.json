@@ -3856,16 +3856,6 @@
             "minLength": 8,
             "title": "Password",
             "description": "至少 8 位，且同时包含字母和数字（D1 密码强度）"
-          },
-          "role": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UserRole"
-              },
-              {
-                "type": "null"
-              }
-            ]
           }
         },
         "type": "object",
