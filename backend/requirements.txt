@@ -47,3 +47,6 @@ ruff>=0.4,<1.0
 # pytest-asyncio 必须与 pyproject.toml asyncio_mode=auto 配套：CI 若缺失，
 # 全部 async def test_* 直接 Failed（pytest 不原生支持 async）→ Unit tests 整段红
 pytest-asyncio>=0.23,<2.0
+# fakeredis：conftest 用 session 级 fakeredis 兜底（API/session 测试不依赖真实 Redis）。
+# 之前漏声明导致 CI 全量收集中途 ModuleNotFoundError → Unit tests exit code 2（2026-08-27 修复）
+fakeredis>=2.26,<4.0

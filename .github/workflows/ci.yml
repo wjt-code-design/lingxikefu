@@ -94,6 +94,13 @@ jobs:
         run: pip install -r requirements.txt
       - name: Apply migrations (fresh PG)
         run: alembic upgrade head
+      # bge 预下载：seed_demo_data 与部分 pytest 需本地 embedding（bge-base-zh-v1.5），
+      # 全新 runner 无 HF 缓存且 embedding.py 以离线加载，缺缓存会 LocalEntryNotFoundError 秒崩
+      # （2026-08-27 实测 seed 阶段 8 处 huggingface 报错）。本 step 与 eval job 同款，不得设 HF_HUB_OFFLINE。
+      - name: Pre-download embedding model (bge-base-zh-v1.5)
+        run: python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-zh-v1.5'); print('bge model cached OK')"
+        env:
+          HF_HUB_DOWNLOAD_TIMEOUT: "60"
       # 订单集成回归（test_demo_orders.py）需要 KB 有订单 demo 数据；全新空库下脚本自动建 demo KB。
       # 幂等（sha256 去重），可安全在每次 CI 前执行。
       - name: Seed demo KB order data
