@@ -1,2 +1,2 @@
 tests/golden/answer_golden_set.txt: 86890fec7f5996839ee2dfdf0b685be6eb4397385abb19ec9a360b6542fda228
-tests/golden/route_eval_set.txt: 0639cd4180d3e719b64361a50cf23d030eed4c76dbeb8a1e118df6c7fec93e32
+tests/golden/route_eval_set.txt: 91c6e516c3e41386b32773236222939be50a7a214f2eb98e0910ef07cd56fb1a

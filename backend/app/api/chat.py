@@ -427,9 +427,11 @@ async def chat_stream(
                     # Router 已前置判定（与管线内 intent 节点同源，必然一致）；
                     # 兜底：若 ctx.ticket_id 为空（Router 未排入或建单失败降级），补建一次，
                     # 与既有行为对齐——任何情况下 handoff 都保证尝试过建单。
+                    # P4：统一 async 契约——await agent.run（内部阻塞经线程池），
+                    # 不再按 Agent 区分 run_in_threadpool/await 两种形态。
                     if intent == "handoff":
                         if ctx.ticket_id is None and TICKET_AGENT in ctx.agents_invoked:
-                            ctx = await run_in_threadpool(ticket_agent.run, ctx)
+                            ctx = await ticket_agent.run(ctx)
                         if ctx.ticket_id is None:
                             logger.warning("handoff 建单降级（degraded=%s）", ctx.degraded)
                         ticket_id = ctx.ticket_id

@@ -46,7 +46,8 @@ class SharedContext:
     image_descriptions: list[str] = field(default_factory=list)  # 多张图片的描述列表
     fused_query: str = ""
 
-    # QA Agent 写入（复用现有 RagResult，不造平行字段结构）
+    # chat 层（stream_answer）写入——QA 路径非 Agent 成员（对抗审查 2026-08-27，
+    # qa_agent 包装类已删；复用现有 RagResult，不造平行字段结构）
     rag_result: RagResult | None = None
 
     # Ticket Agent 写入
@@ -59,6 +60,6 @@ class SharedContext:
 # | trace_id                              | chat 层     | Router、各 Agent、日志、SSE done |
 # | 输入区（query/kb_*/session_*/history） | chat 层     | Router、各 Agent     |
 # | intent / agents_invoked / degraded    | Router      | 各 Agent、chat 层    |
-# | image_desc / fused_query              | Image Agent | QA Agent、Router     |
-# | rag_result                            | QA Agent    | Router、chat 层      |
+# | image_desc / fused_query              | Image Agent | Router、chat 层      |
+# | rag_result                            | chat 层      | Router、chat 层      |
 # | ticket_id                             | Ticket Agent| Router、chat 层      |

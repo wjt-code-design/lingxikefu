@@ -50,7 +50,13 @@ def parse_golden_line(line: str) -> tuple[str, list[str], str] | None:
         return None
 
     query, agents_str, intent = parts
-    expected_agents = [a.strip() for a in agents_str.split(",")]
+    # P4（对抗审查 2026-08-27）：计划只说真话——纯 qa/chitchat 无 Agent 编排，
+    # 黄金集用 `-` 哨兵表示空计划（`""`.split(",") 会产出 [""] 导致误判）
+    expected_agents = [
+        a.strip()
+        for a in agents_str.split(",")
+        if a.strip() and a.strip() != "-"
+    ]
 
     return query, expected_agents, intent
 
