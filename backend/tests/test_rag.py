@@ -10,7 +10,6 @@ from uuid import uuid4
 import pytest
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.rag_service import (
-    RagError,
     classify_intent,
     run_pipeline,
     stream_answer,
@@ -110,15 +109,17 @@ def test_pipeline_no_chunks_refuses(patch, monkeypatch):
     assert r.refuse is True
 
 
-def test_pipeline_retrieval_error_raises(patch, monkeypatch):
+def test_pipeline_retrieval_error_degrades_to_refuse(patch, monkeypatch):
+    """P2-1：检索不可用 → 降级为诚实拒答（fail-open，不再抛 RagError）。"""
     from app.services.retrieval_service import RetrievalError
 
     def boom(*_a, **_k):
         raise RetrievalError("Qdrant 挂了")
 
     monkeypatch.setattr("app.services.retrieval_service.search_kb", boom)
-    with pytest.raises(RagError, match="检索不可用"):
-        run_pipeline("退货运费", uuid4())
+    r = run_pipeline("退货运费", uuid4())
+    assert r.refuse is True
+    assert r.retrieve_degraded is True  # 与"无依据"区分（运营可辨识为基建退化）
 
 
 # --- prompt ---
@@ -188,7 +189,8 @@ async def test_stream_answer_refuse_no_llm(patch, monkeypatch):
     assert patch.calls == []  # 拒答不调 LLM
 
 
-async def test_stream_answer_error_event(patch, monkeypatch):
+async def test_stream_answer_retrieval_error_degrades_to_refusal(patch, monkeypatch):
+    """P2-1：检索不可用 → 不发 error 帧，降级为拒答事件流（token=引导转人工 + done）。"""
     from app.services.retrieval_service import RetrievalError
 
     def boom(*_a, **_k):
@@ -196,12 +198,18 @@ async def test_stream_answer_error_event(patch, monkeypatch):
 
     monkeypatch.setattr("app.services.retrieval_service.search_kb", boom)
     events = [e async for e in stream_answer("退货运费", uuid4())]
-    assert events[0][0] == "error"
-    assert events[0][1]["code"] == "RAG_RETRIEVAL"
+    types = [t for t, _ in events]
+    assert "error" not in types
+    assert types[0] == "intent"
+    assert events[0][1] == {"intent": "qa", "refuse": True}  # 拒答标志
+    assert types[-1] == "done"
+    answer = "".join(d["delta"] for t, d in events if t == "token")
+    assert "转人工" in answer  # 降级话术可操作（引导人工）
+    assert patch.calls == []  # 降级不调 LLM
 
 
-async def test_stream_answer_error_msg_no_qdrant_url(patch, monkeypatch):
-    """P2-④：SSE error frame 的 message 不得透传内部 QDRANT_URL（防御：即便异常带 URL 也截断）。"""
+async def test_stream_answer_retrieval_error_no_qdrant_url_leak(patch, monkeypatch):
+    """P2-1+P2-④：降级拒答流中的任何字段不得透传内部 QDRANT_URL（防御：即便异常带 URL 也截断）。"""
     from app.core.config import settings
     from app.services.retrieval_service import RetrievalError
 
@@ -210,9 +218,9 @@ async def test_stream_answer_error_msg_no_qdrant_url(patch, monkeypatch):
 
     monkeypatch.setattr("app.services.retrieval_service.search_kb", boom)
     events = [e async for e in stream_answer("退货运费", uuid4())]
-    assert events[0][0] == "error"
-    assert events[0][1]["code"] == "RAG_RETRIEVAL"
-    assert settings.QDRANT_URL not in events[0][1]["message"]
+    for event_type, data in events:
+        payload = str(data)
+        assert settings.QDRANT_URL not in payload, f"{event_type} 泄漏内部 URL"
 
 
 async def test_stream_answer_does_not_force_bailian_model_when_provider_is_zhipu(patch, monkeypatch):

@@ -1,10 +1,11 @@
-"""PipelineRunner 编排核心测试：覆盖执行、重试、条件短路。"""
+"""PipelineRunner 编排核心测试：覆盖执行、重试、条件短路、时间预算。"""
 from __future__ import annotations
 
+import time
 from uuid import uuid4
 
 import pytest
-from app.orchestrator import PipelineRunner
+from app.orchestrator import PipelineRunner, PipelineTimeoutError
 from app.services.pipeline import Pipeline
 
 # ---------------------------------------------------------------------------
@@ -79,6 +80,25 @@ class TestPipelineRunnerRetry:
         runner = PipelineRunner(retry=1)
         runner.run(base_pipeline, [n])
         assert n.call_count["n"] == 1
+
+
+class TestPipelineRunnerTimeout:
+    """P2-3：整体时间预算——超限抛 PipelineTimeoutError，后续节点不再执行。"""
+
+    def test_budget_exceeded_raises_timeout_and_stops_chain(self, base_pipeline: Pipeline):
+        slow = _mk_node("slow", side_effect=lambda _p: time.sleep(0.02))
+        after = _mk_node("should_not_run")
+        runner = PipelineRunner(retry=0, time_budget=0.001)
+        with pytest.raises(PipelineTimeoutError):
+            runner.run(base_pipeline, [slow, after])
+        assert after.call_count["n"] == 0  # 预算超限后不再启动后续节点
+
+    def test_default_budget_does_not_break_fast_pipeline(self, base_pipeline: Pipeline):
+        n1 = _mk_node("node_a")
+        n2 = _mk_node("node_b")
+        runner = PipelineRunner(retry=0)  # 默认 20s 预算
+        result = runner.run(base_pipeline, [n1, n2])
+        assert [s["name"] for s in result.stages] == ["node_a", "node_b"]
 
 
 class TestPipelineSerialization:

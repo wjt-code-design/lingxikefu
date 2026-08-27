@@ -6,7 +6,9 @@
 - intent 用规则式（轻量、省 LLM 调用）：闲聊/转人工关键词命中即短路，
   不再调 LLM 做意图分类（单租户客服场景关键词足够）。
 - 诚实性：检索 top-1 分数低于阈值 → 拒答提示转人工，绝不编造（fail-closed）。
-- 所有 RAG 阶段错误抛 RagError，由 Chat 层转 SSE error 事件。
+- P2-1：检索不可用/管线超时（RetrievalError/PipelineTimeoutError）→ fail-open 降级为
+  诚实拒答（retrieve_degraded=True），不再抛 RagError 转 error 事件——
+  用户得到可操作引导（转人工），而非"服务暂不可用"；RagError 仅留作防御性兜底。
 """
 from __future__ import annotations
 
@@ -19,6 +21,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from app.core.config import settings
 from app.llm_clients.chat import get_chat_client
+from app.orchestrator import PipelineTimeoutError
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.clarify import ClarifyError, generate_clarify
 from app.services.pipeline import Pipeline
@@ -74,6 +77,7 @@ class RagResult:
     cached_answer: str = ""  # T10：缓存答案全文
     cached_sources: list[dict] = field(default_factory=list)  # T10：缓存 sources（含 doc_title）
     rewritten_query: str = ""  # T9：检索/缓存 key 用的改写后文本
+    retrieve_degraded: bool = False  # P2-1：检索不可用/管线超时被降级（fail-open 拒答路径）
 
 
 def classify_intent(query: str) -> str:
@@ -120,8 +124,17 @@ def run_pipeline(query: str, kb_id: UUID, top_k: int | None = None, history: lis
     try:
         pipeline = Pipeline(query=query, kb_id=kb_id, history=history or [], kb_version=kb_version)
         pipeline = _build_pipeline(pipeline)
-    except RetrievalError as e:
-        raise RagError(f"检索不可用: {e}") from e
+    except (RetrievalError, PipelineTimeoutError) as e:
+        # P2-1：检索不可用 / 管线时间预算用尽 → 降级为诚实拒答（fail-open），
+        # 不把整条问答链打成 error 事件——用户得到可操作的引导，而非"服务暂不可用"。
+        # 内部重试已在 Runner 内完成（retry=1），走到这里即重试后仍失败。
+        logger.warning("检索/管线不可用，降级拒答引导转人工: %s", e)
+        return RagResult(
+            intent="qa",
+            refuse=True,
+            refuse_reason="检索服务暂不可用",
+            retrieve_degraded=True,
+        )
 
     # 映射回 RagResult（chat.py 现有调用不变）
     return RagResult(
@@ -170,7 +183,9 @@ async def stream_answer(
             run_pipeline, query, kb_id, top_k=top_k, history=history, kb_version=kb_version
         )
     except RagError:
-        # P2-④：对外 SSE 只给通用文案，不转发原始异常（内网地址/细节可能被注入）
+        # 防御性兜底（P2-1 后 run_pipeline 已 fail-open 降级，正常不再触发）：
+        # 一旦未来回归抛 RagError，对外 SSE 仍只给通用文案，不转发原始异常
+        # （内网地址/细节可能被注入）。
         logger.exception("RAG 检索/管线失败")
         yield ("error", {"code": "RAG_RETRIEVAL", "message": "知识库检索暂不可用，请稍后重试"})
         return
@@ -179,21 +194,24 @@ async def stream_answer(
     # 澄清分支自带完整事件序列（intent 不标拒答），故须在统一 intent 事件之前，
     # 且所有 yield 均在 generate_clarify 成功之后——异常时无半截流。
     if result.refuse and result.intent == "qa" and (clarify_left or 0) > 0:
-        try:
-            question = await generate_clarify(query, result.chunks)
-            yield ("intent", {"intent": "qa", "refuse": False})
-            yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
-            yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
-            # 大扫查O3：整段单 token 下发（与订单工具分支同构）——8 字分片会把
-            # 「订单号」等实体词拆散到相邻 SSE 事件，前端逐帧渲染出现断裂观感。
-            yield ("token", {"delta": question})
-            yield ("sources", {"sources": []})
-            yield ("done", {"message_id": "", "clarify": True})
-            return
-        except ClarifyError as e:
-            logger.warning("澄清问句生成失败（%s），落回原拒答路径", e)
-        except Exception:  # noqa: BLE001 - 意外异常同样 fail-open 回退，不产生半截流
-            logger.exception("澄清问句生成意外异常，落回原拒答路径")
+        # P2-1：检索降级时跳过澄清——澄清是"材料足够但要细节"的对话，检索不可用
+        # 时应收敛到可操作的降级话术（引导转人工），而不是假装正常地追问细节。
+        if not result.retrieve_degraded:
+            try:
+                question = await generate_clarify(query, result.chunks)
+                yield ("intent", {"intent": "qa", "refuse": False})
+                yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
+                yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
+                # 大扫查O3：整段单 token 下发（与订单工具分支同构）——8 字分片会把
+                # 「订单号」等实体词拆散到相邻 SSE 事件，前端逐帧渲染出现断裂观感。
+                yield ("token", {"delta": question})
+                yield ("sources", {"sources": []})
+                yield ("done", {"message_id": "", "clarify": True})
+                return
+            except ClarifyError as e:
+                logger.warning("澄清问句生成失败（%s），落回原拒答路径", e)
+            except Exception:  # noqa: BLE001 - 意外异常同样 fail-open 回退，不产生半截流
+                logger.exception("澄清问句生成意外异常，落回原拒答路径")
 
     # R-2：真实意图事件（chat 层据此落库 message.intent，不再写死 qa）
     yield ("intent", {"intent": result.intent, "refuse": result.refuse})
@@ -243,6 +261,9 @@ async def stream_answer(
 
 
 def _no_llm_reply(result: RagResult) -> str:
+    if result.retrieve_degraded:
+        # P2-1：检索服务不可用（区别于"无依据"）——给用户可操作引导
+        return "知识库检索服务暂时不可用，请稍后重试；如急需处理，可转人工客服帮您解决。"
     if result.intent == "handoff":
         return "很抱歉给您带来不好的体验。已为您转接人工客服，请稍候；您也可以描述具体问题，我会先尽力帮您解决。"
     if result.intent == "chitchat":

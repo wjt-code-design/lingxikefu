@@ -35,6 +35,7 @@ from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.services import conversation_state
+from app.services.agent_metrics import drain_degraded
 from app.services.agents.image_agent import ImageAgent
 from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
 from app.services.agents.router import router as agent_router
@@ -537,5 +538,9 @@ async def chat_stream(
             logger.exception("chat stream 处理异常")
             quota.refund(str(user_id), 1, req.client_msg_id)  # R2：异常未完成 → 回滚配额
             yield _sse({"event": "error", "data": {"code": "SYS_ERROR", "message": "服务异常，请稍后重试"}})
+        finally:
+            # P2-2：Agent 降级排水——正常结束/断连/异常全路径统一计数 + 结构化日志
+            # （防静默改路径：降级率从此可统计、可告警）
+            drain_degraded(ctx.degraded, trace_id=trace_id)
 
     return StreamingResponse(gen(), media_type="text/event-stream")
