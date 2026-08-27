@@ -132,6 +132,27 @@ class TestOpenAILikeChat:
         assert captured["headers"]["Authorization"] == "Bearer unit-zhipu-key"
         assert captured["body"]["model"] == "glm-5.1"
 
+    def test_longcat_complete_httpx(self, monkeypatch):
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
+        monkeypatch.setattr(settings, "LONGCAT_BASE_URL", "https://longcat.test/openai")
+        monkeypatch.setattr(settings, "LONGCAT_CHAT_MODEL", "LongCat-2.0")
+        captured: dict = {}
+        monkeypatch.setattr(httpx.AsyncClient, "post", self._fake_post(captured))
+
+        import asyncio
+
+        client = OpenAILikeChatClient("longcat")
+        out = asyncio.run(client.complete([{"role": "user", "content": "hi"}]))
+        assert out == "你好，我是客服"
+        assert captured["url"] == "https://longcat.test/openai/chat/completions"
+        assert captured["headers"]["Authorization"] == "Bearer unit-longcat-key"
+        assert captured["body"]["model"] == "LongCat-2.0"
+
+    def test_longcat_no_key_raises_actionable_error(self, monkeypatch):
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", None)
+        with pytest.raises(ModelNotConfiguredError, match="LONGCAT_API_KEY"):
+            OpenAILikeChatClient("longcat")._api_key()
+
 
 class TestChatRouting:
     def test_routes_by_provider(self, monkeypatch):
@@ -139,6 +160,11 @@ class TestChatRouting:
         get_chat_client.cache_clear()
         assert isinstance(get_chat_client(), OpenAILikeChatClient)
         assert get_chat_client().provider == "zhipu"
+
+        monkeypatch.setattr(settings, "CHAT_PROVIDER", "longcat")
+        get_chat_client.cache_clear()
+        assert isinstance(get_chat_client(), OpenAILikeChatClient)
+        assert get_chat_client().provider == "longcat"
 
         monkeypatch.setattr(settings, "CHAT_PROVIDER", "bailian")
         get_chat_client.cache_clear()

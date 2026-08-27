@@ -1,7 +1,8 @@
-"""Chat 客户端：OpenAI 兼容端点直连（百炼 / 智谱双 provider，httpx 实现）。
+"""Chat 客户端：OpenAI 兼容端点直连（百炼 / 智谱 / LongCat 多 provider，httpx 实现）。
 
-- ``CHAT_PROVIDER=bailian``（默认）：通义千问 qwen3.7-flash，Key 读 DASHSCOPE_API_KEY；
-- ``CHAT_PROVIDER=zhipu``：智谱 GLM（glm-4.7），Key 读 ZHIPU_API_KEY（百炼额度耗尽时的备选）。
+- ``CHAT_PROVIDER=bailian``：通义千问 qwen3.7-flash，Key 读 DASHSCOPE_API_KEY；
+- ``CHAT_PROVIDER=zhipu``：智谱 GLM（glm-4.7），Key 读 ZHIPU_API_KEY（历史备选）；
+- ``CHAT_PROVIDER=longcat``：LongCat LongCat-2.0，Key 读 LONGCAT_API_KEY（当前主用）。
 - 用 httpx 直连（不用 litellm）：litellm 在 Windows 对中文消息序列化有 ascii codec bug；
   httpx 显式 ``content=json.dumps(..., ensure_ascii=False).encode('utf-8')`` 保证 UTF-8。
 - Key 缺失时抛可操作错误（不静默）。
@@ -21,10 +22,13 @@ from app.llm_clients.base import ChatClient, ModelNotConfiguredError
 
 logger = logging.getLogger(__name__)
 
+# provider 白名单：新增 provider 必须同时更新此处与 config 注释
+_VALID_PROVIDERS = ("bailian", "zhipu", "longcat")
+
 #: 流式默认 60s（边收边发足够）；非流式 complete 用 120s（推理模型长回答 + 慢网络兜底）
 _TIMEOUT = httpx.Timeout(60.0, connect=10.0)
 _COMPLETE_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
-#: 429/5xx 重试 1 次（间隔 2s）：智谱/百炼 TPM 限流是分钟级窗口，偶发 429 重试可自愈
+#: 429/5xx 重试 1 次（间隔 2s）：限流是分钟级窗口，偶发 429 重试可自愈
 _RETRY_STATUS = {429, 500, 502, 503}
 
 
@@ -34,30 +38,40 @@ class OpenAILikeChatClient(ChatClient):
     def __init__(self, provider: str) -> None:
         # provider 必须显式传入（配置单一真源，禁止代码内第二份默认值）；
         # 非法值 fail-closed，避免 else 分支把未知 provider 静默当 bailian。
-        if provider not in ("bailian", "zhipu"):
+        if provider not in _VALID_PROVIDERS:
             raise ModelNotConfiguredError(
-                f"chat provider 非法值: {provider!r}（可选: bailian / zhipu，由 CHAT_PROVIDER 配置）"
+                f"chat provider 非法值: {provider!r}（可选: {' / '.join(_VALID_PROVIDERS)}，由 CHAT_PROVIDER 配置）"
             )
         self.provider = provider
 
     # --- provider 配置 ---
     def _api_key(self) -> str:
         if self.provider == "zhipu":
-            key = settings.ZHIPU_API_KEY
-            err = "chat(provider=zhipu) 需要配置 ZHIPU_API_KEY（后端 .env 的 ZHIPU_API_KEY= 一行）"
+            key, env = settings.ZHIPU_API_KEY, "ZHIPU_API_KEY"
+        elif self.provider == "longcat":
+            key, env = settings.LONGCAT_API_KEY, "LONGCAT_API_KEY"
         else:
-            key = settings.DASHSCOPE_API_KEY
-            err = "chat(provider=bailian) 需要配置 DASHSCOPE_API_KEY（后端 .env 的 DASHSCOPE_API_KEY= 一行）"
+            key, env = settings.DASHSCOPE_API_KEY, "DASHSCOPE_API_KEY"
         if not key:
-            raise ModelNotConfiguredError(err + "，当前为空")
+            raise ModelNotConfiguredError(
+                f"chat(provider={self.provider}) 需要配置 {env}（后端 .env 的 {env}= 一行），当前为空"
+            )
         return key
 
     def _api_url(self) -> str:
-        base = settings.ZHIPU_BASE_URL if self.provider == "zhipu" else settings.DASHSCOPE_BASE_URL
+        base = {
+            "zhipu": settings.ZHIPU_BASE_URL,
+            "longcat": settings.LONGCAT_BASE_URL,
+            "bailian": settings.DASHSCOPE_BASE_URL,
+        }[self.provider]
         return base.rstrip("/") + "/chat/completions"
 
     def _default_model(self) -> str:
-        return settings.ZHIPU_CHAT_MODEL if self.provider == "zhipu" else settings.CHAT_MODEL
+        return {
+            "zhipu": settings.ZHIPU_CHAT_MODEL,
+            "longcat": settings.LONGCAT_CHAT_MODEL,
+            "bailian": settings.CHAT_MODEL,
+        }[self.provider]
 
     def _request(self, payload: dict) -> tuple[dict, bytes]:
         """统一请求头与 UTF-8 请求体（stream/complete 共用）。
@@ -199,8 +213,10 @@ class FallbackChatClient(ChatClient):
 @lru_cache(maxsize=1)
 def get_chat_client() -> ChatClient:
     provider = settings.CHAT_PROVIDER.lower()
-    if provider not in ("bailian", "zhipu"):
-        raise ModelNotConfiguredError(f"CHAT_PROVIDER 非法值: {provider!r}（可选: bailian / zhipu）")
+    if provider not in _VALID_PROVIDERS:
+        raise ModelNotConfiguredError(
+            f"CHAT_PROVIDER 非法值: {provider!r}（可选: {' / '.join(_VALID_PROVIDERS)}）"
+        )
     primary = OpenAILikeChatClient(provider)
     if provider == "bailian":
         # 百炼免费额度（每模型 100 万 token，用完即止不重置）耗尽返回 403，

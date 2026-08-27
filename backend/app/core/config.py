@@ -98,8 +98,8 @@ class Settings(BaseSettings):
     # --- LiteLLM 网关（百炼 Key 由网关 env/KMS 注入，禁止直写真实值） ---
     LITELLM_MASTER_KEY: str = PLACEHOLDER_SECRET
 
-    # --- 模型（ADR-3：百炼 + LiteLLM；embedding 本地 bge 优先，可切百炼） ---
-    # chat provider：bailian（默认）/ zhipu（智谱 GLM，百炼额度耗尽时的备选）
+    # --- 模型（ADR-3：百炼/LongCat + LiteLLM；embedding 本地 bge 优先，可切百炼） ---
+    # chat provider：bailian（长文本）/ zhipu（智谱 GLM，旧备选）/ longcat（LongCat，当前主用）
     CHAT_PROVIDER: str = "bailian"
     # chat 主模型：客服高频问答用 flash 档（快 + 便宜），max 档仅降级/复杂任务
     CHAT_MODEL: str = "qwen3.7-flash-2026-07-15"
@@ -112,6 +112,10 @@ class Settings(BaseSettings):
     ZHIPU_API_KEY: str | None = None
     ZHIPU_BASE_URL: str = "https://open.bigmodel.cn/api/paas/v4"
     ZHIPU_CHAT_MODEL: str = "glm-5.1"
+    # LongCat API（OpenAI 兼容端点）；CHAT_PROVIDER=longcat 时生效。Key 只经 env 注入，严禁提交。
+    LONGCAT_API_KEY: str | None = None
+    LONGCAT_BASE_URL: str = "https://api.longcat.chat/openai"
+    LONGCAT_CHAT_MODEL: str = "LongCat-2.0"
     # 火山引擎（视觉模型）：Image Agent 图片理解
     VOLCENGINE_API_KEY: str | None = None
     VOLCENGINE_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
