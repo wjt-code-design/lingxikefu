@@ -8,7 +8,8 @@
 from __future__ import annotations
 
 import pytest
-from scripts.smoke_import import _count_doc_points, _doc_vector_integrity
+from app.models.knowledge import DocumentStatus
+from scripts.smoke_import import _count_doc_points, _doc_vector_integrity, _skip_or_repair
 
 
 class _CountRes:
@@ -45,6 +46,12 @@ class _FakeQuery:
         return self._pg
 
 
+class _FakeDoc:
+    def __init__(self, status: DocumentStatus) -> None:
+        self.status = status
+        self.id = "doc-1"
+
+
 def test_count_doc_points_filters_by_kb_and_doc() -> None:
     client = _FakeQdrant(3)
     n = _count_doc_points(client, "lingxi_hybrid_bge_768", "kb-1", "doc-1")
@@ -64,3 +71,19 @@ def test_integrity_matching_returns_true(monkeypatch: pytest.MonkeyPatch) -> Non
 def test_integrity_missing_vectors_returns_false(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("scripts.smoke_import._count_doc_points", lambda _c, _col, _k, _d: 0)
     assert _doc_vector_integrity(_FakeDb(2), "kb-1", "doc-1") is False
+
+
+def test_skip_indexed_and_complete(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.smoke_import._doc_vector_integrity", lambda _db, _k, _d: True)
+    assert _skip_or_repair(_FakeDoc(DocumentStatus.indexed), None, "kb-1") is True
+
+
+def test_repair_indexed_but_missing_vectors(monkeypatch: pytest.MonkeyPatch) -> None:
+    """indexed 但向量缺失（历史事故主场景）→ 需 REPAIR，不 SKIP。"""
+    monkeypatch.setattr("scripts.smoke_import._doc_vector_integrity", lambda _db, _k, _d: False)
+    assert _skip_or_repair(_FakeDoc(DocumentStatus.indexed), None, "kb-1") is False
+
+
+def test_repair_failed_stub_doc() -> None:
+    """failed stub（chunks=0/vec=0）不得误判为可 SKIP——否则自愈被卡死（实测）。"""
+    assert _skip_or_repair(_FakeDoc(DocumentStatus.failed), None, "kb-1") is False

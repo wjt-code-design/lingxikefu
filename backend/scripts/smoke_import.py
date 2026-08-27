@@ -63,6 +63,18 @@ def _doc_vector_integrity(db, kb_id, doc_id) -> bool:
     return points == pg
 
 
+def _skip_or_repair(existing, db, kb_id) -> bool:
+    """幂等命中后是否可直接 SKIP（返回 True=向量完整可跳过）。
+
+    兜底两条（2026-08-27 实测事故）：
+    - indexed 但向量不完整（部分 chunk 写入失败）→ 需 REPAIR；
+    - status 非 indexed（failed stub，chunks=0/vec=0 会被完整性误判"齐"）→ 需 REPAIR。
+    """
+    if existing.status != DocumentStatus.indexed:
+        return False
+    return _doc_vector_integrity(db, kb_id, existing.id)
+
+
 def main() -> int:
     db = SessionLocal()
     kb_repo = KnowledgeBaseRepository(db)
@@ -90,14 +102,17 @@ def main() -> int:
         content = f.read_bytes()
         sha = hashlib.sha256(content).hexdigest()
         existing = doc_repo.get_by_sha256(kb.id, sha)
+        if existing and _skip_or_repair(existing, db, kb.id):
+            print(f"  [SKIP] {f.name} (sha256 重复)")
+            skipped += 1
+            continue
         if existing:
-            if _doc_vector_integrity(db, kb.id, existing.id):
-                print(f"  [SKIP] {f.name} (sha256 重复)")
-                skipped += 1
-                continue
             # 2026-08-27 历史事故兜底：首次导入部分向量缺失而 doc 仍 indexed，
-            # 幂等 skip 会让缺向量永远补不齐 → 检出后删记录强制重导（import_document 幂等清残向量）。
-            print(f"  [REPAIR] {f.name} 幂等命中但向量不完整，强制重导")
+            # 幂等 skip 会让缺向量永远补不齐 → 检出后强制重导（import_document 幂等清残向量）。
+            # 非 indexed（failed）一并重导：failed doc chunks=0/vec=0 会被完整性误判为"齐"，
+            # 修复前会被 SKIP 挡住，自愈被 stub doc 卡死（实测：REPAIR 重导失败留下 failed stub）。
+            reason = "status 非 indexed" if existing.status != DocumentStatus.indexed else "向量不完整"
+            print(f"  [REPAIR] {f.name} 幂等命中但{reason}，强制重导")
             db.query(Chunk).filter_by(kb_id=kb.id, doc_id=existing.id).delete(synchronize_session=False)
             db.delete(existing)
             db.commit()
