@@ -253,6 +253,11 @@ jobs:
           context: backend
           push: false
           tags: lingxi-backend:ci
+      # docker-compose 的 api/migrate/worker 引用 env_file `- .env`（被 gitignore，CI 不存在），
+      # 直接 compose config 会因缺文件报错。用 .env.example（全占位符）生成一个仅用于语法校验。
+      - name: Prep .env for compose validation
+        working-directory: backend
+        run: cp .env.example .env
       - name: Validate docker-compose
         working-directory: backend
         run: docker compose config --quiet
