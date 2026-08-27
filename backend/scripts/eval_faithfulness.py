@@ -34,8 +34,6 @@ GT_FILE = BASE / "ground-truth.md"
 
 #: 拒答标志词（诚实性题正确表现）
 REFUSE_MARKERS = ("未收录", "转人工", "暂未", "暂无", "未明确", "没有找到", "未提供", "尚未")
-#: LLM 主动拒答文案标志（qa 题模型答"未收录"时用，区别于管线 refuse）
-LLM_REFUSE_MARKERS = ("未收录", "转人工", "没有找到")
 #: 判定时忽略的弱词（避免子串误命中）
 STOPWORDS = {"该", "信息", "资料", "建议", "处理", "规则", "说明", "具体", "相关", "可能", "根据", "平台", "政策"}
 
@@ -140,6 +138,21 @@ def judge_refuse(answer: str) -> tuple[bool, str]:
     return True, ""
 
 
+def _is_llm_refusal(answer: str) -> bool:
+    """LLM 主动拒答判定（收窄版，2026-08-27 修 Q082 假阳性）。
+
+    历史实现用裸子串 ("未收录","转人工","没有找到") 匹配，会把正常回答尾部的
+    "如需…可转人工客服" 引导语误判为自拒 → 假"误拒答"。收紧为：
+    - 含整段拒答话术（未收录/没有找到/建议转人工/暂未收录 等），"转人工"裸词不再生效；
+    - 且不含 [来源N] 引用（有引用的正常回答必带出处，拒答话术不带）。
+    例：Q082 "空调已安装使用…可退 [来源2]。如需协助可转人工客服" → 有 [来源 → 判为作答，
+    如实归位为 qa 漏点而非"误拒答"。
+    """
+    if "[来源" in answer:
+        return False
+    return any(u in answer for u in ("未收录", "没有找到", "建议转人工", "暂未", "尚未"))
+
+
 def _chunks_have_answer(chunks, claims: list[str]) -> bool:
     """检索结果是否含 GT 任一断言的核心信息（判断 LLM 拒答是否合理）。
 
@@ -209,7 +222,7 @@ async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
     if q["intent"] == "qa":
         # 正常题拒答（管线 refuse 或 LLM 主动拒答）：不编造=忠实，但可用性差。
         # 从 faithfulness 分母排除，单列 refuse_qa 统计（合理拒答=资料真没有；误拒答=资料有仍拒）。
-        if r.refuse or any(m in answer for m in LLM_REFUSE_MARKERS):
+        if r.refuse or _is_llm_refusal(answer):
             if gt and _chunks_have_answer(r.chunks, gt["claims"]):
                 return {"qid": q["qid"], "kind": "refuse_qa", "ok": False, "why": "误拒答(资料含答案仍拒答)", "answer": answer[:80]}
             return {"qid": q["qid"], "kind": "refuse_qa", "ok": True, "why": "合理拒答(资料未含答案)", "answer": answer[:80]}
