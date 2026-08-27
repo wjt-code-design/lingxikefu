@@ -264,18 +264,18 @@ jobs:
 
 
   # ═══════════════════════════════════════════════════════════════════
-  # P1-③ 评测门禁（2026-08-26 落地）：report-only 阶段
-  # 背景：P1-② 基线复现后 faithfulness/recall 无 CI 门禁，靠人肉跑脚本易回归。
-  # 当前 air 结果（qa 82.1% / refuse 87.5% / 引用 21.4%）未达契约阈值
-  # （85% / 90% / 95%），故本 job 先 report-only（continue-on-error=true），
-  # 只报告不阻塞；优化达标后移除 continue-on-error 转硬门禁（block）。
+  # P1-③ 评测门禁（2026-08-26 落地 report-only；2026-08-27 转硬门禁）
+  # 契约阈值：recall@5 ≥ 85%（eval_recall）、问答 faithfulness ≥ 85% 且
+  # 诚实性拒答率 ≥ 90%（eval_faithfulness）；任一未达或 step 未执行 → job 失败 → 阻断 CI。
+  # 历史教训（2026-08-27）：曾用 continue-on-error + `|| echo 警告` 吞错，导致
+  # faithfulness 在 CI 全题 ModelNotConfiguredError（CHAT_PROVIDER 默认 bailian 缺
+  # DASHSCOPE_API_KEY）也显示"绿"——假绿。故转硬门禁时固定 CHAT_PROVIDER=zhipu 并去吞错。
   # 数据源全在仓库内：eval-and-samples/（评测集）+ kb/ + kb-pdf/（知识库），
-  # 与生产 KB 同源（smoke_import 导入）；唯一外部依赖=LLM key，经 GitHub
-  # Secrets(ZHIPU_API_KEY) 注入，未配置时 faithfulness 自动跳过并告警。
+  # 与生产 KB 同源（smoke_import 导入）。LLM 走智谱 GLM，Key 经 GitHub
+  # Secrets(ZHIPU_API_KEY) 注入；未配置 key 时 faithfulness step 显式失败（没跑=不过）。
   eval:
-    name: Eval gate (report-only)
+    name: Eval gate (hard)
     runs-on: ubuntu-latest
-    continue-on-error: true
     services:
       postgres:
         image: postgres:16-alpine
@@ -320,6 +320,9 @@ jobs:
       JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
       LITELLM_MASTER_KEY: ci-test-litellm-master-key-0123456789abcdef0123456789abcdef
       ZHIPU_API_KEY: ${{ secrets.ZHIPU_API_KEY }}
+      # 评测 LLM 固定走智谱（默认 bailian 需 DASHSCOPE_API_KEY，CI 仅有 ZHIPU_API_KEY，
+      # 此前全题 ModelNotConfiguredError 被吞成假绿——2026-08-27 修复）
+      CHAT_PROVIDER: zhipu
       EVAL_KB_NAME: "星河智家·官方政策库"
     defaults:
       run:
@@ -349,16 +352,15 @@ jobs:
         run: python -m scripts.smoke_import
       # recall@5：检索层，无 LLM，不依赖 key。契约阈值 recall@5 >= 85%。
       - name: Recall eval (recall@5 >= 85%)
-        run: |
-          python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME" \
-            || { echo "::warning::recall@5 未达 85%（report-only，暂不阻塞）"; }
-      # faithfulness：真实 LLM 调用（glm-4.5-air）。缺 ZHIPU_API_KEY 时跳过并告警，
-      # 不 fail（report-only）；配置 Secrets 后自动生效完整门禁。
-      - name: Faithfulness eval (needs ZHIPU_API_KEY)
+        run: python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME"
+      # faithfulness：真实 LLM 调用（智谱 GLM，走 CHAT_PROVIDER=zhipu）。
+      # 硬门禁：未达阈值脚本 exit 1 → step 失败 → 阻断 CI。
+      - name: Faithfulness eval (qa >= 85% / refuse >= 90%)
         if: env.ZHIPU_API_KEY != ''
-        run: |
-          python -m scripts.eval_faithfulness --kb-name "$EVAL_KB_NAME" \
-            || { echo "::warning::faithfulness 未达契约阈值 85%/90%/95%（report-only，暂不阻塞）"; }
-      - name: Faithfulness skipped (missing ZHIPU_API_KEY)
+        run: python -m scripts.eval_faithfulness --kb-name "$EVAL_KB_NAME"
+      # 未配置 LLM Key = 门禁无法执行 = 显式失败（fail-closed，杜绝"没跑算过"假绿）
+      - name: Faithfulness skipped (missing ZHIPU_API_KEY) => FAIL
         if: env.ZHIPU_API_KEY == ''
-        run: echo "::warning::未配置 GitHub Secrets ZHIPU_API_KEY，faithfulness 门禁未执行；请配置后开启完整门禁。"
+        run: |
+          echo "::error::未配置 GitHub Secrets ZHIPU_API_KEY，faithfulness 门禁未执行（fail-closed）"
+          exit 1
