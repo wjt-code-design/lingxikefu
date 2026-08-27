@@ -323,6 +323,9 @@ jobs:
       # 评测 LLM 固定走智谱（默认 bailian 需 DASHSCOPE_API_KEY，CI 仅有 ZHIPU_API_KEY，
       # 此前全题 ModelNotConfiguredError 被吞成假绿——2026-08-27 修复）
       CHAT_PROVIDER: zhipu
+      # 显式指定智谱模型：glm-5.1（代码默认）在评测时全量 429（额度/模型档位不可用，2026-08-27 实测），
+      # 按对话文档约定改用 glm-4.7 试跑
+      ZHIPU_CHAT_MODEL: "glm-4.7"
       EVAL_KB_NAME: "星河智家·官方政策库"
     defaults:
       run:
