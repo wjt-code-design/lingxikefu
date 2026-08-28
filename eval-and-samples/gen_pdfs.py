@@ -3,12 +3,13 @@
 # 读取 kb/ 下对应 .md/.txt，用 reportlab CID 中文字体渲染为 kb-pdf/*.pdf。
 import os
 import re
+
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.cidfonts import UnicodeCIDFont
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 BASE = os.path.dirname(os.path.abspath(__file__))
 KB = os.path.join(BASE, "kb")

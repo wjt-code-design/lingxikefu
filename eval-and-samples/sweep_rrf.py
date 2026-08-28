@@ -20,19 +20,29 @@ import statistics
 import sys
 from pathlib import Path
 
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue, NamedSparseVector
+from qdrant_client.http.models import (
+    FieldCondition,
+    Filter,
+    MatchValue,
+    NamedSparseVector,
+)
 
 APP_ROOT = os.environ.get("APP_ROOT", "/app")  # 容器内 backend 挂载点
 sys.path.insert(0, APP_ROOT)
 
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-
-from app.core.config import settings  # noqa: E402
-from app.llm_clients.embedding import BGE_QUERY_PREFIX, get_embedding_client  # noqa: E402
-from app.models.knowledge import Document, KnowledgeBase  # noqa: E402
-from app.services.sparse_util import text_to_sparse  # noqa: E402
-from app.services.vector_service import get_collection_name, get_qdrant_client  # noqa: E402
+from app.core.config import settings
+from app.llm_clients.embedding import (
+    BGE_QUERY_PREFIX,
+    get_embedding_client,
+)
+from app.models.knowledge import Document, KnowledgeBase
+from app.services.sparse_util import text_to_sparse
+from app.services.vector_service import (
+    get_collection_name,
+    get_qdrant_client,
+)
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
 BASE = Path("/tmp")
 TOP_K = int(os.environ.get("SWEEP_TOP_K", "5"))

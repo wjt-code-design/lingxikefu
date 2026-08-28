@@ -44,14 +44,14 @@ IGNORE_EXTRA = {
     'EvalResultItem', 'EvalHistoryResp', 'EvalTriggerReq', 'EvalTriggerResp',
 }
 
-INTERFACE_RE = re.compile(r'^export\s+interface\s+(\w+)\s*\{', re.M)
-TYPE_RE = re.compile(r'^export\s+type\s+(\w+)\s*=', re.M)
-FIELD_RE = re.compile(r'^\s*(\w+)(\??):', re.M)
+INTERFACE_RE = re.compile(r'^export\s+interface\s+(\w+)\s*\{', re.MULTILINE)
+TYPE_RE = re.compile(r'^export\s+type\s+(\w+)\s*=', re.MULTILINE)
+FIELD_RE = re.compile(r'^\s*(\w+)(\??):', re.MULTILINE)
 
 
 def strip_comments(ts_text: str) -> str:
-    text = re.sub(r'/\*.*?\*/', '', ts_text, flags=re.S)
-    return re.sub(r'//.*?$', '', text, flags=re.M)
+    text = re.sub(r'/\*.*?\*/', '', ts_text, flags=re.DOTALL)
+    return re.sub(r'//.*?$', '', text, flags=re.MULTILINE)
 
 
 def parse_contract(ts_path: str) -> dict:

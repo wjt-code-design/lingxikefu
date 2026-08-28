@@ -19,12 +19,11 @@ os.environ.setdefault("POSTGRES_DB", "lingxi")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
 os.environ.setdefault("QDRANT_URL", "http://localhost:6333")
 
-from sqlalchemy import create_engine, select  # noqa: E402
-from sqlalchemy.orm import sessionmaker  # noqa: E402
-
-from app.models.knowledge import KnowledgeBase, Document  # noqa: E402
-from app.services.query_rewrite import rewrite  # noqa: E402
-from app.services.retrieval_service import search_kb  # noqa: E402
+from app.models.knowledge import Document, KnowledgeBase
+from app.services.query_rewrite import rewrite
+from app.services.retrieval_service import search_kb
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
 
 BASE = Path(__file__).resolve().parent
 TOP_K = 5
