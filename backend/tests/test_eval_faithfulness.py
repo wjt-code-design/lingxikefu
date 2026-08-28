@@ -125,6 +125,34 @@ def test_judge_citations_detail_none_keeps_old_behavior():
     assert (all_ok, good, total) == (True, 1, 1)
 
 
+def test_judge_citations_marker_after_sentence_punct_takes_real_sentence():
+    """[来源N] 紧跟句末标点时须取到真实句子（2026-08-28 空句子窗口 bug 回归）。
+
+    此前 re.split(lookbehind)[-1] 在引用点前文以 。/！/？/； 结尾时取到空尾串，
+    overlap 恒 0 → 实质支撑的引用被误判非法（基线 run1 误伤 4 点：Q012/Q089×2/Q097，
+    见 results/baseline-longcat-20260828-attribution.md 发现 2）。
+    """
+    chunks = [_Chunk("春节国庆等法定长假按公告暂停发货，假期结束后依次发出。")]
+    # LongCat 后置风格：标记紧跟句号（真实基线 Q012 原样）
+    answer = "春节假期仓库暂停发货，假期结束后依次发出。[来源1]\n\n具体停发和恢复时间以站内公告为准。"
+    detail: list[dict] = []
+    all_ok, good, total = judge_citations(answer, chunks, detail=detail)
+    assert (all_ok, good, total) == (True, 1, 1)
+    assert detail[0]["n"] == 1 and detail[0]["ok"] is True
+    assert detail[0]["overlap"] >= 0.30
+    assert "春节" in detail[0]["sentence"]
+
+
+def test_judge_citations_marker_after_punct_all_final_puncts():
+    """四种句末标点（。！？；）后置标记均取真实句子，不产生空窗口误判。"""
+    chunk_text = "退款均在质检通过后 1-3 个工作日原路退回至支付账户。"
+    chunks = [_Chunk(chunk_text)]
+    sentence = "退款在质检通过后 1-3 个工作日原路退回"
+    for punct in ("。", "！", "？", "；"):
+        all_ok, good, total = judge_citations(f"{sentence}{punct}[来源1]", chunks)
+        assert (all_ok, good, total) == (True, 1, 1), f"句末标点 {punct!r} 后置标记误判"
+
+
 def test_resolve_kb_default_name_matches_smoke_import_build_name():
     """P0 回归：未传 --kb-name 时，_resolve_kb 默认名必须是 smoke_import 建库名，
     不再悬空回退到不存在的旧库名（防误选其他最新库致评测数据源漂移）。"""

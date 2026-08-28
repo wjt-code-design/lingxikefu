@@ -215,7 +215,10 @@ def judge_citations(answer: str, chunks, detail: list | None = None) -> tuple[bo
             n = int(m.group(1))
             if 1 <= n <= len(chunks) and cur.strip():
                 total += 1
-                sentence = re.split(r"(?<=[。！？；])", cur.strip())[-1]
+                # lookbehind split 在前文以句末标点收尾时会产生空尾串，须滤掉再取最后一段，
+                # 否则"……发出。[来源1]"这类后置标记的句子窗口恒为空、overlap 恒 0（误判非法）
+                segs = [s for s in re.split(r"(?<=[。！？；])", cur.strip()) if s.strip()]
+                sentence = segs[-1] if segs else ""
                 overlap = _sentence_overlap(sentence, chunks[n - 1].text)
                 supported = overlap >= 0.30
                 if supported:
