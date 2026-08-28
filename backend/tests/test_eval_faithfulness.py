@@ -125,6 +125,34 @@ def test_judge_citations_detail_none_keeps_old_behavior():
     assert (all_ok, good, total) == (True, 1, 1)
 
 
+def test_resolve_kb_default_name_matches_smoke_import_build_name():
+    """P0 回归：未传 --kb-name 时，_resolve_kb 默认名必须是 smoke_import 建库名，
+    不再悬空回退到不存在的旧库名（防误选其他最新库致评测数据源漂移）。"""
+    import uuid
+
+    from app.core.config import settings
+    from app.models.knowledge import KnowledgeBase
+    from scripts.eval_faithfulness import _resolve_kb
+    from scripts.smoke_import import _KB_NAME
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    engine = create_engine(
+        "sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool
+    )
+    # 只建 KB 表（全 schema 含 JSONB，SQLite 无法渲染 user_profiles.profile）
+    KnowledgeBase.__table__.create(engine)
+    db = sessionmaker(bind=engine)()
+    kb = KnowledgeBase(id=uuid.uuid4(), tenant_id=settings.TENANT_DEFAULT, name=_KB_NAME)
+    db.add(kb)
+    db.commit()
+
+    resolved = _resolve_kb(db, None)
+    assert resolved is not None, "默认名必须命中建库名"
+    assert resolved.name == _KB_NAME == "星河智家·官方政策库"
+
+
 def test_write_report_structure(tmp_path):
     """--out JSON 结构：meta(四件套自描述)/summary/results 三层。"""
     from scripts.eval_faithfulness import _write_report

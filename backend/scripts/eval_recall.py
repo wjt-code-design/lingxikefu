@@ -24,6 +24,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.knowledge import Document, KnowledgeBase
 from app.services.retrieval_service import RetrievalError, search_kb
+from scripts.smoke_import import _KB_NAME  # 建库名唯一真源（P0 同批统一）
 from sqlalchemy import select
 
 BASE = Path(__file__).resolve().parent.parent.parent / "eval-and-samples"
@@ -61,7 +62,8 @@ def parse_questions() -> list[dict]:
 
 def _resolve_kb(db, kb_name: str | None) -> KnowledgeBase | None:
     """按名取最新同名 KB；找不到退租户最新 KB（与 eval_faithfulness/seed_demo_data 同规则）。"""
-    name = kb_name or "星河智家·售后与订单全量库"
+    # KB 口径唯一真源 = smoke_import._KB_NAME；旧名已悬空（P0 同批统一）
+    name = kb_name or _KB_NAME
     kb = db.scalar(
         select(KnowledgeBase)
         .where(KnowledgeBase.name == name)
@@ -168,7 +170,7 @@ def run_recall_eval(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--top-k", type=int, default=5)
-    ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
+    ap.add_argument("--kb-name", default=_KB_NAME)  # 与 smoke_import 建库名一致（P0 同批统一）
     args = ap.parse_args()
 
     db = SessionLocal()

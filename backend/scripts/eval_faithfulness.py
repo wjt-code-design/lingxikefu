@@ -29,6 +29,7 @@ from app.core.database import SessionLocal
 from app.llm_clients.chat import get_chat_client
 from app.models.knowledge import KnowledgeBase
 from app.services.rag_service import build_qa_messages, run_pipeline
+from scripts.smoke_import import _KB_NAME  # 建库名唯一真源（P0：KB 口径统一）
 from sqlalchemy import select
 
 BASE = Path(__file__).resolve().parent.parent.parent / "eval-and-samples"
@@ -299,7 +300,9 @@ async def eval_one_retry(db, kb_id: uuid.UUID, q: dict, gt: dict | None, retries
 
 def _resolve_kb(db, kb_name: str | None) -> KnowledgeBase | None:
     """按名取最新同名 KB；找不到退租户最新 KB（与 eval_recall/seed_demo_data 同规则）。"""
-    name = kb_name or "星河智家·售后与订单全量库"
+    # KB 口径唯一真源 = smoke_import._KB_NAME；旧名"售后与订单全量库"是悬空库名
+    # （seed_demo_data 建库为 "demo"），回退到它会误找最新库（P0 修复）。
+    name = kb_name or _KB_NAME
     kb = db.scalar(
         select(KnowledgeBase)
         .where(KnowledgeBase.name == name)
@@ -453,7 +456,7 @@ async def main() -> int:
         help="确定性均匀抽样 N 题（按列表位置步长取，覆盖各主题；0=全量）。"
         "CI 硬门禁默认 sample 20 控制耗时；需全量请用 workflow_dispatch（full_eval=true）",
     )
-    ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
+    ap.add_argument("--kb-name", default=_KB_NAME)  # 与 smoke_import 建库名一致（P0）
     ap.add_argument(
         "--out", default="",
         help="结果 JSON 落盘路径（相对当前目录；门禁判定前写入，FAIL 也有完整数据）",

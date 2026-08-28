@@ -28,6 +28,9 @@ BASE = Path(__file__).resolve().parent.parent.parent / "eval-and-samples"
 KB_DIR = BASE / "kb"
 PDF_DIR = BASE / "kb-pdf"
 
+#: 冒烟库语义化分类名 = 评测/匹配的 KB 口径唯一真源（eval_faithfulness/eval_recall 引用，须一致）
+_KB_NAME = "星河智家·官方政策库"
+
 
 def _count_doc_points(client, collection: str, kb_id, doc_id) -> int:
     """Qdrant 中该文档（kb_id+doc_id 过滤）的向量点数。"""
@@ -81,8 +84,7 @@ def main() -> int:
     doc_repo = DocumentRepository(db)
 
     # 幂等：按名复用已有同名库，不重复新建（修复"多次运行堆同名冒烟库"）。
-    # 命名去「冒烟库」字眼，改语义化分类名。
-    _KB_NAME = "星河智家·官方政策库"
+    # 命名去「冒烟库」字眼，改语义化分类名（_KB_NAME 为模块级单一真源）。
     kb = next((k for k in kb_repo.list_all() if k.name == _KB_NAME), None)
     if kb is None:
         kb = kb_repo.create(name=_KB_NAME)
