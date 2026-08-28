@@ -155,3 +155,45 @@ def test_write_report_structure(tmp_path):
     assert data["summary"]["stats"]["qa"] == [2, 2]
     assert data["results"][0]["cit_detail"][0]["n"] == 1
     assert data["results"][0]["chunks"][0]["text"] == "原文"
+
+
+# ---------- citation 全量模式门禁（Task 2，spec A2/D1） ----------
+
+
+def _gate_stats(qa_total=10, qa_ok=10, refuse_total=0, refuse_ok=0):
+    return {"qa": [qa_total, qa_ok], "refuse": [refuse_total, refuse_ok]}
+
+
+def test_pass_all_sample_mode_ignores_citation():
+    """抽样模式（full_run=False）citation 不参与判定：20 题仅 ~15-30 引用点，95% 门禁单点抖动 3-7pp 不可靠。"""
+    from scripts.eval_faithfulness import _pass_all
+
+    assert _pass_all(_gate_stats(), cit_good=0, cit_total=10, full_run=False) is True
+
+
+def test_pass_all_full_mode_gates_citation():
+    from scripts.eval_faithfulness import _pass_all
+
+    assert _pass_all(_gate_stats(), cit_good=8, cit_total=10, full_run=True) is False  # 80% < 95%
+    assert _pass_all(_gate_stats(), cit_good=10, cit_total=10, full_run=True) is True
+
+
+def test_pass_all_full_mode_no_citations_passes():
+    """全量但无引用点（退化情况，理论上 qa 题必有）不因 citation 挂。"""
+    from scripts.eval_faithfulness import _pass_all
+
+    assert _pass_all(_gate_stats(), cit_good=0, cit_total=0, full_run=True) is True
+
+
+def test_pass_all_qa_and_refuse_thresholds_unchanged():
+    from scripts.eval_faithfulness import _pass_all
+
+    assert _pass_all(_gate_stats(qa_total=100, qa_ok=84), 10, 10, full_run=True) is False  # 84%<85%
+    assert _pass_all(_gate_stats(refuse_total=10, refuse_ok=8), 10, 10, full_run=True) is False  # 80%<90%
+    assert _pass_all(_gate_stats(), 10, 10, full_run=False) is True
+
+
+def test_pass_all_empty_qa_fails():
+    from scripts.eval_faithfulness import _pass_all
+
+    assert _pass_all(_gate_stats(qa_total=0), 0, 0, full_run=False) is False

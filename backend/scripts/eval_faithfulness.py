@@ -341,6 +341,26 @@ def _write_report(out_path: str, meta: dict, stats: dict, results: list[dict], c
     return path
 
 
+def _pass_all(stats: dict, cit_good: int, cit_total: int, full_run: bool) -> bool:
+    """门禁判定（纯函数，供单测）：qa≥85% 且 refuse≥90%；citation≥95% 仅全量模式判定。
+
+    citation 挂全量模式的原因：抽样 20 题仅 ~15-30 个引用点，95% 门禁=最多错 1 点，
+    单点抖动 3-7pp，抽样下判定不可靠（spec A2）。
+    full_run 须由调用方以 not(sample or limit or offset) 计算（spec D1，--limit 绕过防护）。
+    """
+    qa_total, qa_ok = stats["qa"]
+    refuse_total, refuse_ok = stats["refuse"]
+    if qa_total == 0:
+        return False
+    if qa_ok / qa_total < 0.85:
+        return False
+    if refuse_total and refuse_ok / refuse_total < 0.9:
+        return False
+    if full_run and cit_total and cit_good / cit_total < 0.95:
+        return False
+    return True
+
+
 async def _run_faithfulness(
     db, kb_id: uuid.UUID, questions: list[dict], gt: dict, results: list[dict] | None = None
 ) -> tuple:
@@ -476,19 +496,13 @@ async def main() -> int:
         print(f"  {kind:9s} {ok}/{total} = {rate:.1%}")
     if cit_total:
         print(f"  引用合法率 {cit_good}/{cit_total} = {cit_good / cit_total:.1%}（[来源N] 可溯源，目标≥95%）")
-    qa_ok = stats["qa"][1]
-    qa_total = stats["qa"][0]
-    refuse_ok = stats["refuse"][1]
-    refuse_total = stats["refuse"][0]
     rq_total, rq_ok = stats["refuse_qa"]  # noqa: E501  # stats[kind]=[total, ok]
     if rq_total:
         print(f"  [info] 正常题拒答 {rq_total} 题（合理拒答 {rq_ok}，误拒答 {rq_total - rq_ok}，不计入 faithfulness）")
-    pass_all = (
-        qa_total > 0
-        and qa_ok / qa_total >= 0.85
-        and (refuse_total == 0 or refuse_ok / refuse_total >= 0.9)
-    )
-    print(f"[RESULT] {'PASS ✅' if pass_all else 'FAIL ❌'}（问答 faithfulness≥85% 且 诚实性拒答率≥90%）")
+    full_run = not (args.sample or args.limit or args.offset)
+    pass_all = _pass_all(stats, cit_good, cit_total, full_run)
+    gate_note = "citation≥95% 参与判定" if full_run else "citation 仅报告，不判定（子集模式）"
+    print(f"[RESULT] {'PASS ✅' if pass_all else 'FAIL ❌'}（qa≥85% 且 refuse≥90%；{gate_note}）")
     if fails:
         print("失败明细:")
         for f in fails:

@@ -360,9 +360,9 @@ jobs:
         run: python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME"
       # faithfulness：真实 LLM 调用（LongCat LongCat-2.0，走 CHAT_PROVIDER=longcat）。
       # 硬门禁：未达阈值脚本 exit 1 → step 失败 → 阻断 CI。
-      # CI 用确定性均匀抽样 20 题（跨位置覆盖各主题、每次同一批可对比）；
-      # 全量 100 题约 1h（2026-08-27 实测），仅适合手动触发（workflow_dispatch full_eval=true）。
-      - name: Faithfulness eval (qa >= 85% / refuse >= 90%, sample 20)
+      # 抽样模式（push，--sample 20）：判 qa≥85% + refuse≥90%，citation 仅报告（样本量不足，单点抖动 3-7pp）；
+      # 全量模式（workflow_dispatch full_eval=true，100 题约 1h）：追加 citation≥95% 判定。
+      - name: Faithfulness eval (qa >= 85% / refuse >= 90%; citation >= 95% @ full_eval)
         if: env.LONGCAT_API_KEY != ''
         # push 默认 20 题抽样（~20min）；workflow_dispatch 传 full_eval=true 时跑全量 100 题（~1h）。
         # ${{ github.event.inputs.full_eval }} 在 push 事件中为空（空 → 0 → 走 sample 20）。
