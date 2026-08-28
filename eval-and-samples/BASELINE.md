@@ -7,20 +7,20 @@
 | 维度 | 冻结值 | 位置 |
 |---|---|---|
 | 评测集 | 评测问题库.md / ground-truth.md / 口语化评测集.md | hash 见 BASELINE.sha256 |
-| 判定脚本 | backend/scripts/eval_faithfulness.py @ 250e208（sha256 `28ea8c955d08`） | git commit |
+| 判定脚本 | backend/scripts/eval_faithfulness.py @ df79cb1（sha256 `43934ccf2026`；S1 空句子窗口修复版） | git commit |
 | 检索参数 | RETRIEVAL_TOP_K=5（2026-08-21 降噪 8→5）+ MIN_SCORE=0.30（拒答判定走 dense_score 解耦；RRF score 仅排序，无绝对语义） | backend/app/core/config.py |
 | 模型 | LongCat-2.0（CHAT_PROVIDER=longcat） | backend/.env |
 | 评测 KB | 星河智家·官方政策库（= smoke_import._KB_NAME，唯一真源） | backend/scripts/smoke_import.py |
 
-## 二、faithfulness 新基线（2026-08-28，LongCat-2.0 + 判定脚本@250e208）
+## 二、faithfulness 新基线（2026-08-28，LongCat-2.0 + 判定脚本@df79cb1）
 
 - qa：run1 76/81 = **93.8%**；run2 抖动复核 75/81 = **92.6%**（目标 ≥85% ✅ 双跑均过）
 - refuse：run1/run2 均 7/7 = **100%**（目标 ≥90% ✅）
-- 引用合法率：run1 219/230 = **95.2%**；run2 204/206 = **99.0%**（目标 ≥95% ✅ 双跑均过）
+- 引用合法率（S1 判定器修复后冻结口径）：run1 223/230 = **97.0%**；run2 205/206 = **99.5%**（目标 ≥95% ✅ 双跑均过）
 - refuse_qa：run1 0/1（误拒答 Q064）；run2 1/2（Q093 误拒答）；handoff run1/run2 均 5/5；chitchat 均 5/5
-- 口径：qa 分母剔除 refuse_qa；LongCat-2.0 + top_k=5 + eval_faithfulness.py@250e208 + KB「星河智家·官方政策库」
-- 已知判定器缺陷（见归因清单·发现 2）：[来源N] 紧跟句末标点时句子窗口取空 → 有实质支撑的引用被误判非法（run1 4 点 / run2 1 点）。修正口径：run1 223/230 ≈ **97.0%**、run2 205/206 ≈ **99.5%**；S1 修复后以 `--rejudge` 复算并重冻结。
-- 失败题逐题归因：`results/baseline-longcat-20260828-attribution.md`（S1/S2/S3 冲刺输入）
+- 口径：qa 分母剔除 refuse_qa；LongCat-2.0 + top_k=5 + eval_faithfulness.py@df79cb1 + KB「星河智家·官方政策库」
+- S1 判定器修复说明：@250e208 版存在"[来源N] 紧跟句末标点→句子窗口取空→误判非法"缺陷（run1 误伤 4 点 / run2 1 点，见归因清单·发现 2）。@df79cb1 修复后对原两份基线 JSON 离线 rejudge：219/230→**223/230**、204/206→**205/206**，CHANGED 集合与归因预测逐点一致（复算留档见归因清单·五）；qa/refuse 不受影响。
+- 失败题逐题归因：`results/baseline-longcat-20260828-attribution.md`（S2/S3 冲刺输入）
 - 旧基线（2026-08-26，glm-4.5-air）：qa 82.1% / refuse 87.5% / 引用 21.4%——模型与判定脚本均变，**不可比**
 
 ## 三、历史口径（退役存档，不可与上表直接对比）

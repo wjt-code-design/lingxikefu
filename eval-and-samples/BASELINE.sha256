@@ -10,9 +10,10 @@
 #   + RETRIEVAL_TOP_K=5 / MIN_SCORE=0.30（backend/app/core/config.py）
 #   + LongCat-2.0（backend/.env，CHAT_PROVIDER=longcat）
 #   + 评测 KB「星河智家·官方政策库」（= smoke_import._KB_NAME）
-# 判定脚本 git commit：250e208（Task 3 基线双跑即用此版，sha256 前缀 28ea8c955d08 与两份基线 JSON 记录一致）
+# 判定脚本 git commit：df79cb1（S1 空句子窗口修复版；对 @250e208 旧版双跑基线离线 rejudge 后的冻结口径，
+#   复算留档见 results/baseline-longcat-20260828-attribution.md §五）
 
-28ea8c955d08f6bfdf05274d1aeccea3a537115b350f103aa08167830c56300e *backend/scripts/eval_faithfulness.py
+43934ccf2026d2d7fbc75713b8367553c720ca3ef8ea18b842f4898546f22e68 *backend/scripts/eval_faithfulness.py
 7034bf8433f4b323b1acb60c95944f617f4db3c1597b3de24b3a3de2b595a17f *评测问题库.md
 8d0249474fd386110a57b1f2a831f2292c3eb198287803ded6c8dd92e99b820d *ground-truth.md
 135e00f9f54272aae992d199408690d01d8bf3d34e1ade632814f5e892a898c2 *口语化评测集.md
