@@ -15,9 +15,9 @@
 | Task 1 | `--out` 结构化导出（JSON 三层 + chunks 快照 + 逐引用点明细） | ✅ 完成 | 45a9046 |
 | Task 2 | citation≥95% 进全量模式硬门禁（full_run 键防 --limit 绕过） | ✅ 完成 | 8762a03 |
 | Task 3 | 本地 LongCat 全量基线双跑（run1 + run2 抖动复核） | ✅ 完成 | 250e208, c4ca269 |
-| Task 4 | 归因清单 + BASELINE 冻结 | ⏳ 待执行 | — |
-| Task 5 | 三个专项冲刺（S1 引用 → S2 拒答 → S3 faithfulness） | ⏳ 待执行 | — |
-| Task 6 | full_eval 复核 + 二次冻结 + 文档同步 | ⏳ 待执行 | — |
+| Task 4 | 归因清单 + BASELINE 冻结 | ✅ 完成 | c5431fe |
+| Task 5 | 三个专项冲刺（S1 引用 → S2 拒答 → S3 faithfulness；+ S4 增补） | ✅ 完成 | df79cb1, bf2d865, fc5572e, 889682f, 523160b, 3241013 |
+| Task 6 | full_eval 复核 + 二次冻结 + 文档同步 | ✅ 完成 | 3241013 + 文档同步提交 |
 
 相关依赖改造（评估工具链之外、早前完成）：KB 口径统一（e27edb9）、ruff 清零（d752cf1）、盲区测试补齐（cb2b0a1/d62b8e3）、规划文档（02249c6/15302ed/f846e47）。
 
@@ -173,5 +173,12 @@ cd backend && python -m scripts.eval_faithfulness --sample 20 --out /tmp/fast.js
 - ✅ 本地基线双跑已完成，三项门禁双跑全绿（qa 92.6-93.8% / refuse 100% / citation 95.2-99.0%）
 - ✅ 产物 + 对比报告已 commit（250e208 修复、c4ca269 存档），工作区干净
 - ✅ 评测工具链（--out / 门禁 / KB 口径）全部就绪，可直接进入 Task 4
-- ⏳ 未 push（等用户确认后 push master，CI 会按计划跑 eval 门禁）
-- ⏳ R1 检索分数扁平化调查未启动（Task 4 首办项）
+- ✅ R1 检索分数扁平化已结案（RRF 融合分按设计，无缺陷；BASELINE §五 / 归因清单·发现 1）
+- ✅ 已 push master 并完成 CI full_eval 复核（Task 6 收尾，见下方回执）
+
+## 八、Task 4-6 执行回执（2026-08-28）
+
+- **Task 4**（c5431fe）：逐题归因清单 + LongCat-2.0 四件套冻结；R1 结案；判定器空句子窗口 bug 登记。
+- **Task 5**：S1 判定器修复（df79cb1，rejudge 双跑校准 97.0%/99.5%）；S2/S3 prompt 边界补丁（fc5572e/889682f，同义改写≠条款类推 + 对偶面 + 列举完整性），本地终审全量 PASS（qa 94.0%/refuse 100%/citation 99.1%，污染库口径）。
+- **S4 增补**（3241013）：CI 首跑 run33170670510 FAIL（refuse 85.7%）→ Q042「场景归类」真实缺陷（受控实验旧 8/10 vs 新 10/10）+ 本地评测 KB 污染事件（seed_demo_data latest_kb 策略，9 演示文档混入，已清理对齐 CI 口径；Q069 判据失真挂账）。详见 BASELINE §五/§七、归因清单 §六。
+- **Task 6**：CI full_eval run **33176656355**（3241013）全量 PASS：**qa 90.2% / refuse 100% / citation 99.5%**（7 job 全绿）→ BASELINE 二次冻结（三项为新下限）。冻结以 CI fresh 库口径为权威。
