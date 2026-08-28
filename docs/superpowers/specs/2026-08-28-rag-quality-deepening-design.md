@@ -59,6 +59,15 @@ BASELINE.md 规定"四件套一致才可比"（评测集 + 判定脚本 + 检索
 - judge_citations 对空 chunks 返回合法：qa 题必有 chunks（refuse 已过滤），无影响。
 - run_eval.py 连接串 `__CHANGE_ME__` 占位符：本地工具，POSTGRES_PASSWORD 环境变量可覆盖，不改。
 
+### D 级（最终审核补充，2026-08-28 v2 终审）
+
+- **D1 · 门禁键修正**：A2 中"`args.sample == 0` 区分模式"不严谨——`--limit N`（无 sample）同样产生子集，会误触 citation 门禁抖动。正确判定键：`full_run = not (args.sample or args.limit or args.offset)`。
+- **D2 · 基线 JSON 必须自含 chunks**：归因与判定器双跑都需要"回答 + 对应 chunks"，若 JSON 只存回答则每次归因都要重新检索。`--out` 导出须含每题 chunks（text/score/dense_score/doc_id，约 250KB/100 题）与逐引用点明细（句子/重叠率/判定），使 JSON 成为归因与双跑的单一数据源。
+- **D3 · JSON 落盘先于门禁判定**：`--out` 写入必须在 `pass_all` 计算与 exit 之前——全量基线跑在 citation<95% 时 exit 1 属预期，但完整 JSON 必须已落盘。
+- **D4 · 调用方兼容**：`_run_faithfulness` 被 admin 评测中心复用（`api/eval.py:165` → `run_faithfulness_eval`），签名只能追加可选参数。
+- **D5 · 判定器调参双跑的实现形态**：新增 `--rejudge <json>` 模式对已存 JSON 重跑引用判定（不重检索、不重生成），实现 A 级风险表中"新旧尺子双跑对比留档"的可复现版本；重叠率阈值提为模块常量便于 sweep。
+- **D6 · run_eval.py 文档串与代码不符**：docstring 写 `POSTGRES_PASSWORD=...`，代码实际读 `PG_URL`（L69）。命令统一用 `PG_URL`（工具修正不在本次范围）。
+
 ---
 
 ## 3. 三阶段详细设计（文件/函数/命令级）
