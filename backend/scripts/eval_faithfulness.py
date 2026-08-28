@@ -12,9 +12,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
+import json
 import re
 import sys
 import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 
 # 容器内直跑引导（与 seed 脚本同款）：把 backend 根加入 sys.path
@@ -176,20 +179,26 @@ def _chunks_have_answer(chunks, claims: list[str]) -> bool:
     return False
 
 
-def _sentence_supported(sentence: str, chunk_text: str) -> bool:
-    """引用点句子是否被对应 chunk 实质支撑（2字窗口交集≥30%）。"""
+def _sentence_overlap(sentence: str, chunk_text: str) -> float:
+    """引用点句子与 chunk 的 2 字窗口交集比例（0-1）。"""
     s_bg = _bigrams(sentence)
     c_bg = _bigrams(chunk_text)
     if not s_bg or not c_bg:
-        return False
-    return len(s_bg & c_bg) / len(s_bg) >= 0.30
+        return 0.0
+    return len(s_bg & c_bg) / len(s_bg)
 
 
-def judge_citations(answer: str, chunks) -> tuple[bool, int, int]:
+def _sentence_supported(sentence: str, chunk_text: str) -> bool:
+    """引用点句子是否被对应 chunk 实质支撑（2字窗口交集≥30%）。"""
+    return _sentence_overlap(sentence, chunk_text) >= 0.30
+
+
+def judge_citations(answer: str, chunks, detail: list | None = None) -> tuple[bool, int, int]:
     """[来源N] 引用合法性（grounded-ai：引文必须可溯源到 chunk）。
 
     每个 [来源N] 的引用点句子须与 chunks[N-1].text 有实质内容重叠，
     防「引文编造」（把内容安到无关来源上）。返回 (是否全合法, 合法数, 总数)。
+    detail 非 None 时逐点追加 {"n", "sentence", "overlap", "ok"}（--out 导出/归因用）。
 
     细节：引用点取标记前最近一个句子（避免多句累积稀释交集）；
     连续引用 [来源1][来源2] 时第二个引用点为空 → 跳过不计（共享同一句子）。
@@ -206,8 +215,12 @@ def judge_citations(answer: str, chunks) -> tuple[bool, int, int]:
             if 1 <= n <= len(chunks) and cur.strip():
                 total += 1
                 sentence = re.split(r"(?<=[。！？；])", cur.strip())[-1]
-                if _sentence_supported(sentence, chunks[n - 1].text):
+                overlap = _sentence_overlap(sentence, chunks[n - 1].text)
+                supported = overlap >= 0.30
+                if supported:
                     ok += 1
+                if detail is not None:
+                    detail.append({"n": n, "sentence": sentence, "overlap": round(overlap, 3), "ok": supported})
             cur = ""
         else:
             cur += part
@@ -226,29 +239,36 @@ async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
 
     if gt and gt["refuse"]:
         ok, why = judge_refuse(answer)
-        return {"qid": q["qid"], "kind": "refuse", "ok": ok, "why": why, "answer": answer[:80]}
+        return {"qid": q["qid"], "kind": "refuse", "ok": ok, "why": why, "answer": answer}
     if q["intent"] == "qa":
         # 正常题拒答（管线 refuse 或 LLM 主动拒答）：不编造=忠实，但可用性差。
         # 从 faithfulness 分母排除，单列 refuse_qa 统计（合理拒答=资料真没有；误拒答=资料有仍拒）。
         if r.refuse or _is_llm_refusal(answer):
             if gt and _chunks_have_answer(r.chunks, gt["claims"]):
-                return {"qid": q["qid"], "kind": "refuse_qa", "ok": False, "why": "误拒答(资料含答案仍拒答)", "answer": answer[:80]}
-            return {"qid": q["qid"], "kind": "refuse_qa", "ok": True, "why": "合理拒答(资料未含答案)", "answer": answer[:80]}
+                return {"qid": q["qid"], "kind": "refuse_qa", "ok": False, "why": "误拒答(资料含答案仍拒答)", "answer": answer}
+            return {"qid": q["qid"], "kind": "refuse_qa", "ok": True, "why": "合理拒答(资料未含答案)", "answer": answer}
         ok, why = judge_qa(answer, gt["claims"] if gt else [])
-        cit_all_ok, cit_good, cit_total = judge_citations(answer, r.chunks)
+        cit_detail: list[dict] = []
+        cit_all_ok, cit_good, cit_total = judge_citations(answer, r.chunks, detail=cit_detail)
         return {
             "qid": q["qid"],
             "kind": "qa",
             "ok": ok,
             "why": why,
-            "answer": answer[:80],
+            "answer": answer,
             # 引用统计必须全量累计（合法题同样计入分母）——此前只在整题全合法时
             # 置 None，导致分母只含失败题，引用合法率被系统性高估/失真（2026-08-27 实测）。
             "cit": (cit_good, cit_total, cit_all_ok),
+            "cit_detail": cit_detail,
+            # chunks 快照：归因/双跑不依赖重检索（spec D2）
+            "chunks": [
+                {"i": i + 1, "text": c.text, "score": c.score, "dense_score": c.dense_score, "doc_id": c.doc_id}
+                for i, c in enumerate(r.chunks)
+            ],
         }
     # 闲聊/转人工：有引导词即可
     ok = any(m in answer for m in ("人工", "客服", "解答", "咨询", "帮助"))
-    return {"qid": q["qid"], "kind": q["intent"], "ok": ok, "why": "" if ok else "无引导词", "answer": answer[:80]}
+    return {"qid": q["qid"], "kind": q["intent"], "ok": ok, "why": "" if ok else "无引导词", "answer": answer}
 
 
 async def eval_one_retry(db, kb_id: uuid.UUID, q: dict, gt: dict | None, retries: int = 5) -> dict:
@@ -296,10 +316,37 @@ def _resolve_kb(db, kb_name: str | None) -> KnowledgeBase | None:
     return kb
 
 
-async def _run_faithfulness(db, kb_id: uuid.UUID, questions: list[dict], gt: dict) -> tuple:
+def _write_report(out_path: str, meta: dict, stats: dict, results: list[dict], cit_good: int, cit_total: int) -> Path:
+    """评测结果结构化落盘（归因/双跑对比的单一数据源）。
+
+    meta 自带四件套信息（provider/model/top_k/脚本 sha256 + 调用参数），JSON 自描述；
+    必须在 pass_all 判定与 exit 之前调用——门禁 FAIL 也要有完整 JSON 可查（spec D3）。
+    results 每题含全文 answer 与 chunks 快照（D2），约 250KB/100 题。
+    """
+    payload = {
+        "meta": {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "provider": settings.CHAT_PROVIDER,
+            "model": settings.LONGCAT_CHAT_MODEL,
+            "top_k": settings.RETRIEVAL_TOP_K,
+            "script_sha256_12": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:12],
+            **meta,
+        },
+        "summary": {"stats": {k: list(v) for k, v in stats.items()}, "citation": [cit_total, cit_good]},
+        "results": results,
+    }
+    path = Path(out_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+async def _run_faithfulness(
+    db, kb_id: uuid.UUID, questions: list[dict], gt: dict, results: list[dict] | None = None
+) -> tuple:
     """核心循环：逐题评测并汇总（供 main 与 run_faithfulness_eval 复用）。
 
-    返回 (stats, fails, cit_good, cit_total)。
+    results 非 None 时逐题追加（含 skip/error），供 --out 导出。返回 (stats, fails, cit_good, cit_total)。
     """
     stats = {"qa": [0, 0], "refuse": [0, 0], "refuse_qa": [0, 0], "handoff": [0, 0], "chitchat": [0, 0]}
     fails: list[str] = []
@@ -308,11 +355,15 @@ async def _run_faithfulness(db, kb_id: uuid.UUID, questions: list[dict], gt: dic
         g = gt.get(q["qid"])
         if q["intent"] == "qa" and g is None:
             print(f"  [SKIP] {q['qid']} 无 ground-truth")
+            if results is not None:
+                results.append({"qid": q["qid"], "kind": "skip", "ok": False, "why": "无 ground-truth", "answer": ""})
             continue
         try:
             res = await eval_one_retry(db, kb_id, q, g)
         except Exception as e:  # noqa: BLE001
             print(f"  [ERR] {q['qid']} {type(e).__name__}: {e}")
+            if results is not None:
+                results.append({"qid": q["qid"], "kind": "error", "ok": False, "why": f"{type(e).__name__}: {e}", "answer": ""})
             res = None
         await asyncio.sleep(0.8)  # 题间轻间隔（成功/失败统一），降低 429 概率
         if res is None:
@@ -383,6 +434,10 @@ async def main() -> int:
         "CI 硬门禁默认 sample 20 控制耗时；需全量请用 workflow_dispatch（full_eval=true）",
     )
     ap.add_argument("--kb-name", default="星河智家·售后与订单全量库")
+    ap.add_argument(
+        "--out", default="",
+        help="结果 JSON 落盘路径（相对当前目录；门禁判定前写入，FAIL 也有完整数据）",
+    )
     args = ap.parse_args()
 
     questions = parse_questions()
@@ -398,12 +453,20 @@ async def main() -> int:
         print(f"[SAMPLE] 均匀抽样 {len(questions)} 题（步长 {step}，确定性）")
 
     db = SessionLocal()
+    results: list[dict] = []
     try:
         kb = _resolve_kb(db, args.kb_name)
         if kb is None:
             print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
             return 2
-        stats, fails, cit_good, cit_total = await _run_faithfulness(db, kb.id, questions, gt)
+        stats, fails, cit_good, cit_total = await _run_faithfulness(db, kb.id, questions, gt, results=results)
+        if args.out:
+            p = _write_report(
+                args.out,
+                {"kb_name": args.kb_name, "sample": args.sample, "limit": args.limit, "offset": args.offset},
+                stats, results, cit_good, cit_total,
+            )
+            print(f"[OUT] 结果已写入 {p}")
     finally:
         db.close()
 

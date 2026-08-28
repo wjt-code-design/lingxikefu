@@ -98,3 +98,60 @@ def test_judge_qa_invoice_parallel_claims():
     assert ok, why
     ok2, _ = judge_qa("个人抬头仅可开电子普通发票。", claims)
     assert not ok2
+
+
+# ---------- --out 导出与逐引用点明细（2026-08-28 RAG 质量深化 Task 1） ----------
+
+
+def test_judge_citations_detail_records_each_point():
+    """detail 参数逐引用点记录（n/句子/重叠率/判定），供 --out 导出与归因。"""
+    chunks = [
+        _Chunk("未实际使用的大家电可无理由退货；已安装使用的仅质量问题可退。"),
+        _Chunk("个人抬头仅可开电子普通发票；企业抬头可开具增值税专用发票。"),
+    ]
+    answer = "未实际使用的大家电可无理由退货 [来源1]。最新科技曲线 [来源2]。"
+    detail: list[dict] = []
+    all_ok, good, total = judge_citations(answer, chunks, detail=detail)
+    assert total == 2 and good == 1 and all_ok is False
+    assert detail[0]["n"] == 1 and detail[0]["ok"] is True and detail[0]["overlap"] >= 0.30
+    assert "退货" in detail[0]["sentence"]
+    assert detail[1]["n"] == 2 and detail[1]["ok"] is False and detail[1]["overlap"] < 0.30
+
+
+def test_judge_citations_detail_none_keeps_old_behavior():
+    """不传 detail 时行为与旧签名完全一致（admin 调用方/既有测试兼容）。"""
+    chunks = [_Chunk("未实际使用的大家电可无理由退货。")]
+    all_ok, good, total = judge_citations("未实际使用的大家电可无理由退货 [来源1]。", chunks)
+    assert (all_ok, good, total) == (True, 1, 1)
+
+
+def test_write_report_structure(tmp_path):
+    """--out JSON 结构：meta(四件套自描述)/summary/results 三层。"""
+    from scripts.eval_faithfulness import _write_report
+
+    stats = {"qa": [2, 2], "refuse": [0, 0], "refuse_qa": [0, 0], "handoff": [0, 0], "chitchat": [0, 0]}
+    results = [
+        {
+            "qid": "Q001", "kind": "qa", "ok": True, "why": "", "answer": "已答",
+            "chunks": [{"i": 1, "text": "原文", "score": 0.5, "dense_score": 0.5, "doc_id": "d1"}],
+            "cit": (1, 1, True),
+            "cit_detail": [{"n": 1, "sentence": "已答", "overlap": 0.9, "ok": True}],
+        }
+    ]
+    p = _write_report(
+        str(tmp_path / "r.json"),
+        {"kb_name": "星河智家·官方政策库", "sample": 0, "limit": 0, "offset": 0},
+        stats, results, cit_good=1, cit_total=1,
+    )
+    import json
+
+    data = json.loads(p.read_text(encoding="utf-8"))
+    assert data["meta"]["provider"] == "longcat"
+    assert data["meta"]["top_k"] == 5
+    assert data["meta"]["model"] == "LongCat-2.0"
+    assert data["meta"]["kb_name"] == "星河智家·官方政策库"
+    assert len(data["meta"]["script_sha256_12"]) == 12
+    assert data["summary"]["citation"] == [1, 1]
+    assert data["summary"]["stats"]["qa"] == [2, 2]
+    assert data["results"][0]["cit_detail"][0]["n"] == 1
+    assert data["results"][0]["chunks"][0]["text"] == "原文"
