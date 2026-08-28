@@ -1,11 +1,10 @@
 """seed_demo_data 目标库收权（2026-08-28 评测库污染事故防线）。"""
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from app.core.config import settings
 from app.models.base import Base  # noqa: F401 确保模型注册
 from app.models.knowledge import KnowledgeBase
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 def _session():
