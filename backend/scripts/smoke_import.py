@@ -14,15 +14,26 @@
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
+import sys
 from pathlib import Path
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.knowledge import Chunk, DocumentStatus
+from app.models.knowledge import Chunk, Document, DocumentStatus
 from app.repositories.document_repo import DocumentRepository, KnowledgeBaseRepository
 from app.services.document_service import extract_text
 from app.services.knowledge_import_service import ImportError_, import_document
+
+
+def check_doc_set(kb_docs: set[str], source_files: set[str]) -> list[str]:
+    """KB 内文档名 vs kb/ 源文件名差异审计，返回 KB 多出的文档名（污染嫌疑）。
+
+    2026-08-28 事故：seed_demo_data 无参运行曾把 9 个演示文档混入评测库，
+    检索分布漂移致本地/CI 口径分裂、Q042 缺陷假绿（BASELINE §五）。此审计防复发。
+    """
+    return sorted(kb_docs - source_files)
 
 BASE = Path(__file__).resolve().parent.parent.parent / "eval-and-samples"
 KB_DIR = BASE / "kb"
@@ -79,6 +90,11 @@ def _skip_or_repair(existing, db, kb_id) -> bool:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--strict", action="store_true",
+                        help="审计出非 kb/ 源文档时 exit 1（CI 用）；默认仅告警")
+    args = parser.parse_args()
+
     db = SessionLocal()
     kb_repo = KnowledgeBaseRepository(db)
     doc_repo = DocumentRepository(db)
@@ -142,6 +158,19 @@ def main() -> int:
     # 汇总
     pg_chunks = db.query(Chunk).filter_by(kb_id=kb.id).count()
     print(f"\n[SUMMARY] imported={imported} skipped={skipped} failed={failed}")
+
+    # 文档清单审计：KB 内文档名必须全部来自 kb/（+kb-pdf/）源目录。
+    # 2026-08-28 事故：seed_demo_data 污染评测库致本地/CI 检索分布分裂——此防线防复发。
+    src_names = {f.name for f in files}
+    kb_doc_names = {d.name for d in db.query(Document).filter_by(kb_id=kb.id).all()}
+    extra = check_doc_set(kb_doc_names, src_names)
+    if extra:
+        msg = (f"KB 含 {len(extra)} 个非 kb/ 源文档（疑似 seed_demo_data 污染）: {extra}；"
+               "清理方法见 BASELINE.md §五")
+        if args.strict:
+            print(f"[GUARD][FAIL] {msg}")
+            sys.exit(1)
+        print(f"[GUARD][WARN] {msg}")
 
     # 验证 Qdrant 向量数 == PG chunks 总数（按当前 KB 过滤；集合跨 KB 共享，不能数全集）
     try:

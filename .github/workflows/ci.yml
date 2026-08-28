@@ -353,8 +353,10 @@ jobs:
           HF_HUB_DOWNLOAD_TIMEOUT: "60"
       # 导入评测知识库（eval-and-samples/kb/ + kb-pdf/，sha256 幂等）。
       # smoke_import 建库名为「星河智家·官方政策库」，评测脚本经 --kb-name 对齐。
+      # --strict：fresh 库审计出非 kb/ 源文档即 exit 1（2026-08-28 KB 污染事故防线）；
+      # fresh PG 只会导入 kb/+kb-pdf/，审计恒过，不会误伤。
       - name: Import eval KB (kb/ + kb-pdf/)
-        run: python -m scripts.smoke_import
+        run: python -m scripts.smoke_import --strict
       # recall@5：检索层，无 LLM，不依赖 key。契约阈值 recall@5 >= 85%。
       - name: Recall eval (recall@5 >= 85%)
         run: python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME"
