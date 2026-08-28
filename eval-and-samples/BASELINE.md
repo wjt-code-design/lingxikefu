@@ -1,35 +1,41 @@
 # 灵犀评测基线冻结清单（BASELINE）
 
-> 生效：2026-08-26。规则：**四件套一致才可比**（评测集 + 判定脚本 + 检索参数 + 模型）。
+> 生效：2026-08-28。规则：**四件套一致才可比**（评测集 + 判定脚本 + 检索参数 + 模型 + 评测 KB）。
 
 ## 一、四件套冻结
 
 | 维度 | 冻结值 | 位置 |
 |---|---|---|
 | 评测集 | 评测问题库.md / ground-truth.md / 口语化评测集.md | hash 见 BASELINE.sha256 |
-| 判定脚本 | backend/scripts/eval_faithfulness.py @ e20014e | git commit |
-| 检索参数 | RETRIEVAL_TOP_K=5（2026-08-21 降噪 8→5） | backend/app/core/config.py |
-| 模型 | glm-4.5-air（CHAT_PROVIDER=zhipu） | backend/.env |
+| 判定脚本 | backend/scripts/eval_faithfulness.py @ 250e208（sha256 `28ea8c955d08`） | git commit |
+| 检索参数 | RETRIEVAL_TOP_K=5（2026-08-21 降噪 8→5）+ MIN_SCORE=0.30（拒答判定走 dense_score 解耦；RRF score 仅排序，无绝对语义） | backend/app/core/config.py |
+| 模型 | LongCat-2.0（CHAT_PROVIDER=longcat） | backend/.env |
+| 评测 KB | 星河智家·官方政策库（= smoke_import._KB_NAME，唯一真源） | backend/scripts/smoke_import.py |
 
-## 二、faithfulness 新基线（2026-08-26，backend 严格判定器）
+## 二、faithfulness 新基线（2026-08-28，LongCat-2.0 + 判定脚本@250e208）
 
-- qa：64/78 = **82.1%**（目标 ≥85%）
-- refuse：7/8 = **87.5%**（目标 ≥90%）
-- 引用合法率：3/14 = **21.4%**（目标 ≥95%）
-- refuse_qa 3/4（合理拒答 2、误拒答 Q064）；handoff 5/5；chitchat 5/5
-- 口径：qa 分母剔除 refuse_qa（=78）；glm-4.5-air + top_k=5 + eval_faithfulness.py@e20014e
+- qa：run1 76/81 = **93.8%**；run2 抖动复核 75/81 = **92.6%**（目标 ≥85% ✅ 双跑均过）
+- refuse：run1/run2 均 7/7 = **100%**（目标 ≥90% ✅）
+- 引用合法率：run1 219/230 = **95.2%**；run2 204/206 = **99.0%**（目标 ≥95% ✅ 双跑均过）
+- refuse_qa：run1 0/1（误拒答 Q064）；run2 1/2（Q093 误拒答）；handoff run1/run2 均 5/5；chitchat 均 5/5
+- 口径：qa 分母剔除 refuse_qa；LongCat-2.0 + top_k=5 + eval_faithfulness.py@250e208 + KB「星河智家·官方政策库」
+- 已知判定器缺陷（见归因清单·发现 2）：[来源N] 紧跟句末标点时句子窗口取空 → 有实质支撑的引用被误判非法（run1 4 点 / run2 1 点）。修正口径：run1 223/230 ≈ **97.0%**、run2 205/206 ≈ **99.5%**；S1 修复后以 `--rejudge` 复算并重冻结。
+- 失败题逐题归因：`results/baseline-longcat-20260828-attribution.md`（S1/S2/S3 冲刺输入）
+- 旧基线（2026-08-26，glm-4.5-air）：qa 82.1% / refuse 87.5% / 引用 21.4%——模型与判定脚本均变，**不可比**
 
 ## 三、历史口径（退役存档，不可与上表直接对比）
 
+- **2026-08-26 基线**（glm-4.5-air + 判定脚本@e20014e）：qa 64/78 = 82.1%、refuse 7/8 = 87.5%、引用 3/14 = 21.4%。被 2026-08-28 新基线替代。
 - **8/16 基线**（gen-eval-final-flash-20260816.json）：eval-and-samples/gen_eval.py 宽松标记词（HONEST_MARKS=未收录/转人工/人工客服 + 只验[来源]标记存在）→ qa_false_rate 4.9%、src_compliance 1.0。**95.1% PASS 是这把宽松尺子的结果，与 backend 严格脚本不同源。**
 - **flash 复现**（2026-08-26）：backend 严格脚本 + glm-4-flash → qa 78.8% / refuse 12.5% / 引用 5.6%，仅用于同模型归因（证明非模型退化）。
 
 ## 四、门禁说明
 
-- 阈值 85% / 90% / 95% 为既有目标契约，**不变**。
-- 当前三项未达标 → CI 先 report-only（只报告不阻塞），优化达标后转硬门禁。
-- 已知待优化项：Q064 双模型误拒答；引用合法率 21.4% 需专项提升（模型引用可溯源能力）。
+- CI eval job 已是硬门禁（qa≥85% + refuse≥90%，抽样 20 题）；citation≥95% 在全量模式判定（workflow_dispatch full_eval=true），抽样模式仅报告。
+- 新基线三项双跑达标（本地全量），Task 6 将以 full_eval=true 复核 CI 全量门禁后做二次冻结。
+- 已知待优化项（Task 5 三冲刺）：引用错位 2 题（Q074/Q043）、误拒答边界抖动（Q064）、断言覆盖不完整稳败 3 题（Q032/Q062/Q096）；高抖动题 Q052/Q088/Q092/Q011/Q093 降级处理。
 
 ## 五、体系缺口（已暴露，待补）
 
-- BASELINE.sha256 原只冻结评测集 hash，未冻结判定脚本/检索参数/模型 → 2026-08-26 起以本文件补齐四件套。
+- BASELINE.sha256 原只冻结评测集 hash，未冻结判定脚本/检索参数/模型 → 2026-08-26 起以本文件补齐四件套；2026-08-28 起补录判定脚本 hash 与检索参数至 sha256 文件。
+- 检索分数口径注意：run_eval 存档中的 top1/margin 是 RRF 融合分（理论最大 0.049，无绝对语义），拒答阈值语义看 dense_score（归因清单·发现 1，R1 已结案）。
