@@ -1,7 +1,7 @@
 """灌入模拟真实场景的演示数据到知识库（物流/退款/送装/保修/配送）。
 
 用法：python scripts/seed_demo_data.py [kb_id]
-不传 kb_id 则用当前租户最新创建的 KB（与 chat 路由一致）。
+不传 kb_id 只选 name=='demo' 的库（空环境自动建 demo；只有业务库时拒绝，须显式指定 kb_id）。
 幂等：sha256 去重，重复运行不会产生重复文档。
 """
 import hashlib
@@ -35,25 +35,38 @@ DEMO_DIR = Path(__file__).parent / "demo_data"
 
 
 def latest_kb(db) -> uuid.UUID:
-    kb = db.scalar(
-        sqlalchemy.select(KnowledgeBase)
-        .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
-        .order_by(KnowledgeBase.created_at.desc())
-        .limit(1)
+    """无参 seed 的目标库选择（收权版，2026-08-28 污染事故防线）：
+
+    1) 空环境 → 自动建 demo 库（CI unit tests 无库分支，保留）；
+    2) 有 name=='demo' 库 → 选它（演示数据归位）；
+    3) 只有业务库 → 拒绝并退出，要求显式 kb_id。
+       事故复盘：旧逻辑取「租户最新库」，评测库恰为最新时 9 个演示文档混入
+       「星河智家·官方政策库」，检索分布漂移致本地/CI 口径分裂（BASELINE §五）。
+    """
+    kbs = db.scalars(
+        sqlalchemy.select(KnowledgeBase).order_by(KnowledgeBase.created_at.desc())
+    ).all()
+    if not kbs:
+        demo = KnowledgeBase(
+            name="demo",
+            description="自动创建：承载演示订单数据，供订单检索集成回归（test_demo_orders.py）",
+            tenant_id=settings.TENANT_DEFAULT,
+        )
+        db.add(demo)
+        db.commit()
+        db.refresh(demo)
+        logger.info("自动创建 demo 知识库 %s", demo.id)
+        return demo.id
+    demo_kb = next((k for k in kbs if k.name == "demo"), None)
+    if demo_kb is not None:
+        return demo_kb.id
+    listing = "\n".join(f"  {k.id}  {k.name}" for k in kbs)
+    raise SystemExit(
+        "[seed_demo_data] 拒绝自动选库：环境无 demo 库，现有库：\n"
+        f"{listing}\n"
+        "为防演示数据污染评测库（2026-08-28 事故），请显式指定目标："
+        "python scripts/seed_demo_data.py <kb_id>（可先建独立 demo 库后再 seed）"
     )
-    if kb is not None:
-        return kb.id
-    # CI/全新环境：无知识库时不退出，自动创建 demo 库（订单集成回归 seed 自给自足）。
-    demo = KnowledgeBase(
-        name="demo",
-        description="自动创建：承载演示订单数据，供订单检索集成回归（test_demo_orders.py）",
-        tenant_id=settings.TENANT_DEFAULT,
-    )
-    db.add(demo)
-    db.commit()
-    db.refresh(demo)
-    logger.info("自动创建 demo 知识库 %s", demo.id)
-    return demo.id
 
 
 def main() -> None:
