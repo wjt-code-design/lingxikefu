@@ -403,6 +403,9 @@ async def _run_faithfulness(
             cit_total += t0
             if not all_ok and g0 < t0:
                 fails.append(f"{res['qid']} [cite] 引用不合法 {g0}/{t0}")
+        if results is not None:
+            # 成功路径也必须进 results（此前只有 skip/error 收集，--out 导出 results 恒空）
+            results.append(res)
         tag = "PASS" if res["ok"] else "FAIL"
         print(f"  [{tag}] {res['qid']} ({kind}) {res['answer'][:60]}")
     return stats, fails, cit_good, cit_total

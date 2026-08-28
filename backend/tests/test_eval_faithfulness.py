@@ -225,3 +225,38 @@ def test_pass_all_empty_qa_fails():
     from scripts.eval_faithfulness import _pass_all
 
     assert _pass_all(_gate_stats(qa_total=0), 0, 0, full_run=False) is False
+
+
+# ---------- _run_faithfulness 成功路径 results 收集（2026-08-28 修 results 恒空） ----------
+
+
+def test_run_faithfulness_success_appends_results(monkeypatch):
+    """成功评测的每题必须进 results（此前只有 skip/error 收集，--out 导出 results 恒为空数组）。"""
+
+    async def fake_eval_one(db, kb_id, q, g):
+        return {"qid": q["qid"], "kind": "qa", "ok": True, "why": "", "answer": "已答",
+                "cit": (1, 1, True), "cit_detail": [], "chunks": []}
+
+    import asyncio
+
+    from scripts import eval_faithfulness as ef
+
+    monkeypatch.setattr(ef, "eval_one_retry", fake_eval_one)
+
+    questions = [
+        {"qid": "Q900", "intent": "qa"},
+        {"qid": "Q901", "intent": "qa"},
+    ]
+    gt = {"Q900": {"refuse": False, "claims": ["x"]}, "Q901": {"refuse": False, "claims": ["x"]}}
+
+    results: list[dict] = []
+    stats, fails, cit_good, cit_total = asyncio.run(ef._run_faithfulness(None, "kb", questions, gt, results=results))
+
+    assert stats["qa"] == [2, 2]
+    assert len(results) == 2, "成功路径也必须收集 results"
+    assert results[0]["qid"] == "Q900" and results[0]["answer"] == "已答"
+    assert cit_good == 2 and cit_total == 2
+
+    # 不传 results 时行为不变（run_faithfulness_eval 复用入口不依赖收集）
+    stats2, fails2, *_ = asyncio.run(ef._run_faithfulness(None, "kb", questions, gt))
+    assert stats2["qa"] == [2, 2]
