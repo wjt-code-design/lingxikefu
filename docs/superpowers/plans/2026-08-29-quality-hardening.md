@@ -92,9 +92,24 @@
 
 > S2 不进 F-1 批次的原因：它改的是业务行为（词表语义），须用户拍板设计取舍，且改动须与 13 条锁定用例对质。
 
-### F-3 其余外部条目（未验证，第二批先核实再修）
+### F-3 其余外部条目（批次 G 已核实并处置，2026-08-29）
 
-M3（限流 fail-open）、M4（warmup task 引用）、M5（refresh 无限流）、M7（配额异常补偿）、L1（开关语义重载）、L2（session_obj 别名，progress.md 旧账已见）、L3（_ensured 无锁）、L6（缓存 doc_title）——外部报告标 🔵（代码事实+推演后果），但按本项目纪律**未经运行级核实的修法不入批次**。处置：下一批次开工前，先用 F-1 同款验证代理一次性核实 8 条（每条回答：属实？修法安全？与既有测试/设计冲突？），再按核实结论组批次。已知预判：M6 的教训表明外部修法可能没读底层实现（audit_log 内部 commit / 6381cd5 租户钉死），M3 的 prod fail-closed 建议与 `RATE_LIMIT_ENABLED` 测试语义（L1）存在耦合，须一并设计。
+核实报告：`.superpowers/sdd/external-review-verify-2.md`（运行级验证，8 条全核）。处置结果：
+
+**G1 已修（5906ab8 + 855d1f7 + bff1d37，审查 Approved×2）**：
+- L2：chat.py sources 迭代改名 src，删 session_obj 别名（含历史遮蔽注释如实化）
+- L3：answer_cache `_ensure_collection` 加锁双检（同 `_kb_lock` 先例）
+- L3-一致性：vector_service `ensure_collection` 同款加锁（审查点名定夺项；实现中 global 作用域错误被既有 Bug A 红测当场抓获并修正）
+- M4：warmup task 保存引用 + lifespan 关闭时 cancel（cancel 空操作无害）
+
+**验证证伪不修**：
+- M3（限流 fail-open）：deps.py is_revoked fail-closed 使 Redis 故障期爆破收益趋零；fail-open 是测试钉死的既定决策。仅挂账"加降级告警"。
+- L6（缓存 doc_title 陈旧）：chat.py :449-456 对每次 sources 事件（含缓存命中）按 doc_id 服务时重查 DB 覆写标题——外部审查者没读消费方代码。
+
+**G2 挂账（各需新测试/设计，独立批次）**：
+- M7：quota incr 成功后 decr/marker 异常吞为 (False,0) 致计数虚高（±1 次、48h TTL 自愈）；外部补偿 decr 有负计数反例，正确修法需 executed 标志 + 2 个新红测。
+- M5：refresh 端点无限流；但 refresh token 是 HS256 JWT（prod 密钥≥32 位）爆破在 decode 即败，外部"token 指纹 key"是无效设计（垃圾 token 每次新 key），若做用 IP 维度。
+- L1：RATE_LIMIT_ENABLED 4 类消费点语义重载（含 admin_settings 暴露面）；拆分破坏面小（conftest 一行），做时顺手定夺 M3 降级告警。
 
 ### F-4 修复后统一验证
 
