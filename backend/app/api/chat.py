@@ -278,6 +278,11 @@ async def chat_stream(
         # P0-1：请求级 trace_id 注入 contextvar（RAG/Agent/工具日志统一带 trace_id；
         # asyncio 自动传播到同请求协程，anyio 线程池 worker 复制 context 同样生效）
         set_trace_id(trace_id)
+        # S1（外部审查 2026-08-28）：配额已在上方原子扣减（R2 扣费在生成前），gen 一旦开始
+        # 执行即「已扣费未交付」。consumed=True 表示配额仍被持有：未成功交付（done）的任何
+        # 出口（error 事件/断连/异常）都由下方 finally 统一退款；done 分支在 assistant 落库
+        # 成功后置 False（计费成立，不再退）。此前 error 事件只转发不退款——用户额度被静默侵蚀。
+        consumed = True
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
         if await request.is_disconnected():
             logger.info("chat stream aborted: client disconnected (pre)")
@@ -352,8 +357,7 @@ async def chat_stream(
             # BUG-09：RAG/LLM 生成前再确认连接（检索可能耗时数秒）
             if await request.is_disconnected():
                 logger.info("chat stream aborted: client disconnected (pre-llm)")
-                quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额
-                return
+                return  # S1：consumed 仍 True → finally 统一退款（R2 断连回滚）
             quick_ans = await run_in_threadpool(match_quick, req.content)
 
             # 2026-08-22 Phase C：读取用户画像注入 prompt（fail-open：读取异常 → 不注入，回答照常）。
@@ -409,8 +413,7 @@ async def chat_stream(
                 # BUG-09：每收到一个事件检查客户端连接，断开即终止（不再消费下一个事件）
                 if await request.is_disconnected():
                     logger.info("chat stream aborted: client disconnected during %s", event)
-                    quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额
-                    return
+                    return  # S1：consumed 仍 True → finally 统一退款（R2 断连回滚）
                 if event == "intent":
                     # R-2：真实意图（qa/handoff/chitchat）——落库用 + 转发客户端
                     intent = data.get("intent", "qa")
@@ -476,6 +479,9 @@ async def chat_stream(
                     msg_id = await _persist_answer(
                         db, session_id, content, source_payloads, intent, meta
                     )
+                    # S1：assistant 已落库 = 交付成立，计费生效（finally 不再退）。
+                    # 置于落库成功之后——落库失败仍走 finally 退款（不白扣）。
+                    consumed = False
                     # 2026-08-22 Phase B：assistant 落库后增量采集用户画像（幂等键=user_msg.id；
                     # fail-open：采集异常不影响响应；手打/快捷问题都记主题与实体）。
                     # 归属用 session_owner_id（会话 owner）而非当前操作者：agent/admin 代答时不把画像记到客服头上。
@@ -533,12 +539,18 @@ async def chat_stream(
                         done_data["answer_source"] = data["answer_source"]  # 快捷话术透传（前端空态区分）
                     yield _sse({"event": "done", "data": done_data})
                 elif event == "error":
+                    # S1：error = 已扣费但未交付（rag_service 两个 error 源都在扣费后），
+                    # consumed 保持 True → finally 统一退款（此前只转发不退款，额度被静默侵蚀）。
                     yield _sse({"event": "error", "data": data})
         except Exception:  # pragma: no cover - 兜底，不向客户端泄漏内部细节
             logger.exception("chat stream 处理异常")
-            quota.refund(str(user_id), 1, req.client_msg_id)  # R2：异常未完成 → 回滚配额
             yield _sse({"event": "error", "data": {"code": "SYS_ERROR", "message": "服务异常，请稍后重试"}})
         finally:
+            # S1：未交付出口统一退款（error 事件/断连/异常），单一收口防泄漏也防双退；
+            # done 已置 consumed=False（交付成立不退）。quota.refund 内部幂等标记再兜底一层。
+            if consumed:
+                quota.refund(str(user_id), 1, req.client_msg_id)
+                consumed = False
             # P2-2：Agent 降级排水——正常结束/断连/异常全路径统一计数 + 结构化日志
             # （防静默改路径：降级率从此可统计、可告警）
             drain_degraded(ctx.degraded, trace_id=trace_id)

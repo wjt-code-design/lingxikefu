@@ -329,6 +329,44 @@ def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
     assert called == []  # 未调 LLM
 
 
+def test_chat_stream_error_event_refunds_quota(client, monkeypatch):
+    """S1（外部审查 2026-08-28）：SSE error 事件路径必须退配额。
+
+    rag_service 两个 error 源（RAG_RETRIEVAL/RAG_GENERATE）都在配额扣减之后触发——
+    error 即「已扣费但未交付回答」，配额必须回滚，否则用户额度被静默侵蚀。
+    断言：error 事件发生后净消耗归零（try_consume +1 被 refund 抵消，用户可再次消费）；
+    且 error 路径不落 assistant 消息（未交付不落库）。
+    """
+    tc, Local, calls = client
+
+    class _ErrorStream:
+        """替身 stream_answer：检索正常后生成失败（对齐 rag_service :259 真实序列）。"""
+
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
+            yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
+            yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _ErrorStream())
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert '"event": "error"' in r.text and "RAG_GENERATE" in r.text
+
+    # S1 核心：error 路径退款 → 净消耗归零（修复前恒为 1——额度被静默侵蚀）
+    assert calls["consumed"] == 0
+
+    # 未交付不落 assistant 消息（仅 user 消息在库）
+    with Local() as db:
+        msgs = db.scalars(select(Message)).all()
+        assert [m.role for m in msgs] == [MessageRole.user]
+
+
 def test_chat_stream_foreign_session_404(client):
     tc, *_ = client
     # 他人 session（user 不同，表中不存在）
