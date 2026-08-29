@@ -44,6 +44,10 @@ _TEST_ENV: dict[str, str] = {
 for _key, _value in _TEST_ENV.items():
     os.environ.setdefault(_key, _value)
 
+# INTENT_SHADOW_SAMPLE 是安全开关（非连接配置）：必须强制 0，防外部导出值
+# 让未打桩的 /chat/stream 测试 fire-and-forget 打真实 LLM（审查 P2-T3 Important-1）。
+os.environ["INTENT_SHADOW_SAMPLE"] = "0"
+
 #: from-import 拿走 get_redis 引用的全部模块（patch 需逐模块打到各自命名空间）
 _REDIS_PATCH_TARGETS = (
     "app.core.token_revocation.get_redis",
