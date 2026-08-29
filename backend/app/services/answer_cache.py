@@ -3,6 +3,8 @@
 设计（缓存机制设计-2026-08-16 §二/§三 + 审查补充）：
 - 混合三层：①精确归一（Redis，改写后 query sha）→ ②语义（Qdrant 检索，阈值+实体锁定+版本）→ ③miss 走 RAG 回填
 - **实体锁定**：query 含实体（型号/商品词）时，命中候选必须包含全部实体（防"手机保修"串"冰箱保修"）
+- **极性防护**（架构审核债 5-1）：否定/条件翻转问句（能退/不能退、7天内/超过7天）极性词
+  集合不一致即 miss——语义阈值挡不住一词之差的翻转，实体锁定在无数体句时恒放行
 - **KB 版本失效**：payload 记录 kb_version（KB.updated_at），不一致即 miss 并清理
 - **fail-open**：任何异常降级走 RAG（不阻断）；开关 ANSWER_CACHE_ENABLED 一键关闭
 - 不缓存内容由调用方过滤（handoff/个人上下文/拒答不 put）
@@ -66,6 +68,24 @@ def _entities_ok(query: str, cached_question: str) -> bool:
     return all(e in cached_question for e in qe)
 
 
+#: 否定/条件极性防护（架构审核债 5-1，2026-08-29）：语义相似但极性相反的问句
+#: （"能退"/"不能退"、"7天内"/"超过7天"）余弦挡不住一词之差的翻转，实体锁定在
+#: 无数体句时恒放行。极性词集合不一致即判翻转 → miss 走 RAG：误拦只损失一次
+#: 缓存命中，漏拦是承诺红线串答，故词表从宽——裸"不"兜底双字否定词覆盖不到的
+#: "保修/不保修"类翻转；单字噪声（"不锈钢/不错"）只造成良性 miss。词表只增不减
+#: 单调加严（子串词恒共生，等集判定不会因扩表产生新的错误命中）。
+_POLARITY_TERMS = (
+    "不", "不能", "无法", "不可", "不支持", "不提供", "非", "超过", "以外", "之后",
+)
+
+
+def _polarity_conflict(query: str, cached_question: str) -> bool:
+    """极性防护：query 与缓存问句的极性词集合不一致 → 否定/条件翻转，不可命中。"""
+    a = {t for t in _POLARITY_TERMS if t in query}
+    b = {t for t in _POLARITY_TERMS if t in cached_question}
+    return a != b
+
+
 def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | None:
     """缓存命中（精确→语义）。返回 payload 或 None（fail-open 恒不抛）。
 
@@ -104,6 +124,8 @@ def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | 
             return None  # kb 不匹配 → miss（防跨 KB 串答）
         if not _entities_ok(query, p.get("question", "")):
             return None
+        if _polarity_conflict(query, p.get("question", "")):
+            return None  # 否定/条件翻转（能退/不能退、7天内/超过7天）→ miss，宁可走 RAG
         return p
     except Exception:  # noqa: BLE001 - fail-open
         logger.exception("answer_cache.get 失败（降级走 RAG）")

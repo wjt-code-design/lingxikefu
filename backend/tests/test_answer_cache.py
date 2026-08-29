@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from app.services import answer_cache
-from app.services.answer_cache import COLLECTION, _entities_ok, get, put
+from app.services.answer_cache import COLLECTION, _entities_ok, _polarity_conflict, get, put
 
 
 class _FakeHit:
@@ -226,3 +226,44 @@ def test_evict_stale_kb_disabled_noop(monkeypatch):
     monkeypatch.setattr(answer_cache, "get_qdrant_client", _should_not_touch)
 
     answer_cache.evict_stale_kb("kb-a", "v2")  # 不抛异常即通过
+
+
+# --- 极性防护（架构审核债 5-1）------------------------------------------------
+
+
+def test_polarity_conflict_detection():
+    """极性判定：query 与缓存问句的极性词集合不一致即冲突；一致（含双方皆无）不冲突。"""
+    # 否定翻转：能退 vs 不能退
+    assert _polarity_conflict("商品能退货吗", "商品不能退货吗")
+    # 条件翻转：7天内 vs 超过7天（单侧含条件词即冲突）
+    assert _polarity_conflict("7天内能退货吗", "超过7天能退货吗")
+    assert _polarity_conflict("保修多久", "超过7天还能保修吗")
+    # 裸"不"兜底：双字否定词覆盖不到的"保修/不保修"类翻转也要拦
+    assert _polarity_conflict("手机保修吗", "手机不保修吗")
+    # 极性一致（含双方同含否定词）不冲突
+    assert not _polarity_conflict("商品能退货吗", "商品可以退货吗")
+    assert not _polarity_conflict("不能退货吗", "确实不能退货吗")
+
+
+def test_semantic_hit_blocked_on_polarity_conflict(monkeypatch):
+    """否定/条件翻转防护（架构审核债 5-1）："能退"与"不能退"仅一词之差，假 embed 同向量
+    下余弦必然 ≥0.85，但极性相反——不得互相命中；极性一致的改写"可以退吗"仍命中。"""
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.85,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    qd = _FakeQdrant()
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: qd)
+    monkeypatch.setattr(answer_cache, "get_redis", _FakeRedis)
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type("E", (), {"dim": 768, "embed": lambda *a: [[0.1] * 768]})())
+
+    put("商品能退货吗", "7 天内可退", [{"chunk_id": "c1"}], ["d1"], "v1", kb_id="kb-a")
+    assert qd.upserted, "语义点应已写入"
+    # 假 embed 恒同向量 → 以下翻转问句语义检索必然以 0.93 相似度命中该点
+    qd.hits = [_FakeHit(qd.upserted[0]["points"][0]["payload"], score=0.93)]
+    assert get("商品不能退货吗", "v1", kb_id="kb-a") is None, "否定翻转不得命中缓存"
+    assert get("超过7天能退货吗", "v1", kb_id="kb-a") is None, "条件翻转不得命中缓存"
+    # 对照：极性一致的改写问句照常语义命中（防护只拦翻转，不伤正常问答）
+    hit = get("商品可以退货吗", "v1", kb_id="kb-a")
+    assert hit is not None and hit["answer"] == "7 天内可退"
