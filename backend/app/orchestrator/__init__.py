@@ -17,7 +17,8 @@ class PipelineTimeoutError(TimeoutError):
     """管线整体时间预算用尽（P2-3 对抗审查 2026-08-27）。
 
     编排层防"节点挂起导致请求吊死"：预算在节点之间检查（无法中断单个阻塞节点），
-    超时由调用方按降级语义处理（run_pipeline 将其与检索失败同路降级为诚实拒答）。
+    超时由调用方按降级语义处理（run_pipeline 拆分异常路径：与检索故障分档降级为诚实拒答，
+    话术不同——见 rag_service.degraded_kind）。
     """
 
 

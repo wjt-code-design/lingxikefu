@@ -9,6 +9,8 @@
 - P2-1：检索不可用/管线超时（RetrievalError/PipelineTimeoutError）→ fail-open 降级为
   诚实拒答（retrieve_degraded=True），不再抛 RagError 转 error 事件——
   用户得到可操作引导（转人工），而非"服务暂不可用"；RagError 仅留作防御性兜底。
+  架构一期 5（降级话术阶梯）：两类降级拆分异常路径（degraded_kind=retrieval/timeout），
+  话术分档——检索故障=系统坏了该转人工，管线超时=容量延迟该稍后再试；均保评测锚点。
 """
 from __future__ import annotations
 
@@ -87,6 +89,9 @@ class RagResult:
     cached_sources: list[dict] = field(default_factory=list)  # T10：缓存 sources（含 doc_title）
     rewritten_query: str = ""  # T9：检索/缓存 key 用的改写后文本
     retrieve_degraded: bool = False  # P2-1：检索不可用/管线超时被降级（fail-open 拒答路径）
+    # 降级阶梯（架构一期 5）：""=非降级 | "retrieval"=检索故障（服务坏了）| "timeout"=管线超时（容量延迟）。
+    # 默认 ""：retrieve_degraded=True 而未标 kind 的旧构造方沿用检索故障话术（向后兼容）。
+    degraded_kind: str = ""
 
 
 def classify_intent(query: str) -> str:
@@ -138,16 +143,27 @@ def run_pipeline(query: str, kb_id: UUID, top_k: int | None = None, history: lis
     try:
         pipeline = Pipeline(query=query, kb_id=kb_id, history=history or [], kb_version=kb_version)
         pipeline = _build_pipeline(pipeline)
-    except (RetrievalError, PipelineTimeoutError) as e:
-        # P2-1：检索不可用 / 管线时间预算用尽 → 降级为诚实拒答（fail-open），
-        # 不把整条问答链打成 error 事件——用户得到可操作的引导，而非"服务暂不可用"。
+    except RetrievalError as e:
+        # P2-1：检索不可用 → 降级为诚实拒答（fail-open），不把整条问答链打成 error 事件。
         # 内部重试已在 Runner 内完成（retry=1），走到这里即重试后仍失败。
-        logger.warning("检索/管线不可用，降级拒答引导转人工: %s", e)
+        logger.warning("检索服务不可用，降级拒答引导转人工: %s", e)
         return RagResult(
             intent="qa",
             refuse=True,
             refuse_reason="检索服务暂不可用",
             retrieve_degraded=True,
+            degraded_kind="retrieval",
+        )
+    except PipelineTimeoutError as e:
+        # 降级阶梯（架构一期 5）：时间预算用尽 ≠ 检索故障——超时多为容量/延迟问题，
+        # 用户该"稍后再试"；检索故障才是"系统坏了该转人工"。拆分异常路径后 _no_llm_reply 分档出话术。
+        logger.warning("管线时间预算用尽，降级拒答（容量话术）: %s", e)
+        return RagResult(
+            intent="qa",
+            refuse=True,
+            refuse_reason="管线响应超时",
+            retrieve_degraded=True,
+            degraded_kind="timeout",
         )
 
     # 映射回 RagResult（chat.py 现有调用不变）
@@ -275,7 +291,12 @@ async def stream_answer(
 
 def _no_llm_reply(result: RagResult) -> str:
     if result.retrieve_degraded:
-        # P2-1：检索服务不可用（区别于"无依据"）——给用户可操作引导
+        # 降级话术阶梯（架构一期 5）：先按 degraded_kind 分档，再落原 handoff/chitchat/兜底分支。
+        # - retrieval：检索服务坏了 → 故障话术；timeout：时间预算用尽（容量/延迟）→ 容量话术。
+        # - degraded_kind 为空但 retrieve_degraded=True（旧构造方）沿用检索故障文案（向后兼容）。
+        # - 两档均含「转人工」锚点（eval_faithfulness.REFUSE_MARKERS），缺失会致诚实性评测假阳性。
+        if result.degraded_kind == "timeout":
+            return "当前咨询量较大，回复出现延迟。您可以稍后再试，或转人工客服立即处理。"
         return "知识库检索服务暂时不可用，请稍后重试；如急需处理，可转人工客服帮您解决。"
     if result.intent == "handoff":
         return "很抱歉给您带来不好的体验。已为您转接人工客服，请稍候；您也可以描述具体问题，我会先尽力帮您解决。"

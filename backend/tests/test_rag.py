@@ -10,6 +10,8 @@ from uuid import uuid4
 import pytest
 from app.prompts.qa_prompt import build_qa_messages
 from app.services.rag_service import (
+    RagResult,
+    _no_llm_reply,
     classify_intent,
     run_pipeline,
     stream_answer,
@@ -152,6 +154,34 @@ def test_pipeline_retrieval_error_degrades_to_refuse(patch, monkeypatch):
     r = run_pipeline("退货运费", uuid4())
     assert r.refuse is True
     assert r.retrieve_degraded is True  # 与"无依据"区分（运营可辨识为基建退化）
+    assert r.degraded_kind == "retrieval"  # 降级阶梯：检索故障细分
+
+
+def test_pipeline_timeout_degrades_with_timeout_kind(patch, monkeypatch):
+    """降级阶梯（架构一期 5）：管线时间预算用尽 → degraded_kind="timeout"，仍 fail-open 拒答。"""
+    from app.orchestrator import PipelineTimeoutError
+
+    def budget_exhausted(pipeline):
+        raise PipelineTimeoutError("管线时间预算 20.0s 用尽")
+
+    monkeypatch.setattr("app.services.rag_service._build_pipeline", budget_exhausted)
+    r = run_pipeline("退货运费", uuid4())
+    assert r.refuse is True
+    assert r.retrieve_degraded is True
+    assert r.degraded_kind == "timeout"
+
+
+def test_timeout_vs_retrieval_distinct_replies():
+    """降级话术阶梯：超时=容量话术（稍后重试），检索故障=故障话术；两档均含评测锚点「转人工」且文案不同。"""
+    r_timeout = _no_llm_reply(
+        RagResult(intent="qa", refuse=True, refuse_reason="t", retrieve_degraded=True, degraded_kind="timeout")
+    )
+    r_retrieval = _no_llm_reply(
+        RagResult(intent="qa", refuse=True, refuse_reason="r", retrieve_degraded=True, degraded_kind="retrieval")
+    )
+    assert "转人工" in r_timeout and ("稍后" in r_timeout or "繁忙" in r_timeout)
+    assert "转人工" in r_retrieval
+    assert r_timeout != r_retrieval
 
 
 # --- prompt ---
