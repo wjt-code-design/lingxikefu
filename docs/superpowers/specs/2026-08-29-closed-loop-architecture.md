@@ -141,3 +141,18 @@ graph RAG / 微服务化 / 实时在线学习 / 扩情绪词表（被意图分�
 | T5 配额 DB 化 | app_settings KV + admin PUT 写通道 + 60s 生效缓存；大促可动态上调（0017） | cfbb6ff |
 
 终态：571+ 新增测试全绿（579 总）、ruff 零错、双迁移对称。遗留登记（progress.md）：Celery 导入路径 quick 门控需持久化 covered 版本、tickets.summary 消费端（TicketItem 下发）接线、_ORDER_RE Unicode \b。二期（L2 路由改道 + 意图分类影子验证）待启动。
+
+## 执行回执（2026-08-30）：二期已落地（L2 补全 + 意图影子）
+
+计划：docs/superpowers/plans/2026-08-30-closedloop-phase02.md（3 任务，逐任务审查全 Approved）。
+**设计修正**：v2.1 原文"低风险 handoff 不建单走起草流"被现场证据否决（不建单脱离工单队列/SLA/created 通知），改为"仍建单 + 建单后 AI 预起草自动挂单"——用户侧流程零变化。
+
+| 任务 | 交付 | commit |
+|---|---|---|
+| P2-T1 预起草基建 | classify_handoff_risk（显式人工/投诉/情绪恒 high）+ suggest 核心抽 service 层 + fire-and-forget 起草写 tickets.draft_suggestion（0018）+ TicketItem 下发补全（summary/时间戳，一期 T3 遗留） | 148fdef |
+| P2-T2 填入通道修正 | 缺陷实锤：坐席"填入"建议发送曾落顾客路径——修复走 agent 通道（前端角色分支） | 9ac0ff1 |
+| P2-T3 意图影子 | qa 类 20% 采样 LLM 分类落 Message.meta（不驱动路由）+ admin 一致率统计端点；conftest 强制采样 0 防测试外泄 | bee46a3 + 8d45b73 |
+
+终态：614 passed / 8 skipped、ruff 零错、0018 迁移对称。
+**评测证据裁剪声明**：本批零评测路径改动（无话术/判定/检索/prompt 变更），以 push CI 抽样 eval + 零改动论证作证，未跑全量——区别于一期 T4（改话术必须全量实测）。
+**已知状态**：预起草现网暂零触发（词表下知识型问句判 qa），改道决策待影子一致率数据。遗留登记 progress.md。
