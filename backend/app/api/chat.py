@@ -265,8 +265,9 @@ async def chat_stream(
     if kb_id is not None:
         kb_version = await run_in_threadpool(_kb_version_str, db, kb_id)
 
-    # 画像归属：会话 owner（在 gen 外捕获；P0-1 trace_id 同理——闭包捕获外层名，
-    # 避免 gen 内长生命周期引用悬空）
+    # 画像归属：会话 owner。在 gen 外捕获：历史上 gen 内 sources 迭代用 `s` 遮蔽过外层
+    # Session 导致闭包 UnboundLocalError（测试亲眼红过）；L2 改名 src 后遮蔽已消除，
+    # gen 外捕获保留为防御惯例。
     session_owner_id = s.user_id
     # P0-1 trace_id：复用 HTTP 中间件生成的 request_id，贯通业务链路（日志 / SSE done）。
     trace_id = getattr(request.state, "request_id", "") or uuid.uuid4().hex[:12]

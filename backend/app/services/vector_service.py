@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from functools import lru_cache
 from uuid import NAMESPACE_DNS, UUID, uuid5
@@ -27,6 +28,9 @@ def get_collection_name() -> str:
 #: 集合名列表缓存（L7）：维度不变，60s 内复用，避免每次 upsert/delete 都 get_collections。
 _COLLECTIONS_CACHE: tuple[float, set[str]] | None = None
 _COLLECTIONS_TTL = 60.0
+#: 并发首调防重复 create（同 answer_cache/_kb_lock 先例）：导入多线程同时 upsert 时
+#: check-then-create 会撞 Qdrant already exists → 单次导入整批 FAIL-IMPORT（Bug A 同族教训）。
+_ensure_lock = threading.Lock()
 
 
 def _list_collections() -> set[str]:
@@ -76,48 +80,55 @@ def ensure_collection() -> int:
     """确保 Qdrant 集合存在且维度与当前 embedding 一致，返回维度。
 
     hybrid 模式创建 named vectors（dense+sparse），纯 dense 模式维持旧结构。
+    check-then-create 全程持 _ensure_lock（并发首调防重复建集合，见其注释）。
     """
     global _COLLECTIONS_CACHE  # 必须在创建后刷新模块级缓存（Bug A；缺 global 曾静默失效，单测实证）
     dim = get_embedding_client().dim
     name = get_collection_name()
-    try:
-        client = get_qdrant_client()
-        if name not in _list_collections():
-            if settings.RAG_ENABLE_HYBRID:
-                client.create_collection(
-                    collection_name=name,
-                    vectors_config={"dense": {"size": dim, "distance": "Cosine"}},
-                    sparse_vectors_config={"sparse": {}},
-                )
+
+    def _locked() -> int:
+        global _COLLECTIONS_CACHE  # Bug A 刷新必须写模块级（global 作用域跟赋值所在函数走）
+        try:
+            client = get_qdrant_client()
+            if name not in _list_collections():
+                if settings.RAG_ENABLE_HYBRID:
+                    client.create_collection(
+                        collection_name=name,
+                        vectors_config={"dense": {"size": dim, "distance": "Cosine"}},
+                        sparse_vectors_config={"sparse": {}},
+                    )
+                else:
+                    client.create_collection(
+                        collection_name=name,
+                        vectors_config={"size": dim, "distance": "Cosine"},
+                    )
+                logger.info("创建 Qdrant 集合 %s (dim=%s, hybrid=%s)", name, dim, settings.RAG_ENABLE_HYBRID)
+                # Bug A（2026-08-27 修复）：创建成功后必须刷新集合缓存——否则 60s TTL 内
+                # 紧接的"以为集合还不存在"的 ensure 会重复 PUT create → 409（eval 导入 12 文档 FAIL-IMPORT）
+                _COLLECTIONS_CACHE = None
+                return dim
+            info = client.get_collection(name)
+            vector_params = info.config.params.vectors
+            # named vectors（hybrid：{"dense": {...}, "sparse": {...}}）→ 取 dense 维度；纯 dense → 直接 .size
+            if isinstance(vector_params, dict):
+                existing = vector_params.get("dense").size if vector_params.get("dense") else None
             else:
-                client.create_collection(
-                    collection_name=name,
-                    vectors_config={"size": dim, "distance": "Cosine"},
+                existing = vector_params.size if hasattr(vector_params, "size") else None
+            if existing != dim:
+                raise VectorStoreError(
+                    f"Qdrant 集合 {name} 维度 {existing} != 当前 embedding 维度 {dim}，"
+                    f"换 embedding provider 需重建集合（QDRANT_COLLECTION 应区分维度）"
                 )
-            logger.info("创建 Qdrant 集合 %s (dim=%s, hybrid=%s)", name, dim, settings.RAG_ENABLE_HYBRID)
-            # Bug A（2026-08-27 修复）：创建成功后必须刷新集合缓存——否则 60s TTL 内
-            # 紧接的"以为集合还不存在"的 ensure 会重复 PUT create → 409（eval 导入 12 文档 FAIL-IMPORT）
-            _COLLECTIONS_CACHE = None
             return dim
-        info = client.get_collection(name)
-        vector_params = info.config.params.vectors
-        # named vectors（hybrid：{"dense": {...}, "sparse": {...}}）→ 取 dense 维度；纯 dense → 直接 .size
-        if isinstance(vector_params, dict):
-            existing = vector_params.get("dense").size if vector_params.get("dense") else None
-        else:
-            existing = vector_params.size if hasattr(vector_params, "size") else None
-        if existing != dim:
-            raise VectorStoreError(
-                f"Qdrant 集合 {name} 维度 {existing} != 当前 embedding 维度 {dim}，"
-                f"换 embedding provider 需重建集合（QDRANT_COLLECTION 应区分维度）"
-            )
-        return dim
-    except VectorStoreError:
-        raise
-    except Exception as e:  # noqa: BLE001 - 统一包装为领域错误
-        # P2-④：不向调用方泄漏内部 QDRANT_URL；详情走日志
-        logger.exception("ensure_collection 失败（qdrant url=%s）", settings.QDRANT_URL)
-        raise VectorStoreError(f"Qdrant 不可达/操作失败: {e}") from e
+        except VectorStoreError:
+            raise
+        except Exception as e:  # noqa: BLE001 - 统一包装为领域错误
+            # P2-④：不向调用方泄漏内部 QDRANT_URL；详情走日志
+            logger.exception("ensure_collection 失败（qdrant url=%s）", settings.QDRANT_URL)
+            raise VectorStoreError(f"Qdrant 不可达/操作失败: {e}") from e
+
+    with _ensure_lock:
+        return _locked()
 
 
 def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[list[float]]) -> int:
