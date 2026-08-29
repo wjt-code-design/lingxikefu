@@ -42,6 +42,8 @@ IGNORE_EXTRA = {
     'FrontendErrorReq', 'SessionItem', 'SessionMessage', 'FeedbackItem', 'FeedbackListResp', 'FeedbackResp',
     'SessionMessageSource',
     'EvalResultItem', 'EvalHistoryResp', 'EvalTriggerReq', 'EvalTriggerResp',
+    # 二期 admin/内部类型（前端暂无消费页面；消费时移出并补 TS 契约）
+    'IntentShadowStats', 'IntentShadowBucket', 'QuotaSettingsUpdate',
 }
 
 INTERFACE_RE = re.compile(r'^export\s+interface\s+(\w+)\s*\{', re.MULTILINE)

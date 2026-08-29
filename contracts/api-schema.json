@@ -1269,6 +1269,33 @@
         ]
       }
     },
+    "/api/v1/admin/intent-shadow/stats": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Get Intent Shadow Stats",
+        "description": "LLM 意图分类影子一致率（架构二期 3，ADR-1 第一步：只记不驱动的验证数据）。\n\n聚合用户消息 ``meta[\"intent_shadow\"][\"intent\"]``（LLM 影子产出）vs\n``Message.intent``（规则式 classify_intent，单一真源）→\n``{total, agree, agree_rate, by_intent}``。影子仅采样 qa 类消息，故常态只有\nqa 桶；出现其他桶 = 写入方异常信号，按原样透出不隐藏。\nJSON 路径由 SQLAlchemy 按方言编译（PG: meta->'intent_shadow'->>'intent'，\nSQLite: json_extract），同 R-3 latency 先例；GROUP BY 两列后 Python 侧只归并\n≤N² 行，不做全量拉取。",
+        "operationId": "get_intent_shadow_stats_api_v1_admin_intent_shadow_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentShadowStats"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/feedback": {
       "get": {
         "tags": [
@@ -1337,7 +1364,7 @@
           "admin"
         ],
         "summary": "Get Stats Trend",
-        "description": "运营趋势（P1）：近 N 天会话/消息/工单按日计数。\n\n- Python 侧聚合（数据量小，与 stats 的 latency 聚合同风格，兼容 sqlite/pg）；\n- 无数据日期补 0，保证折线图连续。",
+        "description": "运营趋势（P1）：近 N 天会话/消息/工单按日计数。\n\n- P2-⑧：SQL 聚合（按日分组，PG/SQLite 双兼容）替代全量拉取 Python 分桶；\n- 无数据日期补 0，保证折线图连续。",
         "operationId": "get_stats_trend_api_v1_admin_stats_trend_get",
         "security": [
           {
@@ -1388,7 +1415,7 @@
           "admin"
         ],
         "summary": "Get Admin Settings",
-        "description": "返回当前运行配置（只读，从 settings 单一真源读取，无写接口）。",
+        "description": "返回当前运行配置（quota 组为 DB 生效值，其余分组从 settings 单一真源读取）。",
         "operationId": "get_admin_settings_api_v1_admin_settings_get",
         "responses": {
           "200": {
@@ -1397,6 +1424,53 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSettingsResp"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/settings/quota": {
+      "put": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Put Quota Settings",
+        "description": "更新每日配额上限：写 app_settings KV + 清 60s 生效缓存（秒级生效，免重启）。",
+        "operationId": "put_quota_settings_api_v1_admin_settings_quota_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuotaSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QuotaSettings"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1559,7 +1633,7 @@
           "admin"
         ],
         "summary": "Eval History",
-        "description": "评测历史（最近 30 次运行，按 run_id 聚合）。",
+        "description": "评测历史：按 run_id 聚合返回最近 30 次运行（同一次运行的全部指标行不分离）。\n\nP3-⑭：docstring 如实 vs 行为——此前只取最近 200 行的\"裸行\"，\n与\"按 run_id 聚合\"的描述不符；现按 (run_id, 最近运行时间) 分组取前 30 次运行\n的全部指标行（SQL 聚合，PG/SQLite 双兼容）。",
         "operationId": "eval_history_api_v1_admin_eval_history_get",
         "responses": {
           "200": {
@@ -3348,6 +3422,62 @@
         "title": "HotGap",
         "description": "F1：待补录问题（refuse 意图高频问句——QA 检索无依据被拒答，运营补 KB 信号）。\nhandoff（转人工/情绪）是正常分流，不属于知识缺口，不计入。"
       },
+      "IntentShadowBucket": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "agree": {
+            "type": "integer",
+            "title": "Agree"
+          },
+          "agree_rate": {
+            "type": "number",
+            "title": "Agree Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "agree",
+          "agree_rate"
+        ],
+        "title": "IntentShadowBucket",
+        "description": "单规则意图桶（架构二期 3：意图影子一致率观测）。"
+      },
+      "IntentShadowStats": {
+        "properties": {
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "agree": {
+            "type": "integer",
+            "title": "Agree"
+          },
+          "agree_rate": {
+            "type": "number",
+            "title": "Agree Rate"
+          },
+          "by_intent": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/IntentShadowBucket"
+            },
+            "type": "object",
+            "title": "By Intent",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "total",
+          "agree",
+          "agree_rate"
+        ],
+        "title": "IntentShadowStats",
+        "description": "ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。"
+      },
       "KBItem": {
         "properties": {
           "kb_id": {
@@ -3732,6 +3862,22 @@
           "daily_limit"
         ],
         "title": "QuotaSettings"
+      },
+      "QuotaSettingsUpdate": {
+        "properties": {
+          "daily_quota_limit": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Daily Quota Limit",
+            "description": "每日配额上限（正整数）"
+          }
+        },
+        "type": "object",
+        "required": [
+          "daily_quota_limit"
+        ],
+        "title": "QuotaSettingsUpdate",
+        "description": "PUT /admin/settings/quota 请求体：每日配额上限写通道（架构一期 6，大促动态上调）。\n\n>0 强约束（≤0 会让 try_consume 全量拒绝）；非整数 / 带小数由 int 校验拒绝 → 422。"
       },
       "RagSettings": {
         "properties": {
@@ -4166,6 +4312,17 @@
             ],
             "title": "Tool"
           },
+          "answer_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Answer Source"
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/SessionMessageSource"
@@ -4476,6 +4633,61 @@
           "version": {
             "type": "integer",
             "title": "Version"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "draft_suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Suggestion"
+          },
+          "draft_kind": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Draft Kind"
+          },
+          "processing_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Processing At"
+          },
+          "resolved_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved At"
           }
         },
         "type": "object",
