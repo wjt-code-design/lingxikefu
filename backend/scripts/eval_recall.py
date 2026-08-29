@@ -61,7 +61,7 @@ def parse_questions() -> list[dict]:
 
 
 def _resolve_kb(db, kb_name: str | None) -> KnowledgeBase | None:
-    """按名取最新同名 KB；找不到退租户最新 KB（与 eval_faithfulness/seed_demo_data 同规则）。"""
+    """按名取最新同名 KB；找不到退租户最新 KB（本脚本现行兜底；评测前建议 --kb-name 显式指定）。"""
     # KB 口径唯一真源 = smoke_import._KB_NAME；旧名已悬空（P0 同批统一）
     name = kb_name or _KB_NAME
     kb = db.scalar(
@@ -70,7 +70,8 @@ def _resolve_kb(db, kb_name: str | None) -> KnowledgeBase | None:
         .order_by(KnowledgeBase.created_at.desc())
     )
     if not kb:
-        # 兜底：按名找不到时退到租户最新 KB（与 seed_demo_data/chat 路由同规则）。
+        # 兜底：按名找不到时退到租户最新 KB（本脚本现行兜底；与 seed_demo_data 的
+        # demo 库收权规则已不同步——seed 2497cf5 起无参只选 demo 库，不再退最新库）。
         # 全新环境没有任何脚本会创建带名 KB，硬错会让首次评测直接卡死。
         kb = db.scalar(
             select(KnowledgeBase)

@@ -42,6 +42,9 @@ def latest_kb(db) -> uuid.UUID:
     3) 只有业务库 → 拒绝并退出，要求显式 kb_id。
        事故复盘：旧逻辑取「租户最新库」，评测库恰为最新时 9 个演示文档混入
        「星河智家·官方政策库」，检索分布漂移致本地/CI 口径分裂（BASELINE §五）。
+
+    无参选择仅在单租户（TENANT_DEFAULT）语境下安全；多租户化需显式 tenant 维度
+    （终审建议 2026-08-28）。
     """
     kbs = db.scalars(
         sqlalchemy.select(KnowledgeBase).order_by(KnowledgeBase.created_at.desc())
