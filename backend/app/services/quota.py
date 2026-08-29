@@ -9,21 +9,38 @@
 - Redis 不可用时 ``try_consume`` **fail-closed 拒绝**（而非放行），保证配额保护不失效；
   ``left_today``/``used_today`` 仅供 /quota 展示，Redis 不可达时优雅返回 0/满额（不 5xx）；
   ``refund`` fail-open（回滚失败不阻塞主流程，重试重新扣费兜底）。
-- redis 客户端可注入，便于单测用内存假对象替换（无需真起 Redis）。
+- 上限动态化（架构一期 6）：``daily_limit()`` 优先读 ``app_settings`` KV 覆盖
+  （admin PUT /admin/settings/quota 写入），60s 进程内 TTL 缓存，KV 读失败回退
+  settings 常量而非拒绝服务。
+- redis 客户端 / DB session 工厂可注入，便于单测用内存假对象替换（无需真起 Redis/PG）。
 """
 from __future__ import annotations
 
 import hashlib
 import logging
+import threading
+import time
 from datetime import date
 
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session
+
 from app.core.config import settings
+from app.core.database import SessionLocal
 from app.core.redis_client import get_redis
+from app.models.app_setting import AppSetting
 
 logger = logging.getLogger(__name__)
 
 #: R2：幂等标记 TTL（与配额计数 key 一致，48h 自动清理）
 _IDEM_TTL_SECONDS = 60 * 60 * 48
+
+#: 架构一期 6：每日上限的 app_settings KV 键（覆盖 settings.DAILY_QUOTA_LIMIT）
+DAILY_LIMIT_KV_KEY = "quota.daily_limit"
+
+#: daily_limit() 的 KV 覆盖进程内缓存 TTL（秒）：生效延迟上界，同时把 KV 读
+#: 频率压到每进程每 60s 一次（含「无覆盖」负缓存），避免热路径每请求查库
+_LIMIT_TTL_SECONDS = 60
 
 
 def _today() -> str:
@@ -31,8 +48,17 @@ def _today() -> str:
 
 
 class QuotaService:
-    def __init__(self, redis_client=None) -> None:
+    def __init__(self, redis_client=None, session_factory=None) -> None:
         self._redis = redis_client
+        #: app_settings KV 读用的 session 工厂（None → 惰性取 SessionLocal）；
+        #: 测试注入内存 SQLite 工厂，使 KV 读与 PUT 写通道落在同一库
+        self.session_factory = session_factory
+        #: daily_limit() 进程内缓存态：_limit_loaded=False 表示未加载；
+        #: _limit_value=None 表示「KV 无覆盖」负缓存（同样受 TTL 约束）
+        self._limit_lock = threading.Lock()
+        self._limit_loaded = False
+        self._limit_value: int | None = None
+        self._limit_cached_at = 0.0
 
     @property
     def redis(self):
@@ -40,8 +66,73 @@ class QuotaService:
             self._redis = get_redis()
         return self._redis
 
+    def _db_session(self):
+        factory = SessionLocal if self.session_factory is None else self.session_factory
+        return factory()
+
     def daily_limit(self) -> int:
-        return settings.DAILY_QUOTA_LIMIT
+        """每日配额上限：app_settings KV 覆盖优先（60s 进程内 TTL 缓存），回退 settings。
+
+        - 缓存命中（含「无覆盖」负缓存）未过期直接返回，不开 DB 连接；
+        - 过期则锁内单飞读库回填（防并发击穿造成重复查询）；
+        - KV 读失败（DB 不可达）回退 settings 常量而非拒绝服务（fail-open 方向），
+          失败结果同样按 TTL 负缓存，避免对故障 DB 每请求重试（恢复延迟 ≤ TTL）。
+        """
+        with self._limit_lock:
+            if self._limit_loaded and time.monotonic() - self._limit_cached_at < _LIMIT_TTL_SECONDS:
+                return self._limit_value if self._limit_value is not None else settings.DAILY_QUOTA_LIMIT
+            value = self._read_daily_limit_kv()
+            self._limit_value = value
+            self._limit_loaded = True
+            self._limit_cached_at = time.monotonic()
+            return value if value is not None else settings.DAILY_QUOTA_LIMIT
+
+    def _read_daily_limit_kv(self) -> int | None:
+        """读 KV 覆盖值；无行 / 非法值 / DB 失败一律返回 None（回退 settings）。"""
+        try:
+            db = self._db_session()
+            try:
+                row = db.get(AppSetting, DAILY_LIMIT_KV_KEY)
+            finally:
+                db.close()
+            if row is None or row.tenant_id != settings.TENANT_DEFAULT:
+                return None
+            value = row.value
+            # JSON 标量校验：bool 是 int 子类需排除；非法值视为无覆盖（不信任库内脏数据）
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                logger.warning("app_settings[%s] 非法值 %r，忽略 KV 覆盖", DAILY_LIMIT_KV_KEY, value)
+                return None
+            return value
+        except Exception:  # noqa: BLE001 - KV 读失败回退 settings（fail-open，不拒绝服务）
+            logger.warning("app_settings KV 读取失败，daily_limit 回退 settings", exc_info=True)
+            return None
+
+    def set_daily_limit(self, db: Session, value: int) -> None:
+        """写 KV 覆盖（upsert）并失效进程内缓存 —— admin 写通道（PUT /admin/settings/quota）。
+
+        tenant_id 走 tenant_id_column() 的列默认值（settings.TENANT_DEFAULT，与全仓写路径
+        一致）；并发 PUT 同时判「无行」各插入的 PK 冲突：回滚后重读改更新，幂等收敛到同一值。
+        """
+        row = db.get(AppSetting, DAILY_LIMIT_KV_KEY)
+        if row is None:
+            db.add(AppSetting(key=DAILY_LIMIT_KV_KEY, value=value))
+        else:
+            row.value = value
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            row = db.get(AppSetting, DAILY_LIMIT_KV_KEY)
+            if row is not None:
+                row.value = value
+                db.commit()
+        self.invalidate_limit_cache()
+
+    def invalidate_limit_cache(self) -> None:
+        """清 daily_limit 生效缓存（PUT 写通道调用）——秒级生效，不等 60s TTL。"""
+        with self._limit_lock:
+            self._limit_loaded = False
+            self._limit_value = None
 
     def _key(self, user_id: str, day: str | None = None) -> str:
         return f"quota:{user_id}:{day or _today()}"

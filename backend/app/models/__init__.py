@@ -1,4 +1,5 @@
 """ORM 模型统一出口：import 本包即完成所有表注册到 Base.metadata。"""
+from app.models.app_setting import AppSetting
 from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.feedback import Feedback, FeedbackRating
@@ -18,6 +19,7 @@ from app.models.user_profile import UserProfile
 
 __all__ = [
     "Base",
+    "AppSetting",
     "AuditLog",
     "Notification",
     "User",
