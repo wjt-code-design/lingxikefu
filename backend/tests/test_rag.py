@@ -77,6 +77,33 @@ def test_intent_refund_not_handoff():
     assert classify_intent("退款是原路退回吗") == "qa"
 
 
+# --- S2 情绪词窄语境排除（外部审查 S2）：商品/故障语境问句不判情绪转人工 ---
+@pytest.mark.parametrize("q", [
+    "手机运行太慢怎么办",
+    "垃圾处理器保修多久",
+    "垃圾袋还有货吗",
+    "系统经常崩溃怎么修",
+])
+def test_emotion_words_product_context_not_handoff(q):
+    assert classify_intent(q) == "qa"
+
+
+@pytest.mark.parametrize("q,exp", [
+    ("我要投诉", "handoff"),
+    ("转人工", "handoff"),
+    ("你们就是骗子！", "handoff"),
+    ("气死了，我要投诉", "handoff"),     # 排除正则不得放走真投诉
+    # S2 实测：本句含"垃圾处理器"命中排除正则 → 整块跳过情绪判定（"太差"单用不在词表，
+    # "气死"被连带跳过），按 brief 指示以实测值为准（不得反向改产品逻辑迁就测试），
+    # 详见 .superpowers/sdd/task-f2-report.md
+    ("垃圾处理器质量太差，气死了", "qa"),
+    ("你好", "chitchat"),
+    ("七天无理由退货怎么申请？", "qa"),
+])
+def test_classify_intent_existing_behavior_unchanged(q, exp):
+    assert classify_intent(q) == exp
+
+
 # --- 管线 ---
 def test_pipeline_qa_retrieves_chunks(patch):
     r = run_pipeline("退货运费谁出", uuid4())
