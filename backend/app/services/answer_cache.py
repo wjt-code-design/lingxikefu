@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import threading
 import uuid
 from datetime import datetime
 
@@ -28,7 +29,10 @@ _EXACT_PREFIX = "answer_cache_exact:"
 
 #: P2-⑨：集合创建一次即记（进程内只建一次，消除每次 get/put 的 get_collections RPC）；
 #: 集合若被外部删除，重建依赖 fail-open 的检索降级，不自动追认（符合单进程语义）。
+#: L3（外部审查 2026-08-29 核实）：get/put 经 run_in_threadpool 并发进入，加锁双重检查
+#: 防并发首调重复 create_collection（Qdrant 对重复建集合抛 already exists），同 kb_lookup._kb_lock 先例。
 _ensured = False
+_ensure_lock = threading.Lock()
 
 
 def _normalize_key(query: str) -> str:
@@ -39,16 +43,19 @@ def _ensure_collection() -> None:
     global _ensured
     if _ensured:
         return
-    client = get_qdrant_client()
-    names = {c.name for c in client.get_collections().collections}
-    if COLLECTION not in names:
-        dim = get_embedding_client().dim
-        client.create_collection(
-            collection_name=COLLECTION,
-            vectors_config={"size": dim, "distance": "Cosine"},
-        )
-        logger.info("创建 answer_cache 集合 (dim=%s)", dim)
-    _ensured = True
+    with _ensure_lock:
+        if _ensured:  # 双重检查：等锁期间他人已完成
+            return
+        client = get_qdrant_client()
+        names = {c.name for c in client.get_collections().collections}
+        if COLLECTION not in names:
+            dim = get_embedding_client().dim
+            client.create_collection(
+                collection_name=COLLECTION,
+                vectors_config={"size": dim, "distance": "Cosine"},
+            )
+            logger.info("创建 answer_cache 集合 (dim=%s)", dim)
+        _ensured = True
 
 
 def _entities_ok(query: str, cached_question: str) -> bool:

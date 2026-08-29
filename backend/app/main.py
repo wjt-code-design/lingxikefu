@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -96,7 +96,9 @@ async def _warmup_embedding() -> None:
 async def lifespan(_: FastAPI):
     """应用生命周期：启动恢复滞留导入 → 预热 embedding（避免首个用户等冷加载）→ 启动工单自动化调度。"""
     _recover_stale_imports()
-    asyncio.create_task(_warmup_embedding())
+    # M4（外部审查 2026-08-29 核实）：create_task 仅持弱引用，保存引用防 GC 语义争议；
+    # 关闭时取消并等待，避免关闭窗口内后台任务与解释器拆卸竞态（预热失败本就不阻断启动）。
+    warmup_task = asyncio.create_task(_warmup_embedding())
     # 工单自动化：后台定时扫描超时工单
     try:
         from app.services.ticket_auto_scheduler import start_scheduler
@@ -110,6 +112,10 @@ async def lifespan(_: FastAPI):
         stop_scheduler()
     except Exception:  # noqa: BLE001
         logger.exception("ticket_auto_scheduler: stop failed (non-blocking)")
+    # 关闭时取消预热任务（已完成则 cancel/await 均为无害空操作）
+    warmup_task.cancel()
+    with suppress(asyncio.CancelledError):
+        await warmup_task
 
 
 def _recover_stale_imports() -> None:

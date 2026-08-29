@@ -265,13 +265,10 @@ async def chat_stream(
     if kb_id is not None:
         kb_version = await run_in_threadpool(_kb_version_str, db, kb_id)
 
-    # 画像归属：会话 owner（在 gen 外捕获——gen 内 sources 事件把 `s` 用作迭代变量，
-    # 使 `s` 在 gen 作用域内变成局部名，闭包内引用会 UnboundLocalError——测试亲眼红过此 bug）
+    # 画像归属：会话 owner（在 gen 外捕获；P0-1 trace_id 同理——闭包捕获外层名，
+    # 避免 gen 内长生命周期引用悬空）
     session_owner_id = s.user_id
-    # 批次B：conv_state 读写同样走别名（`s` 在 gen 内被遮蔽，不能直接引用）
-    session_obj = s
     # P0-1 trace_id：复用 HTTP 中间件生成的 request_id，贯通业务链路（日志 / SSE done）。
-    # 同样在 gen 外捕获（gen 内 `s` 被 sources 迭代遮蔽，闭包引用会 UnboundLocalError）。
     trace_id = getattr(request.state, "request_id", "") or uuid.uuid4().hex[:12]
 
     async def gen():
@@ -447,11 +444,12 @@ async def chat_stream(
                     assistant_parts.append(data["delta"])
                     yield _sse({"event": "token", "data": data})
                 elif event == "sources":
-                    # 补文档标题（检索结果只有 doc_id，标题需查 DB；消息来源唯一真源）
-                    doc_ids = {uuid.UUID(s["doc_id"]) for s in data["sources"] if s.get("doc_id")}
+                    # 补文档标题（检索结果只有 doc_id，标题需查 DB；消息来源唯一真源）。
+                    # L2（外部审查 2026-08-29 核实）：迭代变量用 src，不再遮蔽外层 Session `s`。
+                    doc_ids = {uuid.UUID(src["doc_id"]) for src in data["sources"] if src.get("doc_id")}
                     doc_titles = await _fetch_doc_titles(db, doc_ids)
-                    for s in data["sources"]:
-                        s["doc_title"] = doc_titles.get(s.get("doc_id", ""), "")
+                    for src in data["sources"]:
+                        src["doc_title"] = doc_titles.get(src.get("doc_id", ""), "")
                     source_payloads = data["sources"]
                     yield _sse({"event": "sources", "data": data})
                 elif event == "done":
@@ -459,7 +457,7 @@ async def chat_stream(
                     # 大扫查修复：转移逻辑收归 conversation_state.mark_clarifying（单一真源）
                     if data.get("clarify"):
                         try:
-                            session_obj.conv_state = conversation_state.mark_clarifying(session_obj.conv_state)
+                            s.conv_state = conversation_state.mark_clarifying(s.conv_state)
                             await run_in_threadpool(db.commit)
                         except Exception:  # noqa: BLE001 - fail-open
                             logger.exception("clarify 状态写回失败（不影响响应）")
