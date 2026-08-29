@@ -51,6 +51,22 @@ def can_transition(from_status: TicketStatus, event: str) -> bool:
     return event in TRANSITIONS.get(from_status, {})
 
 
+# ── 流转时间戳（架构一期 4）──────────────────────────────────────────────
+#: 目标状态 → 流转时间戳列。closed 无独立列（updated_at 已覆盖）。
+STATUS_TIMESTAMPS: dict[TicketStatus, str] = {
+    TicketStatus.processing: "processing_at",
+    TicketStatus.resolved: "resolved_at",
+}
+
+
+def timestamp_field_for(status: TicketStatus) -> str | None:
+    """目标状态对应的流转时间戳列名（无独立列的状态返回 None）。
+
+    状态机与 PATCH /tickets/{id} 两条 CAS 写路径共用，保证盖戳口径单一真源。
+    """
+    return STATUS_TIMESTAMPS.get(status)
+
+
 def transition(
     db: OrmSession,
     ticket_id: uuid.UUID,
@@ -84,7 +100,18 @@ def transition(
 
     to_status = TRANSITIONS[from_status][event]
 
-    # CAS 写：预期当前状态 + version，并发让位
+    # CAS 写：预期当前状态 + version，并发让位；按目标状态补流转时间戳（架构一期 4）
+    now = datetime.now(UTC)
+    values: dict = {
+        "status": to_status,
+        "version": Ticket.version + 1,
+        "updated_at": now,
+    }
+    stamp = timestamp_field_for(to_status)
+    if stamp:
+        values[stamp] = now
+    if assignee_id:
+        values["assignee_id"] = assignee_id
     result = db.execute(
         update(Ticket)
         .where(
@@ -93,12 +120,7 @@ def transition(
             Ticket.version == t.version,
             Ticket.tenant_id == get_current_tenant(),
         )
-        .values(
-            status=to_status,
-            version=Ticket.version + 1,
-            updated_at=datetime.now(UTC),
-            **({"assignee_id": assignee_id} if assignee_id else {}),
-        )
+        .values(**values)
         .execution_options(synchronize_session=False)
     )
     db.commit()

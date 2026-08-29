@@ -50,6 +50,7 @@ from app.services.quick_answers import match_quick
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
 from app.services.rag_service import stream_answer
+from app.services.session_context import build_handoff_summary
 from app.services.shared_context import SharedContext
 
 # 保留 order_tool 命名空间绑定：既有测试 mock 目标 app.api.chat.order_tool.*
@@ -324,6 +325,13 @@ async def chat_stream(
             db=db,  # 请求级会话：Ticket Agent 建单复用（同事务语义）
             image_paths=req.image_paths,  # v1.3 图片理解
             trace_id=trace_id,  # P0-1：请求级 trace_id 贯通 Router/各 Agent
+            # 架构一期 4：移交摘要随 ctx 下发（Ticket Agent 建单时持久化进 tickets.summary）。
+            # 取材 = history + 当前消息：_fetch_history 排除当前 user_msg，而触发移交的
+            # 当前消息恰是坐席最需要的诉求（单轮移交 history 为空时摘要仍可打包）。
+            # conv_state 用上方行锁读改写的最新值（fail-open 为 None，build 容错）。
+            handoff_summary=build_handoff_summary(
+                [*history, {"role": "user", "content": req.content}], conv_state
+            ),
         )
         ctx = agent_router.route(ctx)
 

@@ -464,6 +464,55 @@ def test_chat_stream_handoff_creates_ticket(client, monkeypatch):
         assert user_msg is not None and user_msg.intent == "handoff"
 
 
+def test_chat_stream_handoff_persists_summary(client, monkeypatch):
+    """架构一期 4：handoff 建单持久化移交摘要（当前诉求 + conv_state 主题跨轮兜底）。
+
+    取材 = history + 当前消息：_fetch_history 排除当前 user_msg，而「转人工」这条触发
+    移交的消息本身是坐席最需要的诉求，单轮移交时 history 为空也必须有摘要。
+    注意两轮都不带订单号：一旦 conv_state 有 order_no + 订单类主题，订单工具分支
+    （零 LLM 模板）会短路整条流，handoff 事件永远到不了。
+    """
+    tc, Local, _ = client
+
+    async def _qa(*_a, **_k):
+        yield ("intent", {"intent": "qa"})
+        yield ("stage", {"stage": "generating"})
+        yield ("token", {"delta": "已为您记录"})
+        yield ("done", {"message_id": ""})
+
+    async def _handoff(*_a, **_k):
+        yield ("intent", {"intent": "handoff"})
+        yield ("stage", {"stage": "retrieving"})
+        yield ("token", {"delta": "已为您转接人工"})
+        yield ("done", {"message_id": ""})
+
+    # 第一轮（qa）：表达退款诉求——conv_state 记下 topic=退款（跨轮保留）
+    monkeypatch.setattr("app.api.chat.stream_answer", _qa)
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "我的退款到底还要多久", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+
+    # 第二轮（handoff）：触发转人工（本身无主题词）
+    monkeypatch.setattr("app.api.chat.stream_answer", _handoff)
+    r2 = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "转人工，气死了", "stream": True},
+        headers=_headers(),
+    )
+    assert r2.status_code == 200
+
+    with Local() as db:
+        tickets = db.scalars(select(Ticket)).all()
+        assert len(tickets) == 1  # 仅第二轮建单（qa 不建单）
+        summary = tickets[0].summary
+        assert summary
+        assert "退款" in summary  # 主题（conv_state 兜底：触发消息本身无主题词）
+        assert "转人工" in summary  # 当前诉求（history 排除当前消息 → 取材含当前）
+
+
 def test_chat_stream_refuse_intent_persisted(client, monkeypatch):
     """H2（外部审查 2026-08-22）：拒答必须以 intent='refuse' 落库。
 

@@ -4,8 +4,10 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import uuid
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
@@ -17,18 +19,31 @@ from app.services.notification_service import create_notification
 logger = logging.getLogger(__name__)
 
 
+def _summary_text(summary: dict[str, Any] | str | None) -> str | None:
+    """摘要归一化：dict（build_handoff_summary 产物）→ JSON 文本（ensure_ascii=False，
+    DBA/坐席直读中文可读）；str 原样透传；None → NULL。"""
+    if summary is None:
+        return None
+    if isinstance(summary, str):
+        return summary
+    return json.dumps(summary, ensure_ascii=False)
+
+
 def ensure_active_ticket(
     db: OrmSession,
     session_id: uuid.UUID,
     message_id: uuid.UUID | None = None,
     source: str = "ai",
     notify: bool = True,
+    summary: dict[str, Any] | str | None = None,
 ) -> Ticket | None:
     """AI 建单 helper（chat.py handoff 时调用）：幂等 + fail-open。
 
-    同 session 已有 open/processing 工单 → 返回既有（不重复建）；
-    任何异常 → 回滚并返回 None（不阻断 SSE 流，chat 层降级为原话术）。
+    同 session 已有 open/processing 工单 → 返回既有（不重复建，summary 亦不覆盖——
+    首建摘要为准）；任何异常 → 回滚并返回 None（不阻断 SSE 流，chat 层降级为原话术）。
     notify=False：手动转人工时由 escalate_ticket 单独发 ticket.transfer，避免重复 ticket.created。
+    summary：移交摘要（架构一期 4），TicketAgent 路径传 build_handoff_summary 产物
+    持久化进 tickets.summary；manual 路径不传（保持 NULL）。
     """
     try:
         active = db.scalar(
@@ -44,6 +59,7 @@ def ensure_active_ticket(
             session_id=session_id,
             message_id=message_id,
             source=source,
+            summary=_summary_text(summary),
         )
         db.add(t)
         db.commit()

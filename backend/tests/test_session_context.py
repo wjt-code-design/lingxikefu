@@ -109,3 +109,24 @@ def test_handoff_summary_without_conv_state_unchanged():
     s = build_handoff_summary(history)
     assert "stage" not in s
     assert s["topic"] == "退款"
+
+
+def test_handoff_summary_topic_fallback_from_conv_state():
+    """架构一期 4：历史关键词未命中时回退 conv_state 主题（跨轮保留）——
+    「转人工」本身无主题词，主题在更早轮次，不兜底则移交摘要缺主题。"""
+    from app.services.session_context import build_handoff_summary
+
+    history = [{"role": "user", "content": "转人工，气死了"}]
+    conv_state = {"stage": "resolving", "topic": "退款", "slots": {"order_no": "SO2026080118"}, "clarify_count": 1}
+    s = build_handoff_summary(history, conv_state=conv_state)
+    assert s is not None
+    assert s["topic"] == "退款"  # 兜底自 conv_state
+    assert s["slots"] == {"order_no": "SO2026080118"}
+
+    # 历史关键词命中时优先（不覆盖）
+    s2 = build_handoff_summary([{"role": "user", "content": "发票怎么开"}], conv_state=conv_state)
+    assert s2 is not None and s2["topic"] == "发票"
+
+    # conv_state 无主题 → 不凭空造
+    s3 = build_handoff_summary(history, conv_state={"stage": "greeting", "topic": "", "slots": {}, "clarify_count": 0})
+    assert s3 is not None and "topic" not in s3

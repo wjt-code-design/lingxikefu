@@ -57,6 +57,10 @@ class Ticket(Base):
         nullable=True,
     )
     external_ref: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    # 架构一期 4：AI handoff 建单时持久化移交摘要（build_handoff_summary 产物的 JSON 文本，
+    # ensure_ascii=False），坐席首屏直接看到主题/槽位/澄清状态，不再从零重问。
+    # 仅新建时落库；manual 建单与历史行为 NULL。
+    summary: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     # S2 乐观锁版本号：每次状态流转/分配 version+1；并发更新时以 version 条件做原子比较，防后者静默覆盖
     version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, default=0, server_default="0"
@@ -72,3 +76,9 @@ class Ticket(Base):
         server_default=sa.func.now(),
         onupdate=sa.func.now(),
     )
+    # 架构一期 4：逐状态流转时间戳（状态机 CAS update 与 PATCH 流转按目标状态补记；
+    # closed 无独立列，updated_at 已覆盖）。存量行 NULL（创建时点不可考，不回填）。
+    processing_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)

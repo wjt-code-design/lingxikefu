@@ -29,6 +29,9 @@ class SharedContext:
     session_id: UUID | None = None
     message_id: UUID | None = None
     history: list[dict] = field(default_factory=list)
+    # 架构一期 4：移交摘要（chat 层组装时由 build_handoff_summary(history+当前消息, conv_state)
+    # 生成，Ticket Agent 建单时持久化进 tickets.summary）；None = 无摘要可打包（无历史时）。
+    handoff_summary: dict[str, Any] | None = None
     image_refs: list[str] = field(default_factory=list)  # 图片引用预留（未启用，恒空）；实际入口 image_paths
     image_paths: list[str] = field(default_factory=list)  # 图片文件路径列表（chat 注入，Image Agent 使用）
 
@@ -59,6 +62,7 @@ class SharedContext:
 # |---------------------------------------|-------------|---------------------|
 # | trace_id                              | chat 层     | Router、各 Agent、日志、SSE done |
 # | 输入区（query/kb_*/session_*/history） | chat 层     | Router、各 Agent     |
+# | handoff_summary                       | chat 层     | Ticket Agent        |
 # | intent / agents_invoked / degraded    | Router      | 各 Agent、chat 层    |
 # | image_desc / fused_query              | Image Agent | Router、chat 层      |
 # | rag_result                            | chat 层      | Router、chat 层      |

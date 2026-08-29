@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -23,6 +24,7 @@ from app.models.ticket import Ticket, TicketStatus
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
 from app.services.ticket_service import ensure_active_ticket
+from app.services.ticket_state_machine import timestamp_field_for
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +210,10 @@ def update_ticket(
     values: dict = {}
     if req.status != cur:
         values["status"] = req.status
+        # 架构一期 4：状态实际变化时按目标状态补流转时间戳（与状态机同口径）
+        stamp = timestamp_field_for(req.status)
+        if stamp:
+            values[stamp] = datetime.now(UTC)
     if req.assignee_id is not None:
         values["assignee_id"] = req.assignee_id
     if not values:

@@ -99,6 +99,10 @@ def build_handoff_summary(
     topics = _extract_topic_names(history)
     if topics:
         summary["topic"] = "/".join(topics)
+    elif conv_state and conv_state.get("topic"):
+        # 架构一期 4：历史关键词未命中时回退 conv_state 主题（跨轮保留：闲聊/追问不清空）。
+        # 常见现场「转人工」本身无主题词，主题在更早轮次——不兜底则持久化摘要缺主题。
+        summary["topic"] = conv_state["topic"]
     entities = _extract_entities(question)
     concrete = [e for e in entities if not _is_generic(e)]
     if concrete:

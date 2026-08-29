@@ -54,5 +54,7 @@ class TicketAgent(BaseAgent):
         # run() 已做 no_session 守卫；此处为静态类型收窄 + 防御性兜底
         if ctx.session_id is None:
             return None
-        t = ensure_active_ticket(ctx.db, ctx.session_id, ctx.message_id)
+        t = ensure_active_ticket(
+            ctx.db, ctx.session_id, ctx.message_id, summary=ctx.handoff_summary
+        )
         return str(t.id) if t is not None else None
