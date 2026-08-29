@@ -54,8 +54,10 @@ EMOTIONAL_KEYWORDS = (
     # 2026-08-21 责骂/质问式情绪表达扩充（抱怨态度差 → handoff 高优）
     "干什么吃的", "怎么搞的", "搞什么名堂",
 )
-#: S2 窄语境排除（外部审查 S2）：商品/故障语境词不判情绪转人工，
-#: 投诉类词（投诉/骗子/转人工等 HANDOFF_KEYWORDS）不受影响。
+#: S2 窄语境排除（外部审查 S2）：商品/故障语境短语不判情绪转人工。
+#: 实现=残句复扫：剔除语境短语后对剩余文本重查情绪词表——只放行语境本身，
+#: 同句其他情绪信号（"气死了""骗子""赔偿""退钱""差评"）仍命中转人工；
+#: HANDOFF_KEYWORDS（投诉/转人工等）判定在此之前的独立分支，不受本排除影响。
 _EMOTION_EXCLUDE = re.compile(
     r"垃圾(袋|桶|处理器|分类)"               # 商品名词：垃圾袋/垃圾桶/垃圾处理器/垃圾分类
     r"|(系统|软件|应用|程序|手机).{0,4}崩溃"  # 故障语境的"崩溃"
@@ -90,12 +92,13 @@ class RagResult:
 def classify_intent(query: str) -> str:
     """规则式意图分类：handoff(人工+情绪) > chitchat > qa（T1 分流升级：情绪词并入 handoff）。
 
-    S2 窄语境排除：商品/故障语境（垃圾袋/系统崩溃/运行太慢等）命中 _EMOTION_EXCLUDE
-    时跳过情绪 handoff 判定；HANDOFF_KEYWORDS/_RE_ARTIFICIAL 判定在前，投诉类词不受影响。
+    S2 窄语境排除：商品/故障语境（垃圾袋/系统崩溃/运行太慢等）先剔除再复扫情绪词表
+    （残句复扫，只放行语境本身，同句情绪信号词仍转人工）；HANDOFF_KEYWORDS/
+    _RE_ARTIFICIAL 判定在最前，投诉类词不受影响。
     """
     if _RE_ARTIFICIAL.search(query) or any(k in query for k in HANDOFF_KEYWORDS):
         return "handoff"
-    if not _EMOTION_EXCLUDE.search(query) and any(k in query for k in EMOTIONAL_KEYWORDS):
+    if any(k in _EMOTION_EXCLUDE.sub("", query) for k in EMOTIONAL_KEYWORDS):
         return "handoff"
     if any(k in query for k in CHITCHAT_KEYWORDS):
         return "chitchat"
