@@ -82,12 +82,12 @@ def ensure_collection() -> int:
     hybrid 模式创建 named vectors（dense+sparse），纯 dense 模式维持旧结构。
     check-then-create 全程持 _ensure_lock（并发首调防重复建集合，见其注释）。
     """
-    global _COLLECTIONS_CACHE  # 必须在创建后刷新模块级缓存（Bug A；缺 global 曾静默失效，单测实证）
     dim = get_embedding_client().dim
     name = get_collection_name()
 
     def _locked() -> int:
-        global _COLLECTIONS_CACHE  # Bug A 刷新必须写模块级（global 作用域跟赋值所在函数走）
+        # global 必须声明在本函数（Bug A：赋值所在函数无声明会静默变局部绑定，模块级缓存不刷新）
+        global _COLLECTIONS_CACHE
         try:
             client = get_qdrant_client()
             if name not in _list_collections():
