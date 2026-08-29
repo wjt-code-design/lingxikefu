@@ -76,18 +76,19 @@
 | M6 | 删除会话审计在 commit 后 | **事实对但外部修法危险**（audit_service.py:56 内部自带 commit+失败 rollback，挪到 commit 前会出现"审计失败→删除连滚→接口仍 200"的反向失真；fail-open 是 Phase 4 显式设计，全仓 8 调用点统一） | **不修**，登记为已知限制（见 §四）；如需强化，独立设计"审计失败告警"而非调换顺序 |
 | L5 | 本地 coverage.xml 假数字 | 报告已查证为局部运行产物（🟢），门禁本身有效 | **随手删** `backend/coverage.xml`（gitignore 已排除），不立项 |
 
-- [ ] **Step F1-1（S1 TDD 红测）**：在 `backend/tests/`（test_chat_api.py 或新建 test_chat_quota.py）加用例：流式请求中注入 LLM error 事件（mock 生成器产出 `("error", ...)`），断言 `quota` 被退款（现有 quota 测试的 mock/fake 手法沿用）。Run: `pytest <该文件> -v --no-cov` → Expected: FAIL（未退款）。
-- [ ] **Step F1-2（S1 最小实现）**：`chat.py` 生成段加 `consumed` 局部标记，`finally` 统一 `quota.refund(...)`；error 分支只置标记。保持断连/无KB/异常路径行为不变（它们的既有测试必须继续绿）。
-- [ ] **Step F1-3（验证）**：`pytest tests/test_chat_api.py tests/test_chat_quota.py -v --no-cov` 全绿；全量单测 523+新增 0 failed。
-- [ ] **Step F1-4（M1/L5 顺手项）**：改 kb_lookup.py docstring 与 main.py:168 注释；`rm backend/coverage.xml`。各自独立小 commit。
-- [ ] **Step F1-5（提交）**：`fix(api): S1 SSE error 事件路径补配额退还——consumed 标记+finally 统一退款（外部审查 S1，验证报告 external-review-verify §一）` 等。
+- [x] **Step F1-1（S1 TDD 红测）**：test_chat_api.py 净计数器 FakeQuota 用例，RED（assert 1==0）。
+- [x] **Step F1-2（S1 最小实现）**：`consumed` 标记 + finally 统一退款（e275ad4）；断连/无KB 两处显式退款位于 try 作用域外保留，异常路径并入 finally；GeneratorExit 断开亦退款（审查确证结构性单次退款）。
+- [x] **Step F1-3（验证）**：532 tests / 0 failed；ruff 绿。
+- [x] **Step F1-4（M1/L5 顺手项）**：kb_lookup docstring（b10bb01）；seed_demo_data/eval_recall 注释对齐（3b687c0，终审建议并入）；coverage.xml 本就未入库（gitignored），仅文件系统删除。
+- [x] **Step F1-5（提交）**：3 commits，任务审查 Approved（单次退款结构性证明）。
 
 ### F-2 S2 情绪词处置（挂账 P2，窄排除 + 双向用例）
 
 验证结论：误伤实测存在（饱和用例 12/12 判 handoff），但**这是 T1 有意策略**（rag_service.py:43-52 注释自证），且 test_rag.py:69-71 / test_agent_behavior.py:84-100 共 **13 条既有用例锁定 handoff**；评测集 100 题无情绪子串题、意图路由**不在 CI eval 门禁内**。外部审查的"12 用例回归测试"若照搬，会把与既有设计相反的期望写进测试。
 
-- [ ] **Step F2-1**：与用户确认取舍（二选一）：**a)** 维持现状——"情绪词→转人工"是有意策略，外部报告的 5 条"误伤"实为策略覆盖面，仅把"商品语境排除"登记为已知限制；**b)** 窄排除——只对"太慢/崩溃/垃圾"3 词加**窄语境**排除正则（`垃圾(袋|桶|处理器|分类)`、`(系统|软件|手机).{0,4}崩溃`、`(运行|速度|加载).{0,4}太慢`），同步给这 3 词补**双向**用例（正常商品问句→qa；"气死了我要投诉"→handoff 仍锁死），跑全量单测确认 13 条既有用例不破。
-- [ ] **Step F2-2**（若选 b）：TDD 红测→窄排除实现→双向用例绿→提交（不触发评测复核：路由不在门禁内，但提交信息须注明）。
+- [x] **Step F2-1**：用户采纳推荐项 b（窄排除）。
+- [x] **Step F2-2**：初版整块跳过（532c120）→ 任务审查抓出 Important×2：①简报错误声称"骗子属 HANDOFF_KEYWORDS"（实为情绪词表），整块跳过放走骗子/赔偿/退钱/差评四类真投诉句（探针实证）；②改**残句复扫**（`_EMOTION_EXCLUDE.sub("", query)` 后重查情绪词表）两全（346924e）。探针 12/12：4 真投诉句恢复 handoff、裁定句恢复简报原预设、商品语境保持 qa、裸情绪不受影响。docstring/注释如实重写，测试 +7 条锁定。
+- [x] **F-2 验证**：全量 550 tests / 0 failed / 8 skipped；ruff 绿；评测集"太慢/崩溃/垃圾"三词 grep 零命中（路由零影响双保险，无需评测复核）。
 
 > S2 不进 F-1 批次的原因：它改的是业务行为（词表语义），须用户拍板设计取舍，且改动须与 13 条锁定用例对质。
 
@@ -97,10 +98,10 @@ M3（限流 fail-open）、M4（warmup task 引用）、M5（refresh 无限流�
 
 ### F-4 修复后统一验证
 
-- [ ] 全量单测（基线 523+新增，0 failed）
-- [ ] ruff 全绿（只许批次内文件零报错）
-- [ ] 若 F-2 选 b 且词表改动影响评测集题目路由（验证已确认不影响 CI 门禁）：仍跑一次本地全量 100 题作烟雾确认（refuse 8 题口径不回退）
-- [ ] 终审代理复审 F 批次 diff
+- [x] 全量单测：F-1 后 532/0/8 → F-2 终审修复后 **550/0/8**（两轮均为 junitxml 实测）
+- [x] ruff 全绿
+- [x] F-2 路由改动评测影响：评测集三词 grep 零命中 + 意图路由不在 CI eval 门禁内（验证报告 §S2）→ 不触发评测复核；push CI 抽样 eval 作最终佐证
+- [x] 任务级审查：F-1 Approved；F-2 初版 Needs fixes → 残句复扫修复（346924e），审查两条 Important 全部落地
 
 ---
 
