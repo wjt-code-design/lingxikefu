@@ -5,15 +5,21 @@ import { Link, MemoryRouter } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
 import { ChatContainer } from '@/components/chat/ChatContainer';
 import { useAuthStore } from '@/store/authStore';
+import { sendAgentMessage } from '@/api/sessions';
+import { createTicket } from '@/api/tickets';
 
 /** 批次A 坐席辅助：客服观察视角点「AI 推荐」→ 卡片展示 → 一键填入输入框。 */
 
 const suggestMock = vi.fn();
+// Phase-2 任务2：stream 需要跨断言稳定引用（断言"喂 AI 流"发生/未发生），改为模块级 mock
+const streamFn = vi.fn();
+const resetFn = vi.fn();
 
 vi.mock('@/hooks/useChatStream', () => ({
   useChatStream: () => ({
     stage: 'idle', tokens: '', sources: [], messageId: null,
-    ticketId: null, error: null, reset: vi.fn(), stream: vi.fn(),
+    userMessageId: null, ticketId: null, tool: undefined, error: null,
+    reset: resetFn, stop: vi.fn(), stream: streamFn,
   }),
 }));
 
@@ -58,6 +64,11 @@ beforeEach(() => {
     text: '您好，退款一般 1-3 个工作日原路退回 [来源1]。',
     sources: [{ chunk_id: 'c1', doc_title: '退换货政策', snippet: '退款 1-3 个工作日', score: 0.82 }],
   });
+  streamFn.mockReset();
+  resetFn.mockReset();
+  // 发送/建单 mock 跨用例重置（调用历史泄漏会让 not.toHaveBeenCalled / 次数断言失真）
+  vi.mocked(sendAgentMessage).mockReset();
+  vi.mocked(createTicket).mockReset();
 });
 
 describe('坐席辅助 AI 推荐（批次A）', () => {
@@ -202,5 +213,92 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
     // 重新生成：必须绕缓存强制重算（60s TTL 内否则返回同一文本，按钮语义失效）
     await userEvent.click(screen.getByRole('button', { name: '重新生成' }));
     await waitFor(() => expect(suggestMock).toHaveBeenLastCalledWith('sess-1', undefined, true));
+  });
+});
+
+/** Phase-2 任务2（填入通道角色修正）：未转人工的会话里，建议卡「填入」→（编辑）→ 发送
+ *  必须走坐席通道（sendAgentMessage，落库 role='agent'），不得当作顾客问题喂 AI 流。
+ *  同时锁定两条不变量：未填入的手动输入保持 W5「模拟顾客发问」演示行为；已转人工路径不受影响。 */
+describe('Phase-2 任务2：建议「填入」发送通道角色', () => {
+  const SUGGEST_TEXT = '您好，退款一般 1-3 个工作日原路退回 [来源1]。';
+  function mockAgentMessage() {
+    vi.mocked(sendAgentMessage).mockResolvedValue({
+      id: 'am-1',
+      session_id: 'sess-1',
+      role: 'agent',
+      content: SUGGEST_TEXT,
+      created_at: '2026-08-28T10:00:00Z',
+      agent_name: '客服甲',
+    });
+  }
+  async function renderObserveReady() {
+    render(
+      <Wrapper>
+        <ChatContainer />
+      </Wrapper>,
+    );
+    // observe 视角就绪（转人工按钮出现即代表详情已加载、发送入口可用）
+    await waitFor(() => expect(screen.getByRole('button', { name: /转人工/ })).toBeInTheDocument());
+  }
+
+  it('未转人工：填入建议 → 发送走坐席通道（sendAgentMessage 落库），不当作顾客问题喂 AI 流', async () => {
+    mockAgentMessage();
+    await renderObserveReady();
+    await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'AI 建议回复' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '填入输入框' }));
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    // 红测关键：此前发送落进顾客/AI 路径（stream），sendAgentMessage 永远不被调用
+    await waitFor(() => expect(vi.mocked(sendAgentMessage)).toHaveBeenCalledWith('sess-1', SUGGEST_TEXT));
+    expect(streamFn).not.toHaveBeenCalled();
+    // 人工客服气泡乐观上屏（建议卡片仍在屏 → 同文本多处出现，用 getAllByText）
+    expect(screen.getAllByText(/退款一般 1-3 个工作日/).length).toBeGreaterThan(0);
+  });
+
+  it('填入发送即视为人工介入：后续手动输入同样走坐席通道（不再模拟顾客发问）', async () => {
+    mockAgentMessage();
+    await renderObserveReady();
+    await userEvent.click(screen.getByRole('button', { name: /AI 推荐/ }));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'AI 建议回复' })).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: '填入输入框' }));
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(vi.mocked(sendAgentMessage)).toHaveBeenCalledTimes(1));
+    // 第二条：纯手动输入（未经填入）——介入状态已随首条代发切换
+    vi.mocked(sendAgentMessage).mockClear();
+    await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '稍后为您跟进，请稍候');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(vi.mocked(sendAgentMessage)).toHaveBeenCalledWith('sess-1', '稍后为您跟进，请稍候'));
+    expect(streamFn).not.toHaveBeenCalled();
+  });
+
+  it('未填入建议时：坐席手动输入保持「模拟顾客发问」演示路径（W5 行为不变，不误走坐席通道）', async () => {
+    await renderObserveReady();
+    await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '帮我模拟问一句');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() =>
+      expect(streamFn).toHaveBeenCalledWith(
+        expect.objectContaining({ session_id: 'sess-1', content: '帮我模拟问一句' })
+      )
+    );
+    expect(vi.mocked(sendAgentMessage)).not.toHaveBeenCalled();
+  });
+
+  it('已转人工：发送走坐席通道（既有 intervened 路径不受本次分支改动影响）', async () => {
+    mockAgentMessage();
+    vi.mocked(createTicket).mockResolvedValue({
+      ticket_id: 't-1',
+      session_id: 'sess-1',
+      status: 'open',
+      created_at: '2026-08-28T10:00:00Z',
+      updated_at: '2026-08-28T10:00:00Z',
+      version: 1,
+    });
+    await renderObserveReady();
+    await userEvent.click(screen.getByRole('button', { name: '转人工' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '已转人工' })).toBeInTheDocument());
+    await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '您好，我是人工客服');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(vi.mocked(sendAgentMessage)).toHaveBeenCalledWith('sess-1', '您好，我是人工客服'));
+    expect(streamFn).not.toHaveBeenCalled();
   });
 });

@@ -212,6 +212,10 @@ export function ChatContainer({
   const [aiSuggest, setAiSuggest] = useState<{ text: string; sources: MessageSource[]; loading: boolean } | null>(null);
   // 本地持有 Composer 的填入能力（建议卡片「填入输入框」用）；透传给父级 WorkbenchLayout（SourcePanel 快捷话术）
   const fillRef = useRef<((t: string) => void) | null>(null);
+  // Phase-2 任务2：建议卡「填入」的一次性标记——填入意图是"代发回复给顾客"，紧随其后的
+  // 发送必须走坐席通道（sendAgentMessage，落库 role='agent'），不得当作顾客问题喂 AI 流
+  //（未转人工会话此前的缺陷）。未填入的手动输入保持 W5「模拟顾客发问」演示行为不变。
+  const suggestFillPendingRef = useRef(false);
   // 溯源选中（2026-08-25）：ref 保持最新 onSelectMessage（历史加载 .then 异步回调内使用，避免闭包过期）
   const onSelectMessageRef = useRef(onSelectMessage);
   useEffect(() => {
@@ -259,6 +263,7 @@ export function ChatContainer({
         setTicketCreated(null);
         setManualTicket(null);
         setAiSuggest(null); // 批次A：切会话重置 AI 建议卡片（防旧会话建议残留/填入新会话输入框）
+        suggestFillPendingRef.current = false; // Phase-2 任务2：切会话同步清「填入待发」标记
         reset(); // C1：切到新会话 → abort 旧流
       }
       return;
@@ -269,6 +274,7 @@ export function ChatContainer({
     setTicketCreated(null);
     setManualTicket(null);
     setAiSuggest(null); // 批次A：切会话重置 AI 建议卡片（防旧会话建议残留/填入新会话输入框）
+    suggestFillPendingRef.current = false; // Phase-2 任务2：切会话同步清「填入待发」标记
     const sid = sessionParam; // P3-⑫：请求发起时捕获，回调内比对最新参数/会话
     getSessionDetail(sid)
       .then((d) => {
@@ -408,10 +414,15 @@ export function ChatContainer({
       setCreateError(null); // 新发送清空创建错误
       setRetryText(null); // 新发送即清空重试标记
 
-      // W5 + Branch 3：客服视角 + 已转人工 → 发送"人工客服"消息（右侧）。
-      // 乐观上屏保手感；随即 POST /sessions/{id}/messages 落库（role=agent），
-      // 成功后用后端 id 对齐本地消息 → 顾客端轮询按 id 去重，不会出现双份。
-      if (isStaff && intervened) {
+      // W5 + Branch 3 + Phase-2 任务2：客服发送走"人工客服"消息（右侧）的两种情形——
+      // ① 已转人工（intervened）；② 建议卡「填入」后的发送（坐席意图是代发回复给顾客，
+      // 未转人工也不得当作顾客问题喂 AI 流——落库须为 role='agent' 顾客端才可见）。
+      // 后者发送即视为人工介入（setIntervened）：头部门状态与后续发送通道随之一致，
+      // 避免"建议已代发、下一句手动输入却模拟顾客发问"的割裂。
+      if (isStaff && (intervened || suggestFillPendingRef.current)) {
+        const viaSuggestFill = !intervened && suggestFillPendingRef.current;
+        suggestFillPendingRef.current = false; // 一次性：标记仅覆盖紧随「填入」的那条发送
+        if (viaSuggestFill) setIntervened(true); // 发送即人工介入（W5 语义：人工客服接待中）
         lastAgentSendRef.current = Date.now(); // 观察视角轮询让位乐观上屏窗口（见该 effect 注释）
         const aid = `ag-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
         const agentName = useAuthStore.getState().user?.email ?? '人工客服';
@@ -437,7 +448,8 @@ export function ChatContainer({
         return true;
       }
 
-      // 顾客 / AI 路径：未转人工前，客服也以"顾客"身份模拟发问（左侧），触发 AI 回答（左侧）
+      // 顾客 / AI 路径：未转人工前，客服手动输入仍以"顾客"身份模拟发问（W5 演示行为），
+      // 触发 AI 回答（左侧）；建议卡「填入」后的发送已在上方分支改走坐席通道（Phase-2 任务2）
       let sid = sessionId;
       if (!sid) {
         setCreating(true);
@@ -723,7 +735,12 @@ export function ChatContainer({
               size="small"
               type="primary"
               disabled={!aiSuggest.text}
-              onClick={() => fillRef.current?.(aiSuggest.text)}
+              onClick={() => {
+                // Phase-2 任务2：标记紧随的发送为坐席代发（填入意图=回复顾客，走 agent 通道）。
+                // 仅建议卡入口设标记；SourcePanel 快捷话术共用 fillRef 但不设（保持各自语义）。
+                suggestFillPendingRef.current = true;
+                fillRef.current?.(aiSuggest.text);
+              }}
             >
               填入输入框
             </Button>
