@@ -6,8 +6,10 @@
 - 文档标题查询原有三份同形拷贝（chat._fetch_doc_titles / sessions._doc_titles /
   knowledge_search.py 既有债）——本模块收敛为单一实现，knowledge_search 留后续批次跟进。
 
-缓存语义（与 chat.py 原实现逐字一致，B4 修复保留）：按租户分桶 + 60s TTL +
+缓存语义（与 chat.py 原实现逐字一致，B4 修复保留）：单租户期单条目缓存
+（tenant_middleware 恒 TENANT_DEFAULT，见 6381cd5 裁定；无按键分桶）+ 60s TTL +
 线程锁（run_in_threadpool 并发读写）+ 不缓存 None（新建 KB 立即可感知）。
+M1（外部审查 2026-08-28）：多租户化前必须改为按 tenant 分桶，否则跨租户泄漏。
 """
 from __future__ import annotations
 
