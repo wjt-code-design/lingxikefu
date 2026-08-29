@@ -1,15 +1,21 @@
 """快捷问题预置话术短路（方案A：彻底杜绝"点快捷要思考"）。
 
 无论前端点快捷按钮还是输入框手动输入相同问句，只要命中本表，后端直接返回预置答案，
-秒回、零思考、不检索、不判缓存版本（kb_version 变化也不再影响这些固定问题）。
+秒回、零思考、不检索。kb_version 失效面（架构审核债 5-2）：知识导入成功后跑覆盖检查
+（check_kb_coverage），通过则记录通过版本（_COVERED_KB_VERSION）；chat 端短路前用
+is_enabled_for(kb_version) 校验——KB 已变更而新版本未通过覆盖检查时禁用 quick 回落 RAG，
+防"KB 更新后话术陈旧无人知晓"。从未跑过覆盖检查的环境恒放行（向后兼容，行为同旧版）。
 
 - 与 KB/后端真实回答对齐；若改知识库相关章节，需同步更新此处答案。
 - 匹配用归一化句（TFKC + 去标点/空白），手打"一模一样"或近似标点差异均可命中。
 """
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
+
+logger = logging.getLogger(__name__)
 
 #: 快捷问题 -> 预置答案（markdown，简短、直接给结论）
 _QA: list[tuple[str, str]] = [
@@ -72,12 +78,12 @@ def _topic_bigrams(q: str) -> set[str]:
     return {norm[i : i + 2] for i in range(len(norm) - 1)}
 
 
-def check_kb_coverage(kb_text: str) -> list[str]:
-    """P4：快捷话术与 KB 双源漂移告警（知识导入成功后调用）。
+def uncovered_questions(kb_text: str) -> list[str]:
+    """P4：快捷话术 vs KB 双源漂移启发式——返回在 KB 中无覆盖依据的问题列表。
 
     对每个快捷问题：去虚词取 bigram，KB 文本（归一化后）若不含其中任一 bigram，
-    判定该问题在 KB 中无覆盖依据 → 返回未覆盖问题列表（调用方记 warning，不阻断）。
-    是启发式告警而非门禁：少量未覆盖提示"该话题只有话术没有文档"，运营据此补录。
+    判定该问题在 KB 中无覆盖依据。调用方（knowledge_import_service）对列表记 warning，
+    提示"该话题只有话术没有文档"，运营据此补录。
     """
     kb_norm = _norm(kb_text or "")
     uncovered: list[str] = []
@@ -86,3 +92,57 @@ def check_kb_coverage(kb_text: str) -> list[str]:
         if grams and not any(g in kb_norm for g in grams):
             uncovered.append(q)
     return uncovered
+
+
+#: 覆盖门禁阈值（架构审核债 5-2）：有 KB 依据的话术占比 ≥ 该值才算"覆盖检查通过"。
+#: 守卫 KB 换血/大面积删除（过半话术失据 → quick 禁用走 RAG）；局部漂移（个别话题
+#: 未覆盖）仍由 uncovered_questions 的 warning 告警，不至于一票否决整表话术。
+_COVERAGE_PASS_RATIO: float = 0.5
+
+#: 最近一次覆盖检查通过的 kb_version（模块级状态；None = 从未通过/从未检查）。
+#: 由 knowledge_import_service 导入成功后调用 check_kb_coverage 写入；
+#: chat.py quick 短路前经 is_enabled_for 比对消费。
+_COVERED_KB_VERSION: str | None = None
+
+#: 已对哪个漂移版本警告过（chat 禁用路径日志一次性：同版本重复请求不刷屏）。
+_WARNED_STALE_VERSION: str | None = None
+
+
+def check_kb_coverage(kb_text: str, kb_version: str | None = None) -> bool:
+    """快捷话术 vs KB 覆盖检查（5-2 失效面门禁）：通过返回 True，否则 False。
+
+    通过判据：有 KB 依据的话术占比 ≥ _COVERAGE_PASS_RATIO（即 uncovered_questions
+    结果不过半）。通过且调用方
+    补传 kb_version（knowledge_import_service 导入成功后按 chat._kb_version_str
+    同式计算）时记录 _COVERED_KB_VERSION，作为 quick 短路的放行锚点；
+    未通过不记录 → 新版本在 chat 端被 is_enabled_for 判为禁用。
+    kb_version 为 None（无法锚定版本）时只返回判定结果、不记录状态。
+    """
+    uncovered = uncovered_questions(kb_text)
+    passed = (len(_QA) - len(uncovered)) / len(_QA) >= _COVERAGE_PASS_RATIO
+    if passed and kb_version is not None:
+        global _COVERED_KB_VERSION
+        _COVERED_KB_VERSION = kb_version
+    return passed
+
+
+def is_enabled_for(kb_version: str | None) -> bool:
+    """quick 预置话术对当前 kb_version 是否放行（chat.py 短路前校验）。
+
+    - 从未通过覆盖检查（_COVERED_KB_VERSION 为 None）→ True：现有环境无导入动作时
+      行为与旧版完全一致（向后兼容）；
+    - 当前 kb_version 为 None（无版本可比）→ True：无版本环境向后兼容；
+    - 与最近通过版本一致 → True；KB 已变更而新版本未通过 → False（回落 RAG），
+      并对该漂移版本 warning 一次（不随请求刷屏）。
+    """
+    if _COVERED_KB_VERSION is None or kb_version is None or kb_version == _COVERED_KB_VERSION:
+        return True
+    global _WARNED_STALE_VERSION
+    if kb_version != _WARNED_STALE_VERSION:
+        _WARNED_STALE_VERSION = kb_version
+        logger.warning(
+            "快捷话术对当前 KB 版本 %s 未通过覆盖检查（最近通过版本: %s），命中问题回落 RAG",
+            kb_version,
+            _COVERED_KB_VERSION,
+        )
+    return False

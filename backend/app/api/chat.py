@@ -34,7 +34,7 @@ from app.core.tracing import set_trace_id
 from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
-from app.services import conversation_state
+from app.services import conversation_state, quick_answers
 from app.services.agent_metrics import drain_degraded
 from app.services.agents.image_agent import ImageAgent
 from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
@@ -373,7 +373,9 @@ async def chat_stream(
                 # 诚实标注（2026-08-25 溯源空面板排查）：该分支不检索、零 LLM，
                 # 不发 retrieving/generating 进度剧场（此前谎报「已检索知识库」）；
                 # done 带 answer_source=quick，前端 SourcePanel 区分「预置话术无引用」空态。
-                if quick_ans:
+                # 5-2 失效面：KB 变更后新版本未通过覆盖检查（is_enabled_for）→ 不短路自然落 RAG，
+                # 防陈旧话术；从未跑过覆盖检查的环境恒放行（向后兼容），禁用时按版本 warning 一次。
+                if quick_ans and quick_answers.is_enabled_for(kb_version):
                     yield ("intent", {"intent": "qa", "refuse": False})
                     for delta in _split_answer(quick_ans):
                         yield ("token", {"delta": delta})

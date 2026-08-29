@@ -136,13 +136,26 @@ def test_faq_empty_db(empty_client):
 
 
 def test_quick_kb_coverage_detects_drift():
-    """P4：快捷话术 vs KB 双源覆盖校验——KB 覆盖话题不告警，无覆盖话题报警（漂移）。"""
-    from app.services.quick_answers import check_kb_coverage
+    """P4：快捷话术 vs KB 双源覆盖校验——KB 覆盖话题不告警，无覆盖话题报警（漂移）。
 
-    covered = check_kb_coverage("手机整机保修 12 个月；七天无理由退货可申请。")
+    5-2 后 check_kb_coverage 返回 bool（门禁），逐题漂移明细改由 uncovered_questions 提供。
+    """
+    from app.services.quick_answers import uncovered_questions
+
+    covered = uncovered_questions("手机整机保修 12 个月；七天无理由退货可申请。")
     assert "保修多久？" not in covered, f"保修话题有 KB 依据，不应告警: {covered}"
     assert "七天无理由退货怎么申请？" not in covered
 
-    drifted = check_kb_coverage("仅包含保修与退货相关内容")
+    drifted = uncovered_questions("仅包含保修与退货相关内容")
     assert "可以开发票吗？" in drifted, f"发票话题无 KB 依据，应告警: {drifted}"
     assert "支持哪些支付方式？" in drifted
+
+
+def test_quick_kb_coverage_gate_threshold():
+    """5-2 门禁：过半话术有依据 → 通过（True）；过半失据 → 不通过（False）。"""
+    from app.services.quick_answers import check_kb_coverage
+
+    # 覆盖发票+保修话题（连带"怎么/多久"泛词命中）→ 过半话术有依据 → 通过
+    assert check_kb_coverage("怎么开发票 保修多久") is True
+    # 与全部话术零交集 → 全部未覆盖 → 不通过
+    assert check_kb_coverage("量子力学波动方程与算符对易关系") is False

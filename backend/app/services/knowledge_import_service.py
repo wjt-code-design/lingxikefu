@@ -131,6 +131,7 @@ def import_document(doc_id: UUID, db: Session):
 
 def _evict_stale_cache_after_import(db: Session, kb_id: UUID) -> None:
     """P2-⑨：导入成功后按新 kb_version 清理旧语义缓存点（fail-open，不阻塞导入）。"""
+    version: str | None = None
     try:
         cnt = (
             db.scalar(
@@ -146,15 +147,20 @@ def _evict_stale_cache_after_import(db: Session, kb_id: UUID) -> None:
         answer_cache.evict_stale_kb(str(kb_id), version)
     except Exception:  # noqa: BLE001 - fail-open：缓存清理失败不影响导入结果
         logger.exception("KB 版本推进缓存清理失败（不阻塞导入）")
-    # P4：快捷话术与 KB 双源漂移告警（fail-open，不阻塞导入）
-    _check_quick_coverage(db, kb_id)
+    # P4：快捷话术与 KB 双源漂移告警（fail-open，不阻塞导入）；version 供 5-2 门禁记录
+    _check_quick_coverage(db, kb_id, version)
 
 
-def _check_quick_coverage(db: Session, kb_id: UUID) -> None:
-    """P4：快捷预置话术 vs KB 内容覆盖校验——漂移告警（不阻断，不阻塞导入）。
+def _check_quick_coverage(db: Session, kb_id: UUID, kb_version: str | None) -> None:
+    """P4：快捷预置话术 vs KB 内容覆盖校验——漂移告警 + 5-2 失效面门禁（不阻塞导入）。
 
-    文本过大（>2M 字符）跳过扫描（避免每次导入全量拼接的 IO 开销）；告警提示
-    "该话题只有话术没有文档"，运营据此补录知识或更新话术。
+    - 告警：无覆盖依据的话术记 warning（不阻断），提示"该话题只有话术没有文档"，
+      运营据此补录知识或更新话术；
+    - 门禁（架构审核债 5-2）：check_kb_coverage 通过且 kb_version 可锚定时记录通过版本，
+      chat 端 quick 短路据此放行；未通过不记录 → 新版本 quick 回落 RAG（防陈旧话术）。
+      kb_version 为 None（版本计算失败）时只告警、不进入受控状态（fail-open）。
+    - 文本过大（>2M 字符）跳过扫描：无法核验 → 新版本不获通过记录，quick 回落 RAG
+      （宁可损失秒回也不放行未核验话术），warning 提示运营关注。
     """
     try:
         from app.services import quick_answers
@@ -168,14 +174,22 @@ def _check_quick_coverage(db: Session, kb_id: UUID) -> None:
         ).all()
         blob = "".join(texts or [])
         if len(blob) > 2_000_000:
-            logger.debug("KB %s 文本过大（%s 字符），跳过快捷话术覆盖校验", kb_id, len(blob))
+            logger.warning(
+                "KB %s 文本过大（%s 字符），跳过快捷话术覆盖校验——该版本（%s）quick 话术回落 RAG",
+                kb_id,
+                len(blob),
+                kb_version,
+            )
             return
-        uncovered = quick_answers.check_kb_coverage(blob)
+        uncovered = quick_answers.uncovered_questions(blob)
         if uncovered:
             logger.warning(
                 "快捷话术与 KB 漂移：%s 个快捷问题在 KB 中无覆盖依据（建议补录知识或更新话术）：%s",
                 len(uncovered),
                 "；".join(uncovered),
             )
+        # 5-2：通过则记录该 kb_version（quick 放行锚点）；未通过不记录 → chat 端禁用 quick。
+        # 与上面告警各扫一遍 blob：告警按"任一话题未覆盖"报，门禁按占比判——语义不同分属两层。
+        quick_answers.check_kb_coverage(blob, kb_version)
     except Exception:  # noqa: BLE001 - fail-open：校验失败不影响导入结果
         logger.exception("快捷话术覆盖校验失败（不阻塞导入）")
