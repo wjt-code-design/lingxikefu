@@ -115,3 +115,13 @@ def test_env_must_be_in_enum() -> None:
     # 大写非法变体必须抛 ValidationError（pydantic Literal 枚举校验）
     with pytest.raises(ValidationError):
         make_settings(ENV="Production")
+
+
+def test_intent_shadow_sample_validated() -> None:
+    """架构二期 3：意图影子采样率必须在 [0,1]（0=关闭）；越界启动即拒。"""
+    make_settings(INTENT_SHADOW_SAMPLE=0.0).validate()
+    make_settings(INTENT_SHADOW_SAMPLE=1.0).validate()
+    with pytest.raises(ValueError, match="INTENT_SHADOW_SAMPLE"):
+        make_settings(INTENT_SHADOW_SAMPLE=1.5).validate()
+    with pytest.raises(ValueError, match="INTENT_SHADOW_SAMPLE"):
+        make_settings(INTENT_SHADOW_SAMPLE=-0.1).validate()

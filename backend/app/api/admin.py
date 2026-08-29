@@ -25,6 +25,8 @@ from app.models.user import User, UserRole
 from app.schemas.admin import (
     AdminStats,
     HotGap,
+    IntentShadowBucket,
+    IntentShadowStats,
     RoleUpdateReq,
     StatsTrendResp,
     TrendPoint,
@@ -238,6 +240,60 @@ def get_stats(
         clarify_rounds=clarify_rounds,
         topic_dist=topic_dist,
         refuse_count=refuse_count,
+    )
+
+
+@router.get("/intent-shadow/stats", response_model=IntentShadowStats)
+def get_intent_shadow_stats(
+    _: dict = Depends(require_admin),
+    db: OrmSession = Depends(get_db),
+) -> IntentShadowStats:
+    """LLM 意图分类影子一致率（架构二期 3，ADR-1 第一步：只记不驱动的验证数据）。
+
+    聚合用户消息 ``meta["intent_shadow"]["intent"]``（LLM 影子产出）vs
+    ``Message.intent``（规则式 classify_intent，单一真源）→
+    ``{total, agree, agree_rate, by_intent}``。影子仅采样 qa 类消息，故常态只有
+    qa 桶；出现其他桶 = 写入方异常信号，按原样透出不隐藏。
+    JSON 路径由 SQLAlchemy 按方言编译（PG: meta->'intent_shadow'->>'intent'，
+    SQLite: json_extract），同 R-3 latency 先例；GROUP BY 两列后 Python 侧只归并
+    ≤N² 行，不做全量拉取。
+    """
+    tenant = settings.TENANT_DEFAULT
+    llm_col = Message.meta["intent_shadow"]["intent"].as_string()
+    rule_col = sa.func.coalesce(Message.intent, "unknown")  # 旧数据 intent 可空
+    rows = db.execute(
+        select(rule_col, llm_col, func.count(Message.id))
+        .where(
+            Message.tenant_id == tenant,
+            Message.role == MessageRole.user,
+            llm_col.isnot(None),  # 影子键存在 = 有效样本（分母）
+        )
+        .group_by(rule_col, llm_col)
+    ).all()
+
+    total = 0
+    agree = 0
+    buckets: dict[str, list[int]] = {}
+    for rule_intent, llm_intent, cnt in rows:
+        cnt = int(cnt)
+        total += cnt
+        bucket = buckets.setdefault(str(rule_intent), [0, 0])
+        bucket[0] += cnt
+        if llm_intent is not None and str(rule_intent) == llm_intent:
+            agree += cnt
+            bucket[1] += cnt
+
+    def _bucket(pair: list[int]) -> IntentShadowBucket:
+        t, a = pair
+        return IntentShadowBucket(
+            total=t, agree=a, agree_rate=round(a / t, 4) if t else 0.0
+        )
+
+    return IntentShadowStats(
+        total=total,
+        agree=agree,
+        agree_rate=round(agree / total, 4) if total else 0.0,
+        by_intent={k: _bucket(v) for k, v in buckets.items()},
     )
 
 

@@ -33,6 +33,10 @@ _TEST_ENV: dict[str, str] = {
     "RATE_LIMIT_ENABLED": "false",
     # 测试环境关闭答案缓存：避免单测触发真实 Qdrant 建集合 + 本地 embedding 加载
     "ANSWER_CACHE_ENABLED": "false",
+    # 架构二期 3：关闭意图影子采样——全量测试中未打桩的 /chat/stream 用例若被采样，
+    # fire-and-forget worker 会打真实 LLM + 真实 PG（影子只记不驱动，0=彻底关闭，
+    # 测试自洽）；影子语义用例（test_intent_shadow）自行 monkeypatch settings 重开。
+    "INTENT_SHADOW_SAMPLE": "0",
 }
 
 # 用 setdefault（而非强制覆盖）：优先尊重外部显式注入的连接配置

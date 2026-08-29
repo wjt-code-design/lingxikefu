@@ -34,7 +34,7 @@ from app.core.tracing import set_trace_id
 from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
-from app.services import conversation_state, quick_answers
+from app.services import conversation_state, intent_shadow, quick_answers
 from app.services.agent_metrics import drain_degraded
 from app.services.agents.image_agent import ImageAgent
 from app.services.agents.router import IMAGE_AGENT, TICKET_AGENT
@@ -438,6 +438,15 @@ async def chat_stream(
                     if intent != user_msg.intent:
                         user_msg.intent = intent
                         await run_in_threadpool(db.commit)
+                    # 架构二期 3（ADR-1 第一步）：LLM 意图分类影子模式——只记不驱动。
+                    # 仅 qa 类（改道决策只关心 qa 侧误判，handoff/chitchat/refuse 显式
+                    # bypass）；INTENT_SHADOW_SAMPLE 采样控成本；fire-and-forget（独立
+                    # 线程池 + 独立短会话，绝不复用请求级 db——响应结束即关）；内部全
+                    # fail-open：失败只 log、结果只落 user_msg.meta["intent_shadow"]，
+                    # Router/管线/SSE 事件流对此无感知（不驱动路由、不阻塞响应）。
+                    intent_shadow.maybe_shadow(
+                        str(user_msg.id), req.content, intent, trace_id=trace_id
+                    )
                     yield _sse({"event": "intent", "data": data})
                     # T1 + v1.1：handoff → Ticket Agent 建单（幂等 + fail-open，独立于流，不阻断）。
                     # Router 已前置判定（与管线内 intent 节点同源，必然一致）；

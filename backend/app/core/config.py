@@ -92,6 +92,11 @@ class Settings(BaseSettings):
     # 工单空闲 N 天 → 自动 closed（0=关闭）
     AUTO_TICKET_CLOSE_IDLE_DAYS: int = 7
 
+    # --- 意图影子（架构二期 3，ADR-1 第一步：LLM 意图分类只记不驱动） ---
+    # 采样率 [0,1]：对规则判为 qa 的用户消息按此概率打 LLM 影子分类（结果只落
+    # Message.meta["intent_shadow"]，不驱动路由）；0 = 关闭影子（不产生 LLM 成本）。
+    INTENT_SHADOW_SAMPLE: float = 0.2
+
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
 
@@ -196,6 +201,12 @@ class Settings(BaseSettings):
 
         if not (1 <= self.POSTGRES_PORT <= 65535):
             errors.append(f"POSTGRES_PORT 非法值: {self.POSTGRES_PORT!r}（应为 1-65535 的整数）")
+
+        # --- 意图影子采样率（架构二期 3）---
+        if not (0 <= self.INTENT_SHADOW_SAMPLE <= 1):
+            errors.append(
+                f"INTENT_SHADOW_SAMPLE 非法值: {self.INTENT_SHADOW_SAMPLE!r}（应为 0~1 的采样率，0=关闭）"
+            )
 
         # --- BU-04 知识库导入参数 ---
         if self.CHUNK_SIZE <= 0:

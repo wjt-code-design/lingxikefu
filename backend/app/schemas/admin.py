@@ -62,3 +62,20 @@ class TrendPoint(BaseModel):
 
 class StatsTrendResp(BaseModel):
     days: list[TrendPoint]
+
+
+class IntentShadowBucket(BaseModel):
+    """单规则意图桶（架构二期 3：意图影子一致率观测）。"""
+
+    total: int  # 影子样本数（meta.intent_shadow 存在的用户消息）
+    agree: int  # LLM 意图与规则意图（user_msg.intent）一致的样本数
+    agree_rate: float  # agree / total（4 位小数；total=0 时为 0.0）
+
+
+class IntentShadowStats(BaseModel):
+    """ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。"""
+
+    total: int
+    agree: int
+    agree_rate: float
+    by_intent: dict[str, IntentShadowBucket] = {}
