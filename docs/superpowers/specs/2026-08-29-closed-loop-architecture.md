@@ -125,3 +125,19 @@ graph RAG / 微服务化 / 实时在线学习 / 扩情绪词表（被意图分�
 | quota 200/天+只读设置 | config.py:74；admin_settings.py:1 |
 | 售前政策已在 KB/评测 | kb/常见问题FAQ.md、会员权益.md；评测问题库.md:10、Q011/Q014-17/Q052-55/Q076/Q044 |
 | 转人工无摘要 | models/ticket.py:30-43(仅 session/message 锚点) |
+
+---
+
+## 执行回执（2026-08-29）：零期 + 一期已落地
+
+计划：docs/superpowers/plans/2026-08-29-closedloop-phase01.md（5 任务，子代理驱动，五任务审查全 Approved）。
+
+| 任务 | 交付 | commit |
+|---|---|---|
+| T1 语义缓存极性防护 | 否定/条件翻转问句不再互相命中（"能退"≠"不能退"）；精确层天然免疫 | 06abb0c |
+| T2 quick_answers 失效面 | KB 变更未过覆盖检查（≥50% 多数命中）即禁用快捷话术走 RAG；向后兼容 | 317721e |
+| T3 移交摘要持久化 | tickets.summary + processing_at/resolved_at（0016）；AI handoff 打包槽位/主题/澄清状态 | 8d69df3 |
+| T4 降级话术阶梯 | 系统故障 vs 容量超时两档独立文案（均含评测锚点"转人工"） | f5815fd |
+| T5 配额 DB 化 | app_settings KV + admin PUT 写通道 + 60s 生效缓存；大促可动态上调（0017） | cfbb6ff |
+
+终态：571+ 新增测试全绿（579 总）、ruff 零错、双迁移对称。遗留登记（progress.md）：Celery 导入路径 quick 门控需持久化 covered 版本、tickets.summary 消费端（TicketItem 下发）接线、_ORDER_RE Unicode \b。二期（L2 路由改道 + 意图分类影子验证）待启动。
