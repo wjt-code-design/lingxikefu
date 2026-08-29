@@ -50,7 +50,7 @@ from app.services.quick_answers import match_quick
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
 from app.services.rag_service import stream_answer
-from app.services.session_context import build_handoff_summary
+from app.services.session_context import build_handoff_summary, classify_handoff_risk
 from app.services.shared_context import SharedContext
 
 # 保留 order_tool 命名空间绑定：既有测试 mock 目标 app.api.chat.order_tool.*
@@ -332,6 +332,10 @@ async def chat_stream(
             handoff_summary=build_handoff_summary(
                 [*history, {"role": "user", "content": req.content}], conv_state
             ),
+            # 架构二期 1（L2 预起草）：handoff 风险判别（low=知识型可 AI 预起草改道，
+            # high=显式人工/投诉/情绪不可改道）。入参 = 当前消息 + 行锁读改写的最新
+            # conv_state（fail-open 为 None，判别容错按无主题=high 处理）。
+            handoff_risk=classify_handoff_risk(req.content, conv_state),
         )
         ctx = agent_router.route(ctx)
 

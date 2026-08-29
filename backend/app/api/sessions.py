@@ -27,8 +27,7 @@ from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.models.user import User
-from app.prompts.agent_assist_prompt import build_assist_messages
-from app.services import conversation_state
+from app.services import agent_assist, conversation_state
 from app.services.audit_service import audit_log
 from app.services.kb_lookup import doc_titles as _doc_titles_sync
 from app.services.kb_lookup import get_latest_kb_id as _latest_kb_id
@@ -486,37 +485,23 @@ async def suggest_reply(
                 return SuggestResp(**hit)
 
     try:
-        kb_id = await run_in_threadpool(_latest_kb_id, db)
-        if kb_id is None:
-            return SuggestResp()  # 无知识库：空建议（fail-open，不缓存）
-
-        chunks = await run_in_threadpool(search_kb, question, kb_id, 3)
-
-        def _history() -> list[dict]:
-            rows = (
-                db.scalars(
-                    select(Message)
-                    .where(Message.session_id == session_id)
-                    .order_by(Message.created_at.desc())
-                    .limit(6)
-                )
-                .all()
-            )
-            return [{"role": m.role.value, "content": m.content} for m in reversed(rows)]
-
-        history = await run_in_threadpool(_history)
-        # 大扫查修复（M-1）：建议 prompt 并入会话状态——顾客已提供订单号时不再重复索要
-        messages = build_assist_messages(
-            question=question,
-            history=history,
-            chunks=chunks,
+        # 架构二期 1：检索+assist prompt+LLM 核心收敛到 services.agent_assist.draft_reply
+        # （建单 AI 预起草共用同一核心）。注入本命名空间绑定的依赖（既有测试 mock 目标
+        # app.api.sessions._latest_kb_id / search_kb / get_chat_client 不失效），
+        # 调用时序 / 60s 缓存 / fail-open 路径与抽取前逐字一致。
+        draft = await agent_assist.draft_reply(
+            db,
+            session_id,
+            question,
+            # 大扫查修复（M-1）：建议 prompt 并入会话状态——顾客已提供订单号时不再重复索要
             state_hint=conversation_state.to_prompt_hint(s.conv_state),
+            latest_kb_id=_latest_kb_id,
+            search_kb=search_kb,
+            chat_client=get_chat_client,
         )
-        # P2-⑤：坐席辅助用短超时（25s < 前端 35s 阈值），避免后端慢导致前端假失败
-        text = (await get_chat_client().complete(messages, timeout=25)).strip()
 
         titles = await run_in_threadpool(
-            _doc_titles, db, {c.doc_id for c in chunks if c.doc_id}
+            _doc_titles, db, {c.doc_id for c in draft.chunks if c.doc_id}
         )
         sources = [
             SessionMessageSource(
@@ -526,10 +511,10 @@ async def suggest_reply(
                 snippet=c.text[:200],
                 score=round(c.score, 4),
             )
-            for c in chunks
+            for c in draft.chunks
         ]
-        resp = SuggestResp(text=text, sources=sources)
-        if text:
+        resp = SuggestResp(text=draft.text, sources=sources)
+        if draft.text:
             with _suggest_lock:
                 _suggest_cache[cache_key] = resp.model_dump()
         return resp

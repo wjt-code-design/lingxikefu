@@ -55,6 +55,15 @@ class TicketItem(BaseModel):
     created_at: str
     updated_at: str
     version: int  # S2 乐观锁版本号：客户端流转时回传，服务端以原子条件比较防并发覆盖
+    # T3 遗留补发（架构二期 1）：移交摘要（build_handoff_summary 产物的 JSON 文本）——
+    # 一期已落库但只写不下发，坐席端此前拿不到
+    summary: str | None = None
+    # L2 预起草（架构二期 1）：AI 预草拟回复 + 种类（ai=AI 预起草）；未起草 NULL
+    draft_suggestion: str | None = None
+    draft_kind: str | None = None
+    # 一期 4 时间戳补发：逐状态流转时间（此前只写不下发；closed 无独立列，用 updated_at）
+    processing_at: str | None = None
+    resolved_at: str | None = None
 
 
 class TicketListResp(BaseModel):
@@ -83,6 +92,11 @@ def _item(t: Ticket) -> TicketItem:
         created_at=t.created_at.isoformat(),
         updated_at=t.updated_at.isoformat(),
         version=t.version,
+        summary=t.summary,
+        draft_suggestion=t.draft_suggestion,
+        draft_kind=t.draft_kind,
+        processing_at=t.processing_at.isoformat() if t.processing_at else None,
+        resolved_at=t.resolved_at.isoformat() if t.resolved_at else None,
     )
 
 

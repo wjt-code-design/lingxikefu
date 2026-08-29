@@ -13,6 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.core.config import settings
+from app.core.database import SessionLocal
+from app.models.session import Session as SessionModel
 from app.models.ticket import Ticket, TicketStatus
 from app.services.notification_service import create_notification
 
@@ -80,3 +82,60 @@ def ensure_active_ticket(
         db.rollback()
         logger.exception("AI 建单失败（fail-open 降级）")
         return None
+
+
+def draft_ticket_suggestion(
+    ticket_id: str | uuid.UUID,
+    question: str,
+    trace_id: str = "",
+    *,
+    session_factory: Any = None,
+) -> None:
+    """低风险 handoff 建单后的 AI 预起草 worker（架构二期 1，fire-and-forget）。
+
+    在独立线程/独立 DB 会话执行（请求级会话随响应关闭，禁止跨线程复用）：
+    读工单 → 已有草稿跳过（首草为准，对齐 ensure_active_ticket 的 summary 幂等语义）
+    → 复用坐席辅助核心（agent_assist.draft_reply：KB 定位 + top3 检索 + assist prompt
+    + LLM 25s 非流式）→ 写 ``draft_suggestion`` + ``draft_kind="ai"``，坐席打开工单即见。
+
+    fail-open：任何异常只记日志、草稿留空（NULL），绝不影响已完成的建单与问答流
+    （本函数由 TicketAgent 经线程池调度时建单早已返回）。question 截 500 字与
+    suggest 端点 SuggestReq 上限对齐。
+
+    session_factory：DB 会话工厂（默认 SessionLocal）；测试注入 SQLite 工厂。
+    """
+    # 延迟导入：agent_assist 牵引 retrieval/vector/llm 链，避免加重本模块导入图
+    import asyncio
+
+    from app.services import agent_assist, conversation_state
+
+    factory = session_factory or SessionLocal
+    try:
+        tid = uuid.UUID(str(ticket_id))
+        with factory() as db:
+            t = db.get(Ticket, tid)
+            if t is None or not (question or "").strip():
+                return
+            if (t.draft_suggestion or "").strip():
+                return  # 首草为准：不覆盖（可能已被坐席编辑，幂等复访也不重打 LLM）
+            hint = None
+            sess = db.get(SessionModel, t.session_id)
+            if sess is not None:
+                hint = conversation_state.to_prompt_hint(sess.conv_state)
+            # SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 再入参（同 kb_lookup 惯例）
+            sid = t.session_id if isinstance(t.session_id, uuid.UUID) else uuid.UUID(str(t.session_id))
+            draft = asyncio.run(
+                agent_assist.draft_reply(db, sid, question[:500], state_hint=hint)
+            )
+            if not draft.text:
+                return  # fail-open：LLM 空/无知识库 → 草稿留空，不影响建单
+            t.draft_suggestion = draft.text
+            t.draft_kind = "ai"
+            db.commit()
+            logger.info(
+                "ticket AI 预起草完成 ticket=%s trace_id=%s len=%d", tid, trace_id, len(draft.text)
+            )
+    except Exception:  # noqa: BLE001 - fail-open：预起草失败只留痕，不影响建单/问答
+        logger.exception(
+            "ticket AI 预起草失败（fail-open 草稿留空） ticket=%s trace_id=%s", ticket_id, trace_id
+        )

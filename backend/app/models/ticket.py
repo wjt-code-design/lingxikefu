@@ -61,6 +61,12 @@ class Ticket(Base):
     # ensure_ascii=False），坐席首屏直接看到主题/槽位/澄清状态，不再从零重问。
     # 仅新建时落库；manual 建单与历史行为 NULL。
     summary: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    # 架构二期 1（L2 预起草）：low risk handoff 建单后后台 AI 预草拟的回复
+    # （agent_assist.draft_reply 产物），坐席打开工单即见草稿。fail-open：起草失败
+    # 留 NULL；首草为准不覆盖（对齐 summary 幂等语义）。
+    draft_suggestion: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
+    # 草稿种类：ai = AI 预起草；预留 M7 草稿确认流的人工编辑态。未起草 NULL。
+    draft_kind: Mapped[str | None] = mapped_column(sa.String(20), nullable=True)
     # S2 乐观锁版本号：每次状态流转/分配 version+1；并发更新时以 version 条件做原子比较，防后者静默覆盖
     version: Mapped[int] = mapped_column(
         sa.Integer, nullable=False, default=0, server_default="0"

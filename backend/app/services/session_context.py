@@ -74,6 +74,36 @@ def _extract_topic_names(history: list[dict] | None) -> list[str]:
     return topics
 
 
+def classify_handoff_risk(query: str, conv_state: dict | None = None) -> str:
+    """低风险 handoff 判别（架构二期 1，L2 预起草改道的白名单维度）。
+
+    - "low"：非显式转人工/投诉/情绪，且 conv_state.topic ∈ FLOW_TOPICS 有值
+      （知识型流程主题，AI 可预起草草稿供坐席确认）；
+    - "high"：其余——**显式人工（裸「人工」正则/转人工/人工客服/真人客服/找人工/经理）、
+      投诉、情绪词一律 high：用户明确意图不可改道（L2 硬约束，宁可漏改不可错改）**。
+
+    词表单一真源 = rag_service（function-level import：rag_service 模块级反向依赖本
+    模块做 extract_topic，顶层 import 会成环）；情绪语境排除与 classify_intent 同口径
+    （_EMOTION_EXCLUDE 残句复扫）。本函数只做判别，不改道决策（Router/后续任务）。
+    """
+    from app.services.rag_service import (
+        _EMOTION_EXCLUDE,
+        _RE_ARTIFICIAL,
+        EMOTIONAL_KEYWORDS,
+        HANDOFF_KEYWORDS,
+    )
+
+    q = query or ""
+    if _RE_ARTIFICIAL.search(q) or any(k in q for k in HANDOFF_KEYWORDS):
+        # HANDOFF_KEYWORDS 含转人工/人工客服等显式请求 + 投诉/经理——全部高风险
+        return "high"
+    if any(k in _EMOTION_EXCLUDE.sub("", q) for k in EMOTIONAL_KEYWORDS):
+        return "high"
+    if (conv_state or {}).get("topic") in {name for name, _keys in FLOW_TOPICS}:
+        return "low"
+    return "high"
+
+
 def build_handoff_summary(
     history: list[dict] | None,
     conv_state: dict | None = None,

@@ -167,6 +167,14 @@ export interface TicketItem {
   created_at: string;
   updated_at: string;
   version: number; // S2 乐观锁版本号：流转时回传，服务端原子比较防并发覆盖
+  // 移交摘要（build_handoff_summary 产物的 JSON 文本；一期 T3 遗留补发）
+  summary?: string | null;
+  // AI 预起草（架构二期 1）：low risk handoff 建单后后台草拟的回复；draft_kind "ai"=AI 预起草
+  draft_suggestion?: string | null;
+  draft_kind?: string | null;
+  // 逐状态流转时间戳（一期 4 补发；closed 无独立列，用 updated_at）
+  processing_at?: string | null;
+  resolved_at?: string | null;
 }
 export interface TicketListResp {
   items: TicketItem[];
