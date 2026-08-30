@@ -131,10 +131,18 @@ def ensure_collection() -> int:
         return _locked()
 
 
-def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[list[float]]) -> int:
+def upsert_document(
+    doc_id: UUID,
+    kb_id: UUID,
+    texts: list[str],
+    vectors: list[list[float]],
+    visible: bool = True,
+) -> int:
     """把文档全部切片写入 Qdrant，返回写入条数。
 
-    payload 含 chunk_id/doc_id/kb_id/tenant_id/idx/text，检索与来源溯源（BU-07）依赖它。
+    payload 含 chunk_id/doc_id/kb_id/tenant_id/idx/text/visible，检索与来源溯源（BU-07）依赖它。
+    visible（门禁 v2 G1）：False = staged 未发布（检索过滤不可见），发布=翻转 payload；
+    默认 True——smoke/单文档直传/评测路径零改动豁免。
     """
     if len(texts) != len(vectors):
         raise VectorStoreError(
@@ -164,6 +172,7 @@ def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[l
                     "tenant_id": settings.TENANT_DEFAULT,
                     "idx": idx,
                     "text": texts[idx],
+                    "visible": visible,
                 },
             }
             for idx in range(len(texts))
@@ -180,6 +189,7 @@ def upsert_document(doc_id: UUID, kb_id: UUID, texts: list[str], vectors: list[l
                     "tenant_id": settings.TENANT_DEFAULT,
                     "idx": idx,
                     "text": texts[idx],
+                    "visible": visible,
                 },
             }
             for idx in range(len(texts))

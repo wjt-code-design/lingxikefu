@@ -99,6 +99,10 @@ def search_kb(query: str, kb_id: UUID, top_k: int = 8) -> list[RetrievedChunk]:
             must=[
                 FieldCondition(key="tenant_id", match=MatchValue(value=settings.TENANT_DEFAULT)),
                 FieldCondition(key="kb_id", match=MatchValue(value=str(kb_id))),
+                # 门禁 v2 G1：staged 未发布（visible=False）的 chunk 对检索不可见；
+                # 发布 = set_payload 翻转（瞬时/幂等/不重嵌入）。存量 point 由
+                # scripts/backfill_visible.py 回填（部署顺序：回填先行，见其 docstring）。
+                FieldCondition(key="visible", match=MatchValue(value=True)),
             ]
         )
         name = get_collection_name()

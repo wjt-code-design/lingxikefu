@@ -98,7 +98,10 @@ def test_search_kb_filter_tenant_and_kb(patch):
 
     flt = patch["qd"].search_calls[0]["query_filter"]
     keys = {c.key for c in flt.must}
-    assert keys == {"tenant_id", "kb_id"}
+    # G1 门禁 v2：visible=True 加入 must（staged 未发布 chunk 对检索不可见）
+    assert keys == {"tenant_id", "kb_id", "visible"}
+    visible_cond = next(c for c in flt.must if c.key == "visible")
+    assert visible_cond.match.value is True
     # kb_id 匹配值必须是我们传的那个
     kb_cond = next(c for c in flt.must if c.key == "kb_id")
     assert kb_cond.match.value == str(kb_id)
