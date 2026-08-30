@@ -84,9 +84,15 @@ class IntentShadowBucket(BaseModel):
 
 
 class IntentShadowStats(BaseModel):
-    """ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。"""
+    """ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。
+
+    H4 观测（架构数据积累期）：min_total/remaining 供"距切换决策门槛还差多少样本"
+    一屏可读——门槛值 INTENT_SHADOW_MIN_TOTAL（config），remaining<=0 即样本量达标。
+    """
 
     total: int
     agree: int
     agree_rate: float
     by_intent: dict[str, IntentShadowBucket] = {}
+    min_total: int = 0
+    remaining: int = 0

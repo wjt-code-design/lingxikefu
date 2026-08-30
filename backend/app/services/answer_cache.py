@@ -77,13 +77,25 @@ def _entities_ok(query: str, cached_question: str) -> bool:
 _POLARITY_TERMS = (
     "不", "不能", "无法", "不可", "不支持", "不提供", "非", "超过", "以外", "之后",
 )
+#: 同义否定 → 规范类（H3 债清偿）："无法/不可/不可以"与"不能"同极性，不归一则
+#: 跨家族句子集合永不相等 → 高频否定问句缓存命中率结构性为 0。
+_POLARITY_CANON = {"无法": "不能", "不可": "不能", "不可以": "不能"}
+
+
+def _polarity_classes(text: str) -> frozenset:
+    """命中词 → 规范类 → 极大类归并：被同侧其他类包含的短类不计。
+
+    归并是必须的：裸"不"⊂"不能"，含"不能"的句子原始集合恒多出"不"，
+    与任何不含裸"不"字面的否定家族（如"无法"）永不等。同极性合并不产生
+    新的错误命中（只会回收良性 miss），保持词表"只增不减"不变量。
+    """
+    classes = [_POLARITY_CANON.get(t, t) for t in _POLARITY_TERMS if t in text]
+    return frozenset(c for c in classes if not any(o != c and c in o for o in classes))
 
 
 def _polarity_conflict(query: str, cached_question: str) -> bool:
-    """极性防护：query 与缓存问句的极性词集合不一致 → 否定/条件翻转，不可命中。"""
-    a = {t for t in _POLARITY_TERMS if t in query}
-    b = {t for t in _POLARITY_TERMS if t in cached_question}
-    return a != b
+    """极性防护：query 与缓存问句的极性类集合不一致 → 否定/条件翻转，不可命中。"""
+    return _polarity_classes(query) != _polarity_classes(cached_question)
 
 
 def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | None:

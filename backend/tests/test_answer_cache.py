@@ -267,3 +267,18 @@ def test_semantic_hit_blocked_on_polarity_conflict(monkeypatch):
     # 对照：极性一致的改写问句照常语义命中（防护只拦翻转，不伤正常问答）
     hit = get("商品可以退货吗", "v1", kb_id="kb-a")
     assert hit is not None and hit["answer"] == "7 天内可退"
+
+
+def test_polarity_synonym_families_hit():
+    """H3 债清偿：同义否定家族（无法/不可 vs 不能）归一规范类后应互相命中——
+    修前裸"不"⊂"不能"致类集合永不等，高频否定问句缓存命中率结构性为 0。"""
+    from app.services.answer_cache import _polarity_conflict
+
+    assert not _polarity_conflict("无法退货吗", "为什么不能退货")   # 跨家族归一命中
+    assert not _polarity_conflict("可不可以退", "能不能退")          # 归一并极大类后命中
+    # 既有断言不翻转：真翻转仍拦
+    assert _polarity_conflict("商品能退货吗", "商品不能退货吗")
+    # 极大类归并：同侧"不"被"不能"包含不计，两侧类集合相等
+    assert not _polarity_conflict("不能退货", "确实不能退")
+    # 条件词（超过/之外）与否定词不同类，仍拦
+    assert _polarity_conflict("超过7天能退吗", "不能退货")

@@ -96,6 +96,9 @@ class Settings(BaseSettings):
     # 采样率 [0,1]：对规则判为 qa 的用户消息按此概率打 LLM 影子分类（结果只落
     # Message.meta["intent_shadow"]，不驱动路由）；0 = 关闭影子（不产生 LLM 成本）。
     INTENT_SHADOW_SAMPLE: float = 0.2
+    #: 意图影子切换决策的最小样本量（H4 观测）：stats.remaining<=0 即样本量达标，
+    #: 是否切换仍需结合 agree_rate 与人工评审，本字段只做进度观测。
+    INTENT_SHADOW_MIN_TOTAL: int = 500
 
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"

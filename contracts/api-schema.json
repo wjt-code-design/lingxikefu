@@ -3591,6 +3591,16 @@
             "type": "object",
             "title": "By Intent",
             "default": {}
+          },
+          "min_total": {
+            "type": "integer",
+            "title": "Min Total",
+            "default": 0
+          },
+          "remaining": {
+            "type": "integer",
+            "title": "Remaining",
+            "default": 0
           }
         },
         "type": "object",
@@ -3600,7 +3610,7 @@
           "agree_rate"
         ],
         "title": "IntentShadowStats",
-        "description": "ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。"
+        "description": "ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。\n\nH4 观测（架构数据积累期）：min_total/remaining 供\"距切换决策门槛还差多少样本\"\n一屏可读——门槛值 INTENT_SHADOW_MIN_TOTAL（config），remaining<=0 即样本量达标。"
       },
       "KBItem": {
         "properties": {

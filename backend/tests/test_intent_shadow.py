@@ -556,7 +556,11 @@ def test_stats_empty_returns_zeroes(stats_client):
     r = tc.get(f"{API}/admin/intent-shadow/stats", headers=_h(ADMIN_ID, "admin"))
     assert r.status_code == 200
     data = r.json()
-    assert data == {"total": 0, "agree": 0, "agree_rate": 0.0, "by_intent": {}}
+    # H4：min_total/remaining 门槛进度字段（additive，config 默认 500）
+    assert data == {
+        "total": 0, "agree": 0, "agree_rate": 0.0, "by_intent": {},
+        "min_total": 500, "remaining": 500,
+    }
 
 
 def test_stats_groups_by_rule_intent_verbatim(stats_client):

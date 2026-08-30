@@ -333,11 +333,14 @@ def get_intent_shadow_stats(
             total=t, agree=a, agree_rate=round(a / t, 4) if t else 0.0
         )
 
+    min_total = settings.INTENT_SHADOW_MIN_TOTAL
     return IntentShadowStats(
         total=total,
         agree=agree,
         agree_rate=round(agree / total, 4) if total else 0.0,
         by_intent={k: _bucket(v) for k, v in buckets.items()},
+        min_total=min_total,
+        remaining=max(0, min_total - total),
     )
 
 

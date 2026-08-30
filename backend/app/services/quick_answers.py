@@ -120,6 +120,9 @@ _REDIS_COVERED_KEY = "quick:covered_kb_version"
 #: 多一条/少一条 warning，无正确性影响。
 _REDIS_WARNED = False
 
+#: Redis 锚点缺失但模块态兜底的 info 已记一次（H4 观测：静默放行窗口可感知）。
+_FALLBACK_NOTED = False
+
 
 #: 已对哪个漂移版本警告过（chat 禁用路径日志一次性：同版本重复请求不刷屏）。
 _WARNED_STALE_VERSION: str | None = None
@@ -143,7 +146,7 @@ def _redis_set_covered(kb_version: str) -> None:
 
 def _covered_version() -> str | None:
     """最近通过覆盖检查的 kb_version：Redis 优先（跨进程），缺失/不可用回退模块级。"""
-    global _REDIS_WARNED
+    global _REDIS_WARNED, _FALLBACK_NOTED
     try:
         value = get_redis().get(_REDIS_COVERED_KEY)
     except Exception:  # noqa: BLE001 - fail-open
@@ -154,6 +157,15 @@ def _covered_version() -> str | None:
     _REDIS_WARNED = False  # 恢复可达：重置一次性警告
     if value:
         return value
+    # H4 观测（债清偿）：Redis 可达但锚点缺失（新实例/被清空）且模块态有值 →
+    # 门控靠本进程遗留状态兜底，多进程下其他进程无此状态=静默放行窗口。info 一次。
+    if _COVERED_KB_VERSION and not _FALLBACK_NOTED:
+        _FALLBACK_NOTED = True
+        logger.info(
+            "quick covered 锚点在 Redis 缺失，进程内模块级状态 %s 暂作兜底"
+            "（多进程部署下仅本进程有此状态；下次导入通过覆盖检查即恢复跨进程锚点）",
+            _COVERED_KB_VERSION,
+        )
     return _COVERED_KB_VERSION  # key 不存在（新实例/被清空）→ 模块级兜底
 
 
