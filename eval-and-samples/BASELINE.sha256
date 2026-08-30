@@ -14,7 +14,10 @@
 #   复算留档见 results/baseline-longcat-20260828-attribution.md §五）
 # 2026-08-28 Q069 回改拒答类（二期修订，详见 ground-truth.md 修订说明）；判定脚本不变
 
-43934ccf2026d2d7fbc75713b8367553c720ca3ef8ea18b842f4898546f22e68 *backend/scripts/eval_faithfulness.py
+9b381e948fb1bf94495c695c9b89778e892f7b42439f8f3ffd6a317f15a9fb4a *backend/scripts/eval_faithfulness.py
 7034bf8433f4b323b1acb60c95944f617f4db3c1597b3de24b3a3de2b595a17f *评测问题库.md
 b1aad5fe4c493978c45e35eb3ba40299f6359a980128ef55cb2318e109730923 *ground-truth.md
 135e00f9f54272aae992d199408690d01d8bf3d34e1ade632814f5e892a898c2 *口语化评测集.md
+
+# 2026-08-30 判定脚本 hash 同步（G2 授权变更）：run_faithfulness_eval 加可选 sample/kb_id 参数
+#   （KB 发布门禁 v2 的快检触发链），CLI argparse/main 本体零改动；评测集三行不变。
