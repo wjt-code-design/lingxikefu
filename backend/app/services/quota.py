@@ -73,11 +73,17 @@ class QuotaService:
     def daily_limit(self) -> int:
         """每日配额上限：app_settings KV 覆盖优先（60s 进程内 TTL 缓存），回退 settings。
 
-        - 缓存命中（含「无覆盖」负缓存）未过期直接返回，不开 DB 连接；
-        - 过期则锁内单飞读库回填（防并发击穿造成重复查询）；
+        - **双检**（H2 债清偿）：锁外无锁读快照（GIL 下单字段读原子；三字段撕裂
+          最坏=多进一次锁，无正确性影响）——命中零锁零等待，DB 停摆时不堵热路径；
+        - miss 进锁 double-check（等锁期间他人可能已回填）再读库发布（单飞防击穿）；
         - KV 读失败（DB 不可达）回退 settings 常量而非拒绝服务（fail-open 方向），
           失败结果同样按 TTL 负缓存，避免对故障 DB 每请求重试（恢复延迟 ≤ TTL）。
         """
+        if (
+            self._limit_loaded
+            and time.monotonic() - self._limit_cached_at < _LIMIT_TTL_SECONDS
+        ):
+            return self._limit_value if self._limit_value is not None else settings.DAILY_QUOTA_LIMIT
         with self._limit_lock:
             if self._limit_loaded and time.monotonic() - self._limit_cached_at < _LIMIT_TTL_SECONDS:
                 return self._limit_value if self._limit_value is not None else settings.DAILY_QUOTA_LIMIT

@@ -19,6 +19,10 @@ engine = create_engine(
     pool_pre_ping=True,
     pool_size=10,
     max_overflow=20,
+    # H2（架构遗留债清偿）：连接阶段超时上界。psycopg3 走 libpq conninfo 参数；
+    # 若无此界，DB 停摆时 connect 阻塞无上界，quota 等锁内 DB 读会把共享锁
+    # 串行堵死全部 chat 热路径。照 main.py 健康检查引擎先例（connect_timeout=2）。
+    connect_args={"connect_timeout": 5},
 )
 
 SessionLocal = sessionmaker(

@@ -119,3 +119,33 @@ def test_put_quota_invalid_value_422(client, bad):
     r = client.put(f"{API}/admin/settings/quota", json={"daily_quota_limit": bad}, headers=_h(ADMIN, "admin"))
     assert r.status_code == 422
     assert get_quota_service().daily_limit() == settings.DAILY_QUOTA_LIMIT
+
+
+def test_daily_limit_fast_path_returns_without_lock(kv_sessionmaker):
+    """H2 双检：缓存命中时走锁外快照——即使锁被他人持有也不阻塞（DB 停摆不堵热路径）。"""
+    import threading
+    import time
+
+    from app.core.config import settings as app_settings
+    from app.services.quota import get_quota_service
+
+    svc = get_quota_service()
+    svc.session_factory = kv_sessionmaker
+    svc.daily_limit()  # 预填缓存（锁内正常路径）
+
+    assert svc._limit_lock.acquire(timeout=2), "测试前置：占锁失败"
+    try:
+        result: dict = {}
+
+        def _call():
+            result["v"] = svc.daily_limit()
+
+        th = threading.Thread(target=_call)
+        th.start()
+        th.join(timeout=3)
+        assert not th.is_alive(), "缓存命中却阻塞在他人持锁上——锁外快照失效"
+        assert result["v"] == app_settings.DAILY_QUOTA_LIMIT
+    finally:
+        svc._limit_lock.release()
+    # 防并发串扰：等待后台线程彻底退出再继续
+    time.sleep(0.05)
