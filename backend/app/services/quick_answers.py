@@ -2,9 +2,11 @@
 
 无论前端点快捷按钮还是输入框手动输入相同问句，只要命中本表，后端直接返回预置答案，
 秒回、零思考、不检索。kb_version 失效面（架构审核债 5-2）：知识导入成功后跑覆盖检查
-（check_kb_coverage），通过则记录通过版本（_COVERED_KB_VERSION）；chat 端短路前用
-is_enabled_for(kb_version) 校验——KB 已变更而新版本未通过覆盖检查时禁用 quick 回落 RAG，
-防"KB 更新后话术陈旧无人知晓"。从未跑过覆盖检查的环境恒放行（向后兼容，行为同旧版）。
+（check_kb_coverage），通过则记录通过版本——Redis 锚点（quick:covered_kb_version，跨进程：
+Celery worker 写、API/chat 进程读，架构三期 2）+ 模块级 _COVERED_KB_VERSION 兜底；
+chat 端短路前用 is_enabled_for(kb_version) 校验——KB 已变更而新版本未通过覆盖检查时禁用
+quick 回落 RAG，防"KB 更新后话术陈旧无人知晓"。从未跑过覆盖检查的环境恒放行（向后兼容，
+行为同旧版）。Redis 不可用时回退模块级状态（行为同旧版），不依赖 Redis 存活。
 
 - 与 KB/后端真实回答对齐；若改知识库相关章节，需同步更新此处答案。
 - 匹配用归一化句（TFKC + 去标点/空白），手打"一模一样"或近似标点差异均可命中。
@@ -14,6 +16,8 @@ from __future__ import annotations
 import logging
 import re
 import unicodedata
+
+from app.core.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -102,10 +106,55 @@ _COVERAGE_PASS_RATIO: float = 0.5
 #: 最近一次覆盖检查通过的 kb_version（模块级状态；None = 从未通过/从未检查）。
 #: 由 knowledge_import_service 导入成功后调用 check_kb_coverage 写入；
 #: chat.py quick 短路前经 is_enabled_for 比对消费。
+#: 架构三期 2：模块级是进程内状态（Celery worker 写、API/chat 进程读不到 → 主部署下
+#: 门控无操作），故 Redis 锚点为主、此处降级为"Redis 不可用时的本进程兜底"。
 _COVERED_KB_VERSION: str | None = None
+
+#: covered 版本的 Redis 锚点 key（架构三期 2）。无 TTL——版本指纹单调递进
+#: （就绪文档数:最新文档 created_at，见 chat._kb_version_str），每次覆盖检查通过即覆盖写，
+#: 旧值天然被替代，无需过期淘汰。
+_REDIS_COVERED_KEY = "quick:covered_kb_version"
+
+#: Redis 不可用只警告一次（沿用 _WARNED_STALE_VERSION 的一次性去重模式，不随请求刷屏）；
+#: 任一操作成功即重置——恢复后的再次故障会重新警告，避免长期静默。竞态最坏后果是
+#: 多一条/少一条 warning，无正确性影响。
+_REDIS_WARNED = False
+
 
 #: 已对哪个漂移版本警告过（chat 禁用路径日志一次性：同版本重复请求不刷屏）。
 _WARNED_STALE_VERSION: str | None = None
+
+
+def _redis_set_covered(kb_version: str) -> None:
+    """covered 版本写 Redis（跨进程锚点，Celery worker 写、API/chat 进程读）。
+
+    fail-open（沿用 answer_cache 精确层先例）：失败仅警告一次，模块级状态已兜底，
+    不阻塞导入。
+    """
+    global _REDIS_WARNED
+    try:
+        get_redis().set(_REDIS_COVERED_KEY, kb_version)
+        _REDIS_WARNED = False
+    except Exception:  # noqa: BLE001 - fail-open
+        if not _REDIS_WARNED:
+            _REDIS_WARNED = True
+            logger.warning("covered 版本写 Redis 失败（跨进程门控暂不可用，退回模块级状态）", exc_info=True)
+
+
+def _covered_version() -> str | None:
+    """最近通过覆盖检查的 kb_version：Redis 优先（跨进程），缺失/不可用回退模块级。"""
+    global _REDIS_WARNED
+    try:
+        value = get_redis().get(_REDIS_COVERED_KEY)
+    except Exception:  # noqa: BLE001 - fail-open
+        if not _REDIS_WARNED:
+            _REDIS_WARNED = True
+            logger.warning("covered 版本读 Redis 失败（回退模块级状态，仅本进程门控生效）", exc_info=True)
+        return _COVERED_KB_VERSION
+    _REDIS_WARNED = False  # 恢复可达：重置一次性警告
+    if value:
+        return value
+    return _COVERED_KB_VERSION  # key 不存在（新实例/被清空）→ 模块级兜底
 
 
 def check_kb_coverage(kb_text: str, kb_version: str | None = None) -> bool:
@@ -114,28 +163,36 @@ def check_kb_coverage(kb_text: str, kb_version: str | None = None) -> bool:
     通过判据：有 KB 依据的话术占比 ≥ _COVERAGE_PASS_RATIO（即 uncovered_questions
     结果不过半）。通过且调用方
     补传 kb_version（knowledge_import_service 导入成功后按 chat._kb_version_str
-    同式计算）时记录 _COVERED_KB_VERSION，作为 quick 短路的放行锚点；
-    未通过不记录 → 新版本在 chat 端被 is_enabled_for 判为禁用。
-    kb_version 为 None（无法锚定版本）时只返回判定结果、不记录状态。
+    同式计算）时记录通过版本——双写：模块级（本进程兜底）+ Redis 锚点（跨进程生效，
+    架构三期 2），作为 quick 短路的放行依据；未通过不记录 → 新版本在 chat 端被
+    is_enabled_for 判为禁用。kb_version 为 None（无法锚定版本）时只返回判定结果、
+    不记录状态。
     """
     uncovered = uncovered_questions(kb_text)
     passed = (len(_QA) - len(uncovered)) / len(_QA) >= _COVERAGE_PASS_RATIO
     if passed and kb_version is not None:
         global _COVERED_KB_VERSION
-        _COVERED_KB_VERSION = kb_version
+        _COVERED_KB_VERSION = kb_version  # 模块级始终记录（Redis 不可用时本进程仍生效）
+        _redis_set_covered(kb_version)
     return passed
 
 
 def is_enabled_for(kb_version: str | None) -> bool:
     """quick 预置话术对当前 kb_version 是否放行（chat.py 短路前校验）。
 
-    - 从未通过覆盖检查（_COVERED_KB_VERSION 为 None）→ True：现有环境无导入动作时
-      行为与旧版完全一致（向后兼容）；
-    - 当前 kb_version 为 None（无版本可比）→ True：无版本环境向后兼容；
+    通过版本的读序：Redis（跨进程，Celery worker 导入后写入）→ 模块级回退
+    （Redis 不可用/key 缺失时的本进程兜底）→ 两者皆无 → 恒 True。
+
+    - 从未通过覆盖检查 → True：现有环境无导入动作时行为与旧版完全一致（向后兼容）；
+    - 当前 kb_version 为 None（无版本可比）→ True：无版本环境向后兼容，且不触碰
+      Redis（chat 热路径零额外开销）；
     - 与最近通过版本一致 → True；KB 已变更而新版本未通过 → False（回落 RAG），
       并对该漂移版本 warning 一次（不随请求刷屏）。
     """
-    if _COVERED_KB_VERSION is None or kb_version is None or kb_version == _COVERED_KB_VERSION:
+    if kb_version is None:
+        return True
+    covered = _covered_version()
+    if covered is None or kb_version == covered:
         return True
     global _WARNED_STALE_VERSION
     if kb_version != _WARNED_STALE_VERSION:
@@ -143,6 +200,6 @@ def is_enabled_for(kb_version: str | None) -> bool:
         logger.warning(
             "快捷话术对当前 KB 版本 %s 未通过覆盖检查（最近通过版本: %s），命中问题回落 RAG",
             kb_version,
-            _COVERED_KB_VERSION,
+            covered,
         )
     return False

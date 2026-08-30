@@ -57,6 +57,7 @@ _REDIS_PATCH_TARGETS = (
     "app.services.quota.get_redis",
     "app.services.user_profile_service.get_redis",  # 2026-08-22 Phase B：画像幂等键查重
     "app.services.ticket_auto_scheduler.get_redis",  # 2026-08-22 工单扫描锁（互斥测试用 fakeredis）
+    "app.services.quick_answers.get_redis",  # 架构三期 2：covered 版本锚点（chat quick 路径读 / 导入钩子写）
 )
 
 
