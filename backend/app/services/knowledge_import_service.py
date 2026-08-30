@@ -68,11 +68,15 @@ class ImportError_(Exception):
     """文档导入失败（错误信息会写入 Document.error 并标 failed）。"""
 
 
-def import_document(doc_id: UUID, db: Session, visible: bool = True):
+def import_document(
+    doc_id: UUID, db: Session, visible: bool = True, batch_tag: str | None = None
+):
     """导入单个文档，返回更新后的 Document。任一步失败标 failed 并回滚已写数据。
 
     visible（门禁 v2 G1）：False = staged 未发布（检索过滤不可见，发布=翻转 payload）；
     默认 True——smoke_import/单文档直传/评测路径零改动豁免，G2 的 batch 流程显式传 False。
+    batch_tag（门禁 v2 G2）：staged 批次标记（=batch_id），写入 Qdrant payload，
+    发布/回滚按它（或 doc_id 集合）一次 filter 翻转；直通路径恒 None。
     """
     doc_repo = DocumentRepository(db)
     chunk_repo = ChunkRepository(db)
@@ -114,7 +118,9 @@ def import_document(doc_id: UUID, db: Session, visible: bool = True):
 
         # 写 Qdrant（失败 → 回滚清 PG chunks + 标 failed）
         try:
-            vector_service.upsert_document(doc.id, doc.kb_id, chunks, vectors, visible=visible)
+            vector_service.upsert_document(
+                doc.id, doc.kb_id, chunks, vectors, visible=visible, batch_tag=batch_tag
+            )
         except VectorStoreError as e:
             chunk_repo.delete_by_doc(doc.id)
             raise ImportError_(str(e)) from e

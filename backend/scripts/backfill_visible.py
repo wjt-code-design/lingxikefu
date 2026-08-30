@@ -17,7 +17,7 @@ import argparse
 import sys
 
 from app.services.vector_service import ensure_collection, get_collection_name, get_qdrant_client
-from qdrant_client.http.models import FieldCondition, Filter, MatchValue, PointIdsList
+from qdrant_client.http.models import Filter, IsNullCondition, PointIdsList
 
 
 def _scroll_all_points(client, collection: str, page_size: int = 256):
@@ -27,7 +27,9 @@ def _scroll_all_points(client, collection: str, page_size: int = 256):
             collection_name=collection,
             limit=page_size,
             offset=offset,
-            with_payload=False,
+            # 门禁 v2 G2：必须读 visible 字段才能区分"存量缺失"与"staged=False"，
+            # 否则会把暂存批次误翻成已发布（此前 with_payload=False 恒视为缺失）
+            with_payload=["visible"],
             with_vectors=False,
         )
         if not points:
@@ -53,8 +55,10 @@ def main() -> int:
     for point in _scroll_all_points(client, collection, args.page_size):
         total += 1
         payload = point.payload or {}
-        if payload.get("visible") is True:
-            continue  # 幂等：已回填跳过
+        # 门禁 v2 G2：visible=False 是批次暂存（staged）的合法状态——只回填"缺字段"的
+        # 存量 point，不得翻转 staged（否则重跑本脚本会静默发布未过门禁的批次）。
+        if payload.get("visible") is not None:
+            continue  # 幂等：已显式标注（True 或 staged=False）跳过
         batch_ids.append(str(point.id))
         if len(batch_ids) >= args.page_size:
             client.set_payload(
@@ -74,15 +78,15 @@ def main() -> int:
         patched += len(batch_ids)
     print(f"[BACKFILL] 完成：total={total} patched={patched}（其余本已 visible）")
 
-    # --- 对账：visible=true 计数必须 == 全部 point 计数，不一致 exit 1 ---
+    # --- 对账：缺 visible 字段的 point 必须为 0（G2 起 staged=False 合法，不再要求全 true）---
     all_count = client.count(collection_name=collection, exact=True).count
-    visible_exact = client.count(
+    missing = client.count(
         collection_name=collection,
-        count_filter=Filter(must=[FieldCondition(key="visible", match=MatchValue(value=True))]),
+        count_filter=Filter(must=[IsNullCondition(is_null={"key": "visible"})]),
         exact=True,
     ).count
-    print(f"[VERIFY] visible=true {visible_exact} / total {all_count}")
-    if visible_exact != all_count:
+    print(f"[VERIFY] total {all_count}，缺 visible 字段 {missing}")
+    if missing:
         print("[VERIFY][FAIL] 对账不一致——存在未回填 point，排查后重跑本脚本")
         return 1
     print("[VERIFY][PASS] 对账一致")

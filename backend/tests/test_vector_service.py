@@ -72,6 +72,9 @@ class _FakeQdrant:
         self.delete_calls: list[tuple[str, object]] = []
         self.fail_upsert: Exception | None = None
         self.fail_delete: Exception | None = None
+        # 门禁 v2 G2：set_payload 翻转（发布/回滚）
+        self.set_payload_calls: list[tuple[str, dict, object]] = []
+        self.fail_set_payload: Exception | None = None
 
     def get_collections(self):
         return SimpleNamespace(collections=[SimpleNamespace(name=n) for n in self.collections])
@@ -101,6 +104,12 @@ class _FakeQdrant:
         if self.fail_delete:
             raise self.fail_delete
         self.delete_calls.append((collection_name, points_selector))
+
+    def set_payload(self, collection_name: str, payload: dict, points: object) -> object:
+        if self.fail_set_payload:
+            raise self.fail_set_payload
+        self.set_payload_calls.append((collection_name, payload, points))
+        return SimpleNamespace(status="completed")
 
 
 @pytest.fixture(autouse=True)
@@ -259,3 +268,88 @@ class TestEnsureDimensionGuard:
         )
         with pytest.raises(VectorStoreError, match="维度"):
             vector_service.ensure_collection()
+
+
+class TestSetVisibleByDocIds:
+    """门禁 v2 G2：发布/回滚翻转——一次 filter set_payload（不逐 point 重写）。"""
+
+    def test_publish_flip_filters_by_batch_tag_and_clears_it(self, fake_qdrant, monkeypatch):
+        """发布（visible=True）：按 batch_tag 一次翻转全部批次 points，同时清空 batch_tag
+        （不变式：payload.batch_tag 非空 ⇔ staged 未发布）。"""
+        monkeypatch.setattr(settings, "RAG_ENABLE_HYBRID", False)
+        fake = fake_qdrant()
+        fake.collections = [settings.QDRANT_COLLECTION]
+
+        vector_service.set_visible_by_doc_ids(
+            [uuid4(), uuid4()], True, batch_tag="b-abc"
+        )
+
+        assert len(fake.set_payload_calls) == 1
+        coll, payload, selector = fake.set_payload_calls[0]
+        assert coll == settings.QDRANT_COLLECTION
+        assert payload == {"visible": True, "batch_tag": None}
+        from qdrant_client.http.models import FilterSelector
+
+        assert isinstance(selector, FilterSelector)
+        must = selector.filter.must
+        assert len(must) == 1 and must[0].key == "batch_tag"
+        assert must[0].match.value == "b-abc"
+
+    def test_rollback_flip_filters_by_doc_ids_and_restores_tag(self, fake_qdrant, monkeypatch):
+        """回滚（visible=False）：batch_tag 已被发布清空 → 按 doc_id ∈ doc_ids 精确翻转，
+        并重写 batch_tag 恢复 staged 标记（re-publish 可再次按 batch_tag 翻转）。"""
+        monkeypatch.setattr(settings, "RAG_ENABLE_HYBRID", False)
+        fake = fake_qdrant()
+        fake.collections = [settings.QDRANT_COLLECTION]
+        d1, d2 = uuid4(), uuid4()
+
+        vector_service.set_visible_by_doc_ids([d1, d2], False, batch_tag="b-abc")
+
+        _, payload, selector = fake.set_payload_calls[0]
+        assert payload == {"visible": False, "batch_tag": "b-abc"}
+        must = selector.filter.must
+        assert len(must) == 1 and must[0].key == "doc_id"
+        assert sorted(must[0].match.any) == sorted([str(d1), str(d2)])
+
+    def test_publish_without_batch_tag_raises(self, fake_qdrant):
+        """发布翻转必须提供 batch_tag（否则 filter 无从命中，宁抛不误翻全库）。"""
+        fake_qdrant()
+        with pytest.raises(ValueError, match="batch_tag"):
+            vector_service.set_visible_by_doc_ids([uuid4()], True)
+
+    def test_collection_missing_is_noop(self, fake_qdrant):
+        fake = fake_qdrant()  # collections 为空
+        vector_service.set_visible_by_doc_ids([uuid4()], True, batch_tag="b-1")
+        assert fake.set_payload_calls == []
+
+    def test_error_wrapped(self, fake_qdrant, monkeypatch):
+        monkeypatch.setattr(settings, "RAG_ENABLE_HYBRID", False)
+        fake = fake_qdrant()
+        fake.collections = [settings.QDRANT_COLLECTION]
+        fake.fail_set_payload = RuntimeError("qdrant down")
+        with pytest.raises(VectorStoreError, match="翻转 visible"):
+            vector_service.set_visible_by_doc_ids([uuid4()], True, batch_tag="b-1")
+
+
+class TestUpsertBatchTag:
+    """upsert payload 顺带 batch_tag（staged 期 = batch_id，直通路径 = None）。"""
+
+    def test_batch_tag_written_to_payload(self, fake_qdrant, monkeypatch):
+        monkeypatch.setattr(settings, "RAG_ENABLE_HYBRID", False)
+        fake = fake_qdrant()
+        fake.collections = [settings.QDRANT_COLLECTION]
+        vector_service.upsert_document(
+            uuid4(), uuid4(), ["a"], [[0.1] * 768], visible=False, batch_tag="b-9"
+        )
+        _, points = fake.upsert_calls[0]
+        assert all(p["payload"]["batch_tag"] == "b-9" for p in points)
+        assert all(p["payload"]["visible"] is False for p in points)
+
+    def test_default_batch_tag_none(self, fake_qdrant, monkeypatch):
+        monkeypatch.setattr(settings, "RAG_ENABLE_HYBRID", False)
+        fake = fake_qdrant()
+        fake.collections = [settings.QDRANT_COLLECTION]
+        vector_service.upsert_document(uuid4(), uuid4(), ["a"], [[0.1] * 768])
+        _, points = fake.upsert_calls[0]
+        assert points[0]["payload"]["batch_tag"] is None
+        assert points[0]["payload"]["visible"] is True

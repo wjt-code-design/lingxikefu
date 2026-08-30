@@ -288,3 +288,83 @@ def test_run_faithfulness_success_appends_results(monkeypatch):
     # 不传 results 时行为不变（run_faithfulness_eval 复用入口不依赖收集）
     stats2, fails2, *_ = asyncio.run(ef._run_faithfulness(None, "kb", questions, gt))
     assert stats2["qa"] == [2, 2]
+
+
+def _all_stats(n: int) -> dict:
+    """_run_faithfulness 返回形态：全部 kind 键齐备（run_faithfulness_eval 汇总按 kind 取）。"""
+    return {k: [n, n] for k in ("qa", "refuse", "refuse_qa", "handoff", "chitchat")}
+
+
+# ---------- run_faithfulness_eval 复用入口的 sample/kb_id 参数（门禁 v2 G2 快检） ----------
+
+
+def test_run_faithfulness_eval_sample_and_kb_id(monkeypatch):
+    """G2 快检复用入口：sample 确定性均匀抽样（同 CLI --sample 公式）+ kb_id 精确绑定。
+
+    - sample=20 → 恰 20 题入核心循环（100 题步长 5）；
+    - kb_id 提供时直接按 id 取 KB，不走 _resolve_kb 同名解析（批次发布精确绑定）；
+    - 不传（既有 eval.py 触发链）→ 全量 + 名称解析，行为零变化。
+    """
+    import asyncio
+    from types import SimpleNamespace
+
+    from scripts import eval_faithfulness as ef
+
+    questions = [{"qid": f"Q{i:03d}", "intent": "qa"} for i in range(100)]
+    monkeypatch.setattr(ef, "parse_questions", lambda: questions)
+    monkeypatch.setattr(ef, "parse_ground_truth", lambda: {})
+
+    captured: dict = {}
+
+    async def fake_core(db, kb_id, qs, gt, results=None):
+        captured["n"] = len(qs)
+        captured["kb_id"] = kb_id
+        return _all_stats(len(qs)), [], 0, 0
+
+    monkeypatch.setattr(ef, "_run_faithfulness", fake_core)
+
+    def _boom(db, kb_name):
+        raise AssertionError("kb_id 提供时不得走 _resolve_kb")
+
+    monkeypatch.setattr(ef, "_resolve_kb", _boom)
+
+    class _DB:
+        def get(self, model, ident):
+            return SimpleNamespace(id=ident)
+
+    asyncio.run(ef.run_faithfulness_eval(_DB(), kb_id="kb-1", sample=20))
+    assert captured["n"] == 20, "sample=20 必须抽 20 题"
+    assert captured["kb_id"] == "kb-1"
+
+    # 默认参数：全量 + 名称解析（既有调用零变化）
+    monkeypatch.setattr(ef, "_resolve_kb", lambda db, kb_name: SimpleNamespace(id="kb-x"))
+    asyncio.run(ef.run_faithfulness_eval(_DB(), kb_name="星河"))
+    assert captured["n"] == 100
+    assert captured["kb_id"] == "kb-x"
+
+
+def test_run_faithfulness_eval_sample_larger_than_pool(monkeypatch):
+    """sample 大于题库：step=max(1,..) 保护，返回全部题（不越界不重复）。"""
+    import asyncio
+    from types import SimpleNamespace
+
+    from scripts import eval_faithfulness as ef
+
+    questions = [{"qid": f"Q{i}", "intent": "qa"} for i in range(7)]
+    monkeypatch.setattr(ef, "parse_questions", lambda: questions)
+    monkeypatch.setattr(ef, "parse_ground_truth", lambda: {})
+    captured: dict = {}
+
+    async def fake_core(db, kb_id, qs, gt, results=None):
+        captured["n"] = len(qs)
+        return _all_stats(len(qs)), [], 0, 0
+
+    monkeypatch.setattr(ef, "_run_faithfulness", fake_core)
+    monkeypatch.setattr(ef, "_resolve_kb", lambda db, kb_name: SimpleNamespace(id="kb"))
+
+    class _DB:
+        def get(self, model, ident):
+            return SimpleNamespace(id=ident)
+
+    asyncio.run(ef.run_faithfulness_eval(_DB(), kb_id="kb", sample=20))
+    assert captured["n"] == 7

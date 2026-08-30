@@ -887,6 +887,7 @@
           "knowledge"
         ],
         "summary": "Upload Document",
+        "description": "上传文档（BU-04）。batch_id（门禁 v2 G2，可选）：不带＝现状直通\n（import_document 默认 visible=True，零变化）；带＝文档 staged 导入\n（visible=False + batch_tag）并记入发布批次（首个上传隐式建行，pending）。",
         "operationId": "upload_document_api_v1_knowledge_bases__kb_id__documents_post",
         "security": [
           {
@@ -903,6 +904,25 @@
               "format": "uuid",
               "title": "Kb Id"
             }
+          },
+          {
+            "name": "batch_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 64
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "发布批次 id（可选；带则走 staged 暂存通道）",
+              "title": "Batch Id"
+            },
+            "description": "发布批次 id（可选；带则走 staged 暂存通道）"
           }
         ],
         "requestBody": {
@@ -1769,6 +1789,129 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/kb/batches/{batch_id}/publish": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Publish Batch",
+        "description": "发布批次：校验就绪 → evaluating → 后台快检（sample=20）→ 自动发布/拦截。\n\n快检真实耗时 ~20min（LLM 逐题），故立即 202 返回；完成侧经通知中心 + 批次列表\n可查。并发/重复语义：evaluating / released 再 publish → 409。",
+        "operationId": "publish_batch_api_v1_admin_kb_batches__batch_id__publish_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchActionResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/kb/batches/{batch_id}/rollback": {
+      "post": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Rollback Batch",
+        "description": "回滚已发布批次：visible 翻转回 staged（检索即刻不可见）→ rolled_back。",
+        "operationId": "rollback_batch_api_v1_admin_kb_batches__batch_id__rollback_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "batch_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Batch Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchActionResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/admin/kb/batches": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "List Batches",
+        "description": "批次列表：全部批次含 status / 文档数 / 评测摘要（按锚点 run_id 聚合）。",
+        "operationId": "list_batches_api_v1_admin_kb_batches_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchListResp"
                 }
               }
             }
@@ -2849,6 +2992,228 @@
           "refresh_token"
         ],
         "title": "AuthResp"
+      },
+      "BatchActionResp": {
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "evaluating",
+              "released",
+              "failed",
+              "rolled_back"
+            ],
+            "title": "Status"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_id",
+          "status"
+        ],
+        "title": "BatchActionResp",
+        "description": "publish（202）/ rollback（200）动作响应。"
+      },
+      "BatchEvalMetric": {
+        "properties": {
+          "metric": {
+            "type": "string",
+            "title": "Metric"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "passed": {
+            "type": "integer",
+            "title": "Passed"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "metric",
+          "score",
+          "total",
+          "passed",
+          "status"
+        ],
+        "title": "BatchEvalMetric"
+      },
+      "BatchEvalSummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "kb_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Version"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          },
+          "metrics": {
+            "items": {
+              "$ref": "#/components/schemas/BatchEvalMetric"
+            },
+            "type": "array",
+            "title": "Metrics",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id"
+        ],
+        "title": "BatchEvalSummary"
+      },
+      "BatchItem": {
+        "properties": {
+          "batch_id": {
+            "type": "string",
+            "title": "Batch Id"
+          },
+          "kb_id": {
+            "type": "string",
+            "title": "Kb Id"
+          },
+          "kb_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Name"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "evaluating",
+              "released",
+              "failed",
+              "rolled_back"
+            ],
+            "title": "Status"
+          },
+          "doc_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Doc Ids",
+            "default": []
+          },
+          "doc_count": {
+            "type": "integer",
+            "title": "Doc Count",
+            "default": 0
+          },
+          "eval_result_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Eval Result Id"
+          },
+          "eval": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BatchEvalSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "batch_id",
+          "kb_id",
+          "status"
+        ],
+        "title": "BatchItem"
+      },
+      "BatchListResp": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/BatchItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "BatchListResp"
       },
       "Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post": {
         "properties": {

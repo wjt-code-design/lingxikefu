@@ -48,6 +48,7 @@ python scripts/check_contracts.py
 - **命名差异（契约已有对应）**：`AdminSettingsResp`↔AdminSettings、`KnowledgeSearchHit`↔KnowledgeHit、`FaqDocItem`↔FaqDoc、`FaqKbItem`↔FaqKBItem、`FaqListResp`↔PublicFaqResp、`UserRole`↔Role
 - **枚举 → TS 内联 union（同名忽略）**：`FeedbackRating`、`SuggestionType`（TS 端以字面量 union 表达，无独立 interface）
 - **未回填（待后续轮次补齐）**：`CreateSessionReq`、`CreateTicketReq`、`SatisfactionReq`、`FrontendErrorReq`、`SessionItem`、`SessionMessage`、`FeedbackItem`、`FeedbackListResp`、`FeedbackResp`、`ModelSettings`、`QuotaSettings`、`RagSettings`、`RateLimitSettings`
+- **门禁 v2 G2 KB 发布流编排（2026-08-30）**：`BatchItem`、`BatchListResp`、`BatchActionResp`、`BatchEvalSummary`、`BatchEvalMetric`（/admin/kb/batches 编排面，前端暂无消费页面，消费时回填）
 - **字段命名偏差（前端 API 适配层映射）**：`SessionItem.session_id`（后端）↔ 契约 `Session.id`（前端 `sessions.ts` 的 `toSession` 负责 session_id→id 映射，避免渗透到组件层）
 
 > 校验脚本只比对「契约有且后端有」的 A 类类型字段；后端新增未列入白名单的模型会 FAIL 提示，保证门禁不被静默绕过。

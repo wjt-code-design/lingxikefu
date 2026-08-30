@@ -15,7 +15,7 @@ import logging
 import threading
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
@@ -34,7 +34,7 @@ from app.schemas.knowledge import (
     KBListResp,
     OkResp,
 )
-from app.services import vector_service
+from app.services import kb_publish_service, vector_service
 from app.services.audit_service import audit_log
 from app.services.document_service import SUPPORTED_EXTENSIONS, UnsupportedFileError, extract_text
 from app.services.knowledge_import_service import ImportError_, import_document
@@ -48,12 +48,12 @@ logger = logging.getLogger(__name__)
 _IMPORT_SEMAPHORE = threading.BoundedSemaphore(4)
 
 
-def _run_background_import(doc_id: str) -> None:
+def _run_background_import(doc_id: str, *, visible: bool = True, batch_tag: str | None = None) -> None:
     """后台线程执行导入（M9：避免阻塞上传请求线程）；独立 DB 会话；信号量限并发。"""
     with _IMPORT_SEMAPHORE:
         bg_db = SessionLocal()
         try:
-            import_document(UUID(doc_id), bg_db)
+            import_document(UUID(doc_id), bg_db, visible=visible, batch_tag=batch_tag)
         except ImportError_:
             logger.warning("后台导入文档 %s 失败（已标 failed）", doc_id)
         except Exception:  # noqa: BLE001
@@ -62,8 +62,12 @@ def _run_background_import(doc_id: str) -> None:
             bg_db.close()
 
 
-def _enqueue_background_import(doc_id: str) -> None:
-    threading.Thread(target=_run_background_import, args=(doc_id,), daemon=True).start()
+def _enqueue_background_import(
+    doc_id: str, *, visible: bool = True, batch_tag: str | None = None
+) -> None:
+    threading.Thread(
+        target=_run_background_import, args=(doc_id,), kwargs={"visible": visible, "batch_tag": batch_tag}, daemon=True
+    ).start()
 
 #: KB 资源路由（/api/v1/knowledge-bases）
 router = APIRouter(prefix="/knowledge-bases", tags=["knowledge"])
@@ -140,12 +144,21 @@ def list_documents(
 def upload_document(
     kb_id: UUID,
     file: UploadFile = File(...),
+    batch_id: str | None = Query(None, max_length=64, description="发布批次 id（可选；带则走 staged 暂存通道）"),
     payload: dict = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> DocItem:
+    """上传文档（BU-04）。batch_id（门禁 v2 G2，可选）：不带＝现状直通
+    （import_document 默认 visible=True，零变化）；带＝文档 staged 导入
+    （visible=False + batch_tag）并记入发布批次（首个上传隐式建行，pending）。"""
     repo = KnowledgeBaseRepository(db)
     if not repo.get(kb_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "knowledge base not found")
+
+    if batch_id is not None:
+        batch_id = batch_id.strip()
+        if not batch_id:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "batch_id 不能为空")
 
     # M6（外部审查 2026-08-22）：分块读取到上限即止——此前先全量 read() 再校验，
     # 传超大文件会先吃满内存才返回 413
@@ -174,10 +187,17 @@ def upload_document(
             f"unsupported file type, allowed: {', '.join(sorted(SUPPORTED_EXTENSIONS))}",
         )
 
-    # sha256 同 KB 去重（幂等：重复上传返回已有文档，不重新导入）
+    # sha256 同 KB 去重（幂等：重复上传返回已有文档，不重新导入）。
+    # 批次通道例外：命中说明该内容已存在（可能已发布可见），不能悄悄挂进 staged 批次
+    # （重导入会开"旧内容瞬间消失"窗口），显式 400 让管理员先删后传。
     sha256 = hashlib.sha256(content).hexdigest()
     existing = DocumentRepository(db).get_by_sha256(kb_id, sha256)
     if existing is not None:
+        if batch_id is not None:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                f"文档 {existing.name} 已存在（sha256 去重）；如需纳入批次请先删除后重新上传",
+            )
         return _doc_item(existing)
 
     # 解析文本（不支持类型 / 扫描件 PDF 直接 400，不落库）
@@ -194,14 +214,27 @@ def upload_document(
         raw_text=raw_text,
     )
 
-    # 调度导入：优先 Celery 异步；broker 不可达 → 后台线程异步执行（M9：不阻塞请求）
+    if batch_id is not None:
+        # 门禁 v2 G2：批次登记（隐式建行/追加 doc_ids）。跨 KB 冲突/唯一索引竞争 → 400。
+        try:
+            kb_publish_service.upsert_batch_membership(db, kb_id, batch_id, doc.id)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+
+    # 调度导入：优先 Celery 异步；broker 不可达 → 后台线程异步执行（M9：不阻塞请求）。
+    # 批次通道传 staged 参数（visible=False + batch_tag），直通路径不带（零变化）。
     try:
         from app.workers.import_worker import import_document_task
 
-        import_document_task.delay(str(doc.id))
+        if batch_id is not None:
+            import_document_task.delay(str(doc.id), visible=False, batch_tag=batch_id)
+        else:
+            import_document_task.delay(str(doc.id))
     except Exception as e:  # noqa: BLE001 - broker 不可达（kombu 连接失败等）
         logger.warning("Celery 调度失败，降级后台线程导入（%s）", e)
-        _enqueue_background_import(str(doc.id))
+        _enqueue_background_import(
+            str(doc.id), visible=batch_id is None, batch_tag=batch_id
+        )
 
     db.refresh(doc)
     # Phase4 审计埋点：文档上传成功（resource=document）

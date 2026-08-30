@@ -137,12 +137,15 @@ def upsert_document(
     texts: list[str],
     vectors: list[list[float]],
     visible: bool = True,
+    batch_tag: str | None = None,
 ) -> int:
     """把文档全部切片写入 Qdrant，返回写入条数。
 
     payload 含 chunk_id/doc_id/kb_id/tenant_id/idx/text/visible，检索与来源溯源（BU-07）依赖它。
     visible（门禁 v2 G1）：False = staged 未发布（检索过滤不可见），发布=翻转 payload；
     默认 True——smoke/单文档直传/评测路径零改动豁免。
+    batch_tag（门禁 v2 G2）：staged 批次标记（=batch_id），发布翻转按它一次 filter
+    set_payload（不变式：batch_tag 非空 ⇔ visible=False staged 期）；直通路径恒 None。
     """
     if len(texts) != len(vectors):
         raise VectorStoreError(
@@ -173,6 +176,7 @@ def upsert_document(
                     "idx": idx,
                     "text": texts[idx],
                     "visible": visible,
+                    "batch_tag": batch_tag,
                 },
             }
             for idx in range(len(texts))
@@ -190,6 +194,7 @@ def upsert_document(
                     "idx": idx,
                     "text": texts[idx],
                     "visible": visible,
+                    "batch_tag": batch_tag,
                 },
             }
             for idx in range(len(texts))
@@ -229,3 +234,59 @@ def delete_by_doc_id(doc_id: UUID) -> None:
             )
     except Exception as e:  # noqa: BLE001
         raise VectorStoreError(f"Qdrant 删除文档向量失败: {e}") from e
+
+
+def set_visible_by_doc_ids(
+    doc_ids: list[UUID] | list[str], visible: bool, batch_tag: str | None = None
+) -> None:
+    """批量翻转文档全部 points 的 visible payload（门禁 v2 G2 发布/回滚，不重嵌入）。
+
+    - 发布（visible=True）：按 ``batch_tag`` 一次 filter set_payload 命中整批 points
+      （staged 导入时已写入 batch_tag=batch_id），同时把 batch_tag 清空——
+      不变式：payload.batch_tag 非空 ⇔ staged 未发布；故必须提供 batch_tag，
+      缺失即抛 ValueError（防误翻全库）。
+    - 回滚（visible=False）：batch_tag 已在发布时清空，改按 ``doc_id ∈ doc_ids``
+      （MatchAny，单次调用）精确翻转，并重写 batch_tag 恢复 staged 标记
+      （re-publish 可再次按 batch_tag 翻转；doc 数量级几十，单 filter 可承受）。
+
+    集合不存在 → 静默返回（幂等，同 delete_by_doc_id）；失败抛 VectorStoreError
+    （fail-closed，调用方保持批次状态可重试）。
+    """
+    if visible and not batch_tag:
+        # 参数校验在 try 外：这是调用方契约错误，不得被包装成 VectorStoreError
+        raise ValueError("发布翻转必须提供 batch_tag（按批次 filter 命中，防误翻全库）")
+    name = get_collection_name()
+    try:
+        client = get_qdrant_client()
+        if name not in _list_collections():
+            return
+        from qdrant_client.http.models import (
+            FieldCondition,
+            Filter,
+            FilterSelector,
+            MatchAny,
+            MatchValue,
+        )
+
+        if visible:
+            payload = {"visible": True, "batch_tag": None}
+            selector = FilterSelector(
+                filter=Filter(
+                    must=[FieldCondition(key="batch_tag", match=MatchValue(value=batch_tag))]
+                )
+            )
+        else:
+            payload = {"visible": False, "batch_tag": batch_tag}
+            selector = FilterSelector(
+                filter=Filter(
+                    must=[
+                        FieldCondition(
+                            key="doc_id",
+                            match=MatchAny(any=[str(d) for d in doc_ids]),
+                        )
+                    ]
+                )
+            )
+        client.set_payload(collection_name=name, payload=payload, points=selector)
+    except Exception as e:  # noqa: BLE001
+        raise VectorStoreError(f"Qdrant 翻转 visible 失败: {e}") from e

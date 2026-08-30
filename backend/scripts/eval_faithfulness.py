@@ -415,18 +415,34 @@ async def _run_faithfulness(
 
 
 async def run_faithfulness_eval(
-    db, limit: int = 0, kb_name: str | None = None
+    db,
+    limit: int = 0,
+    kb_name: str | None = None,
+    sample: int = 0,
+    kb_id: uuid.UUID | None = None,
 ) -> list[tuple[str, float, int, int]]:
-    """后台评测中心复用入口：跑 faithfulness 全量，返回指标元组列表。
+    """后台评测中心复用入口：跑 faithfulness，返回指标元组列表。
 
     [(metric, score, total, passed), ...]，score=passed/total，供 EvalResult 落表。
+    sample>0（门禁 v2 G2）：确定性均匀抽样，公式与 CLI ``--sample`` 完全一致
+    （step=max(1, len//sample)，跨位置覆盖各主题），批次发布快检用它控制耗时；
+    kb_id 提供时直接按 id 取 KB、不走 _resolve_kb 同名解析（批次发布按 kb_id
+    精确绑定，防同名库歧义）。两者默认关闭——既有调用（eval.py 触发链）零变化，
+    CLI main 不经本入口，本体零改动。
     """
     questions = parse_questions()
     gt = parse_ground_truth()
     print(f"[INPUT] 问题 {len(questions)} 题 | ground-truth {len(gt)} 题")
     if limit:
         questions = questions[:limit]
-    kb = _resolve_kb(db, kb_name)
+    if sample:
+        step = max(1, len(questions) // sample)
+        questions = questions[::step][:sample]
+        print(f"[SAMPLE] 抽样 {len(questions)}/{len(parse_questions())} 题（step={step}）")
+    if kb_id is not None:
+        kb = db.get(KnowledgeBase, kb_id)
+    else:
+        kb = _resolve_kb(db, kb_name)
     if kb is None:
         print("[ERR] 无任何知识库（先跑 scripts.smoke_import 或 seed_demo_data）")
         return []

@@ -3,6 +3,7 @@ from app.models.app_setting import AppSetting
 from app.models.audit import AuditLog
 from app.models.base import Base
 from app.models.feedback import Feedback, FeedbackRating
+from app.models.kb_publish import KBBatchStatus, KBPublishBatch
 from app.models.knowledge import (
     Chunk,
     ChunkContext,
@@ -29,6 +30,8 @@ __all__ = [
     "MessageRole",
     "MessageSource",
     "KnowledgeBase",
+    "KBBatchStatus",
+    "KBPublishBatch",
     "Document",
     "DocumentStatus",
     "Chunk",

@@ -43,6 +43,9 @@ IGNORE_EXTRA = {
     'SessionMessageSource',
     'EvalResultItem', 'EvalHistoryResp', 'EvalTriggerReq', 'EvalTriggerResp',
     'EvalGateResp',  # 三期 3 发布门禁 v1 观测面（GET /admin/eval/gate）：前端暂无消费页面，消费时回填契约
+    # 门禁 v2 G2 KB 发布流编排（/admin/kb/batches，2026-08-30）：admin 编排面，前端暂无消费页面，
+    # 消费时移出本组并回填契约
+    'BatchItem', 'BatchListResp', 'BatchActionResp', 'BatchEvalSummary', 'BatchEvalMetric',
     # 二期 admin/内部类型（前端暂无消费页面；消费时移出并补 TS 契约）
     'IntentShadowStats', 'IntentShadowBucket', 'QuotaSettingsUpdate',
 }

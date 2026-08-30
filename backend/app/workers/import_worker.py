@@ -17,13 +17,20 @@ logger = logging.getLogger(__name__)
 
 
 @celery_app.task(name="knowledge.import_document", bind=True, max_retries=1, default_retry_delay=5)
-def import_document_task(self, doc_id: str) -> dict:
-    """Celery 任务：导入单个文档。失败重试 1 次（延迟 5s），仍失败则由服务层标 failed。"""
+def import_document_task(
+    self, doc_id: str, visible: bool = True, batch_tag: str | None = None
+) -> dict:
+    """Celery 任务：导入单个文档。失败重试 1 次（延迟 5s），仍失败则由服务层标 failed。
+
+    visible/batch_tag（门禁 v2 G2）：staged 批次通道参数——批次上传传
+    visible=False + batch_tag=batch_id（检索不可见，快检通过后翻转发布）；
+    直通路径不传（默认 True/None），行为零变化。
+    """
     from sqlalchemy.exc import OperationalError
 
     db = SessionLocal()
     try:
-        doc = import_document(UUID(doc_id), db)
+        doc = import_document(UUID(doc_id), db, visible=visible, batch_tag=batch_tag)
         return {"ok": True, "doc_id": doc_id, "status": doc.status.value}
     except ImportError_ as e:
         # 业务性失败（不可重试）：错误已写入 Document.error，返回失败结果
