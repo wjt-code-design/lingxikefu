@@ -156,3 +156,15 @@ graph RAG / 微服务化 / 实时在线学习 / 扩情绪词表（被意图分�
 终态：614 passed / 8 skipped、ruff 零错、0018 迁移对称。
 **评测证据裁剪声明**：本批零评测路径改动（无话术/判定/检索/prompt 变更），以 push CI 抽样 eval + 零改动论证作证，未跑全量——区别于一期 T4（改话术必须全量实测）。
 **已知状态**：预起草现网暂零触发（词表下知识型问句判 qa），改道决策待影子一致率数据。遗留登记 progress.md。
+
+## 执行回执（2026-08-30）：三期已落地（知识闭环 v1）
+
+计划：docs/superpowers/plans/2026-08-30-closedloop-phase03.md（3 任务，逐任务审查全 Approved）。
+
+| 任务 | 交付 | commit |
+|---|---|---|
+| P3-T1 信号聚类升级 | hot_gaps 时间窗（?days=7，0=旧口径）+ feedback_gaps（down 反馈连被踩回答原文聚类）+ FeedbackGap 契约真回填 | e8a32f0 |
+| P3-T2 quick 版本持久化 | covered 版本写 Redis 跨进程生效——Celery 导入路径门控债清偿 | 82dc9f2 |
+| P3-T3 发布门禁 v1 | eval_results.kb_version 绑定（0019，含 eval_results 建表修补——自 P1 起无建表迁移的隐藏债）+ GET /admin/eval/gate 三态 + kb_version 抽单一真源 | 4af9f06 |
+
+终态：638 passed / 8 skipped、ruff 零错、0019 双路径迁移实测。**门禁 v1 边界**：观测与记录（gate 一屏可见），强制阻断与自动回滚留 v2。遗留登记 progress.md。
