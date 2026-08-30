@@ -42,6 +42,15 @@ def test_update_slot_fill_moves_to_resolving():
     assert missing_slots(s) == []
 
 
+def test_update_cjk_adjacent_order_fills_slot():
+    """H1 行为变化回归：贴汉字订单号（修前 \\b 对 CJK 失效漏提取）修后填充槽位 → 主题+槽位齐即 resolving。"""
+    s = update(None, "我的订单SO2026080118退款")
+    assert s["topic"] == "退款"
+    assert s["slots"]["order_no"] == "SO2026080118"
+    assert s["stage"] == STAGE_RESOLVING
+    assert missing_slots(s) == []
+
+
 def test_slot_fill_without_topic_stays_greeting():
     """先给订单号后说主题（倒序）——槽位照存，阶段随主题变化。"""
     s = update(None, "SO2026080118 怎么回事")

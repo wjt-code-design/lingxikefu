@@ -1,7 +1,7 @@
 """QueryRewrite 规则层测试（T9-S2）：归一 / 方言 / 语气词 / 指代 / 红线 / 意图保持。"""
 from __future__ import annotations
 
-from app.services.query_rewrite import rewrite
+from app.services.query_rewrite import _ORDER_RE, rewrite
 from app.services.rag_service import classify_intent
 
 
@@ -63,6 +63,29 @@ def test_coreference_resolution_business_order():
     history2 = [{"role": "user", "content": "订单 SO2026080118 显示派送中"}]
     r2, _ = rewrite("它什么时候到", history=history2)
     assert "SO2026080118" in r2, r2
+
+
+def test_order_extraction_cjk_adjacency():
+    """H1 修复：_ORDER_RE 的 \\b 在 Unicode 模式下 CJK 属 \\w → 汉字紧贴订单号时边界不成立，漏提取。
+
+    期望来源=手工复现（修前 3 条 miss）；对照锚（带空格）修前即命中，修后必须保持。
+    负例：长 ASCII 标识符中段不提取（AXOZ1234567 整串本就是订单形、修前即整串命中，
+    lookaround 只放行汉字邻接，故断言=恰好整串命中、不拆出中段）。
+    """
+    assert _ORDER_RE.findall("订单SO2026080118到哪了") == ["SO2026080118"]
+    assert _ORDER_RE.findall("我的订单SO2026080118退款") == ["SO2026080118"]
+    assert _ORDER_RE.findall("XOZ-12345退款了吗") == ["XOZ-12345"]
+    assert _ORDER_RE.findall("订单 XOZ-12345 退款") == ["XOZ-12345"]  # 对照锚
+    assert _ORDER_RE.findall("ABCXOZ-12345DEF") == []  # ASCII 中段不提
+    assert _ORDER_RE.findall("AXOZ1234567") == ["AXOZ1234567"]  # 整串命中，无中段误拆
+
+
+def test_coreference_cjk_adjacent_order():
+    """H1 行为受益：上轮贴汉字订单号（修前漏提取）→ 本轮指代消解可用。"""
+    history = [{"role": "user", "content": "订单SO2026080118到哪了"}]
+    r, meta = rewrite("它什么时候到", history=history)
+    assert "SO2026080118" in r, r
+    assert meta["adopted"]
 
 
 def test_intent_preserved_after_rewrite():
