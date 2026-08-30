@@ -322,3 +322,116 @@ def test_stats_trend_tool_clarify_series(client):
     assert by_date[old_key]["clarify_rounds"] == 0
     assert by_date[mid_key]["tool_dist"] == {}
     assert by_date[mid_key]["clarify_rounds"] == 0
+
+
+def test_stats_hot_gaps_days_window(client):
+    """三期 1：hot_gaps ?days 时间窗——7 天外的 refuse 不计入；days=0 保持旧口径（不限）。
+
+    预期独立手算：
+    - 默认（days=7）：窗外 refuse（8 天前）排除；窗内 refuse（fixture 2 条同义问法 + 今天 1 条）计入；
+    - days=0：SQL 不带时间条件 → 旧口径全量，窗外数据回归（既有数字口径不变）；
+    - 时间窗只作用于 hot_gaps：refuse_count 等其余字段仍为全量（fixture 2 + 新增 2 = 4）。
+    RED 预期：默认调用即含 8 天前的 refuse → "八天前的缺口" in gaps（时间窗缺失）。"""
+    from datetime import UTC, datetime, timedelta
+
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        old = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=8)
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.user, content="八天前的缺口", intent="refuse", created_at=old))
+        db.add(Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.user, content="今天的缺口", intent="refuse"))
+        db.commit()
+    finally:
+        gen.close()
+
+    # 默认 days=7：窗内计入（fixture 今天的 2 条同义问法不受影响），窗外排除；feedback_gaps 空表兜底
+    r = client.get(f"{API}/admin/stats", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    data = r.json()
+    assert data["feedback_gaps"] == []  # 新字段 additive：无数据时空列表（非缺键/None）
+    gaps = {g["question"]: g["count"] for g in data["hot_gaps"]}
+    assert gaps.get("今天的缺口") == 1
+    assert gaps.get("商品详情页在哪？") == 2  # fixture（今天）不受时间窗影响
+    assert "八天前的缺口" not in gaps  # 7 天外不计入
+
+    # days=0：旧口径（不限时间）→ 窗外数据回归，其余不变
+    r0 = client.get(f"{API}/admin/stats?days=0", headers=_h(ADMIN, "admin"))
+    assert r0.status_code == 200
+    gaps0 = {g["question"]: g["count"] for g in r0.json()["hot_gaps"]}
+    assert gaps0.get("八天前的缺口") == 1
+    assert gaps0.get("今天的缺口") == 1
+    assert gaps0.get("商品详情页在哪？") == 2
+
+    # 时间窗仅作用于 hot_gaps 聚类：refuse_count 仍为全量口径（2 fixture + 2 新增）
+    assert data["refuse_count"] == 4
+
+
+def test_stats_feedback_gaps(client):
+    """三期 1：feedback_gaps——down 反馈连消息原文聚类 Top10（归一化归并 + 最近 down 时间）。
+
+    种子（down 反馈 join 被踩消息原文，同 /admin/feedback 的 join 先例）：
+    - "怎么开发票？" ×1 + " 怎么开发票？ " ×1（归一化后同组）→ count=2，展示取较短变体；
+    - "退款政策是什么？" ×1（count=1，组内最近时间=2h 前）；
+    - up 反馈（"只有赞的回答"）不计入；8 天前的 down（"很久前的踩"）窗外排除；
+    - days=0：窗外 down 回归（旧口径全量）。
+    RED 预期：响应无 feedback_gaps 键 → KeyError（功能缺失）。"""
+    from datetime import UTC, datetime, timedelta
+
+    from app.models.feedback import FeedbackRating
+
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        now = datetime.now(UTC).replace(tzinfo=None)
+        old = now - timedelta(days=8)
+        m1 = Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                     role=MessageRole.assistant, content="怎么开发票？")
+        m2 = Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                     role=MessageRole.assistant, content=" 怎么开发票？ ")  # 归一化后与 m1 同组
+        m3 = Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                     role=MessageRole.assistant, content="退款政策是什么？")
+        m_up = Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                       role=MessageRole.assistant, content="只有赞的回答")
+        m_old = Message(id=uuid.uuid4(), session_id=SID, tenant_id="default",
+                        role=MessageRole.assistant, content="很久前的踩")
+        db.add_all([m1, m2, m3, m_up, m_old])
+        db.flush()
+        db.add_all([
+            Feedback(message_id=m1.id, tenant_id="default", user_id=USER,
+                     rating=FeedbackRating.down, created_at=now - timedelta(hours=2)),
+            Feedback(message_id=m2.id, tenant_id="default", user_id=USER,
+                     rating=FeedbackRating.down, created_at=now),  # 组内最近 down 时间
+            Feedback(message_id=m3.id, tenant_id="default", user_id=USER,
+                     rating=FeedbackRating.down, created_at=now - timedelta(hours=1)),
+            Feedback(message_id=m_up.id, tenant_id="default", user_id=USER,
+                     rating=FeedbackRating.up, created_at=now),  # up 不计入
+            Feedback(message_id=m1.id, tenant_id="default", user_id=ADMIN,
+                     rating=FeedbackRating.up, created_at=now),  # 同消息 up 不影响 down 计数
+            Feedback(message_id=m_old.id, tenant_id="default", user_id=USER,
+                     rating=FeedbackRating.down, created_at=old),  # 8 天前 → 窗外
+        ])
+        db.commit()
+    finally:
+        gen.close()
+
+    r = client.get(f"{API}/admin/stats", headers=_h(ADMIN, "admin"))
+    assert r.status_code == 200
+    gaps = r.json()["feedback_gaps"]
+    # 排序：组次数倒序 → "怎么开发票？"（count=2）第一
+    assert gaps[0]["question"] == "怎么开发票？"
+    assert gaps[0]["count"] == 2  # 归一化归并（含空白差异变体）
+    assert " 怎么开发票？ " not in {g["question"] for g in gaps}  # 归并后不重复出现
+    assert gaps[0]["last_at"] == now.isoformat()  # 组内最近一次 down 反馈时间
+    fg = {g["question"]: g["count"] for g in gaps}
+    assert fg.get("退款政策是什么？") == 1
+    assert "只有赞的回答" not in fg  # up 反馈不计入
+    assert "很久前的踩" not in fg  # 7 天外不计入
+
+    # days=0：旧口径（不限时间）→ 窗外 down 回归
+    r0 = client.get(f"{API}/admin/stats?days=0", headers=_h(ADMIN, "admin"))
+    assert r0.status_code == 200
+    fg0 = {g["question"]: g["count"] for g in r0.json()["feedback_gaps"]}
+    assert fg0.get("很久前的踩") == 1
+    assert fg0.get("怎么开发票？") == 2

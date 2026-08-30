@@ -24,6 +24,7 @@ from app.models.ticket import Ticket
 from app.models.user import User, UserRole
 from app.schemas.admin import (
     AdminStats,
+    FeedbackGap,
     HotGap,
     IntentShadowBucket,
     IntentShadowStats,
@@ -118,10 +119,17 @@ def update_user_role(
 
 @router.get("/stats", response_model=AdminStats)
 def get_stats(
+    days: int = Query(7, ge=0, le=365),
     _: dict = Depends(require_admin),
     db: OrmSession = Depends(get_db),
 ) -> AdminStats:
-    """运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。"""
+    """运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。
+
+    三期 1：hot_gaps/feedback_gaps 支持 ``?days`` 信号时间窗（默认 7 天，0=不限——
+    SQL 不带时间条件，输出与旧版逐字段一致）。时间窗**只作用于两个聚类字段**，
+    refuse_count 等其余字段仍为全量口径。feedback_gaps：down 反馈连被踩消息
+    原文聚类 Top10（问题原文/次数/最近 down 时间），与 hot_gaps（refuse 源）互补。
+    """
     tenant = settings.TENANT_DEFAULT
     sessions = db.scalar(select(func.count(Session.id)).where(Session.tenant_id == tenant)) or 0
     messages = db.scalar(select(func.count(Message.id)).where(Message.tenant_id == tenant)) or 0
@@ -151,18 +159,25 @@ def get_stats(
         )
     ).one()
     avg_first_token_ms = round(float(avg_row[0]), 1) if avg_row[0] is not None else 0.0
+    # 三期 1：信号时间窗（默认近 7 天；0=不限 → 不加时间条件，SQL 与旧版完全一致）。
+    # UTC now 对齐 trend 端点先例（get_stats_trend）；created_at 列 timezone=True，
+    # PG 按 timestamptz 比较，SQLite 存储层做一致的字符串渲染（既有 trend 测试锁定）。
+    since = datetime.now(UTC) - timedelta(days=days) if days > 0 else None
     # F1：待补录问题 Top10——仅聚合 refuse 意图的用户消息（QA 检索但无依据被拒答 → KB 未覆盖
     # 的真正补录信号）。handoff（转人工/情绪）是正常分流、非知识缺口：补录知识解决不了"转人工"
     # 诉求，收进来只会污染运维补录清单（此前误把 handoff 一并统计，见修复备注）。
     # SQL 先按原文 GROUP BY 压缩行数（同问句一行，count 由数据库算），Python 仅做跨变体
     # 归一化归并（NFKC/去标点）——传输量从"消息数"降到"不同问句数"。
+    gap_where = [
+        Message.tenant_id == tenant,
+        Message.role == MessageRole.user,
+        Message.intent == "refuse",
+    ]
+    if since is not None:
+        gap_where.append(Message.created_at >= since)
     raw_rows = db.execute(
         select(Message.content, func.count(Message.id))
-        .where(
-            Message.tenant_id == tenant,
-            Message.role == MessageRole.user,
-            Message.intent == "refuse",
-        )
+        .where(*gap_where)
         .group_by(Message.content)
     ).all()
 
@@ -184,6 +199,34 @@ def get_stats(
         # 展示组内出现最多的原始问句；次数平局取较短（更简洁、利于一眼看懂）
         question = max(g["variants"], key=lambda k: (g["variants"][k], -len(k)))
         hot_gaps.append(HotGap(question=question, count=sum(g["variants"].values())))
+
+    # 三期 1：点踩缺口 Top10——down 反馈连被踩消息原文（join 同 /admin/feedback 先例：
+    # Feedback.message_id == Message.id），归一化归并复用 hot_gaps 的 _norm 手法；
+    # count=组内 down 反馈次数，last_at=组内最近一次 down 反馈时间（func.max 继承
+    # 列类型，结果处理器返回 datetime，PG/SQLite 双兼容）。
+    fb_where = [Feedback.tenant_id == tenant, Feedback.rating == FeedbackRating.down]
+    if since is not None:
+        fb_where.append(Feedback.created_at >= since)
+    fb_rows = db.execute(
+        select(Message.content, func.count(Feedback.id), func.max(Feedback.created_at))
+        .join(Feedback, Feedback.message_id == Message.id)
+        .where(*fb_where)
+        .group_by(Message.content)
+    ).all()
+    fb_groups: dict[str, dict] = {}
+    for content, cnt, last in fb_rows:
+        g = fb_groups.setdefault(_norm(content), {"variants": {}, "last": None})
+        g["variants"][content] = int(cnt)
+        if last is not None and (g["last"] is None or last > g["last"]):
+            g["last"] = last
+    feedback_gaps = [
+        FeedbackGap(
+            question=max(g["variants"], key=lambda k: (g["variants"][k], -len(k))),
+            count=sum(g["variants"].values()),
+            last_at=g["last"].isoformat() if g["last"] else "",
+        )
+        for g in sorted(fb_groups.values(), key=lambda x: -sum(x["variants"].values()))[:10]
+    ]
 
     # T1.2：运营观测聚合——工具分布 / 澄清轮数 / 会话主题分布 + 拒答口径。
     # JSON 索引由 SQLAlchemy 按方言编译（PG: ->>，SQLite: json_extract），同 R-3 latency 先例；
@@ -236,6 +279,7 @@ def get_stats(
         feedback_down=feedback_down,
         avg_first_token_ms=avg_first_token_ms,
         hot_gaps=hot_gaps,
+        feedback_gaps=feedback_gaps,
         tool_dist=tool_dist,
         clarify_rounds=clarify_rounds,
         topic_dist=topic_dist,

@@ -1248,8 +1248,27 @@
           "admin"
         ],
         "summary": "Get Stats",
-        "description": "运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。",
+        "description": "运营统计（会话/消息/文档/赞踩计数 + R-3 首字时延均值 + F1 待补录问题 Top10）。\n\n三期 1：hot_gaps/feedback_gaps 支持 ``?days`` 信号时间窗（默认 7 天，0=不限——\nSQL 不带时间条件，输出与旧版逐字段一致）。时间窗**只作用于两个聚类字段**，\nrefuse_count 等其余字段仍为全量口径。feedback_gaps：down 反馈连被踩消息\n原文聚类 Top10（问题原文/次数/最近 down 时间），与 hot_gaps（refuse 源）互补。",
         "operationId": "get_stats_api_v1_admin_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "days",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 365,
+              "minimum": 0,
+              "default": 7,
+              "title": "Days"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1260,13 +1279,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/intent-shadow/stats": {
@@ -2611,6 +2635,14 @@
             "title": "Hot Gaps",
             "default": []
           },
+          "feedback_gaps": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackGap"
+            },
+            "type": "array",
+            "title": "Feedback Gaps",
+            "default": []
+          },
           "tool_dist": {
             "additionalProperties": {
               "type": "integer"
@@ -3255,6 +3287,30 @@
           "items"
         ],
         "title": "FaqListResp"
+      },
+      "FeedbackGap": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "last_at": {
+            "type": "string",
+            "title": "Last At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "count",
+          "last_at"
+        ],
+        "title": "FeedbackGap",
+        "description": "点踩缺口（架构三期 1）：down 反馈连被踩消息原文聚类——高频被踩原文，\n与 hot_gaps（refuse 源）互补的运营补录/优化信号。"
       },
       "FeedbackItem": {
         "properties": {

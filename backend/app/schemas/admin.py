@@ -32,6 +32,15 @@ class HotGap(BaseModel):
     count: int
 
 
+class FeedbackGap(BaseModel):
+    """点踩缺口（架构三期 1）：down 反馈连被踩消息原文聚类——高频被踩原文，
+    与 hot_gaps（refuse 源）互补的运营补录/优化信号。"""
+
+    question: str  # 组内出现最多的消息原文变体（归一化归并后展示）
+    count: int  # 组内 down 反馈总次数
+    last_at: str  # 组内最近一次 down 反馈时间（ISO8601）
+
+
 class AdminStats(BaseModel):
     sessions: int
     messages: int
@@ -40,6 +49,8 @@ class AdminStats(BaseModel):
     feedback_down: int
     avg_first_token_ms: float
     hot_gaps: list[HotGap] = []
+    # 三期 1：点踩源聚类（默认值保证旧调用方兼容；时间窗与 hot_gaps 共用 ?days）
+    feedback_gaps: list[FeedbackGap] = []
     # T1.2 运营观测扩展（默认值保证旧调用方兼容）：
     # 拒答口径：refuse_count 即真拒答轮数（澄清轮 intent 落 'qa' 不计入，勿再减 clarify_rounds）
     tool_dist: dict[str, int] = {}

@@ -327,6 +327,13 @@ export interface HotGap {
   question: string;
   count: number;
 }
+/** 架构三期 1：点踩缺口——down 反馈连被踩消息原文聚类（与 hot_gaps 的 refuse 源互补） */
+export interface FeedbackGap {
+  question: string;
+  count: number;
+  /** 组内最近一次 down 反馈时间（ISO8601） */
+  last_at: string;
+}
 export interface AdminStats {
   sessions: number;
   messages: number;
@@ -335,6 +342,8 @@ export interface AdminStats {
   feedback_down: number;
   avg_first_token_ms: number;
   hot_gaps: HotGap[];
+  /** 三期 1：down 反馈聚类 Top10（被踩消息原文/次数/最近 down 时间）；?days 时间窗与 hot_gaps 共用（默认 7，0=不限） */
+  feedback_gaps?: FeedbackGap[];
   /** T1.2 运营观测：工具回答分布（如 order_query→45），空对象=无数据 */
   tool_dist?: Record<string, number>;
   /** T1.2：澄清轮 assistant 消息数（meta.clarify=true）；独立观测口径，与 refuse_count 无推导关系 */
