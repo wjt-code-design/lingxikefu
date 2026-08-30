@@ -620,3 +620,46 @@ def test_upload_to_evaluating_or_released_batch_rejected(env, monkeypatch):
             headers=_headers(),
         )
         assert r.status_code == 400, f"{s.value} 批次追加应 400: {r.text}"
+
+
+def test_upload_to_evaluating_batch_400_no_zombie_doc(env, monkeypatch):
+    """G2 审查 Important-1：批次登记被拒（evaluating 拒追加）→ 400 且不留 parsing 僵尸文档。"""
+    from app.models.knowledge import Document
+    from app.services.kb_publish_service import KBBatchStatus
+
+    c, Local = env
+    kb_id = c.post(
+        f"{API}/knowledge-bases", json={"name": "僵尸防护库"}, headers=_headers()
+    ).json()["kb_id"]
+    fake_task = _FakeTask()
+    monkeypatch.setattr("app.workers.import_worker.import_document_task", fake_task)
+
+    # 第一篇正常入 pending 批次
+    r1 = c.post(
+        f"{API}/knowledge-bases/{kb_id}/documents?batch_id=b-zom",
+        files={"file": ("第一批.md", "内容一".encode(), "text/markdown")},
+        headers=_headers(),
+    )
+    assert r1.status_code == 201
+
+    # 手工置 evaluating（模拟发布中）
+    with Local() as db:
+        db.query(KBPublishBatch).filter_by(batch_id="b-zom").update(
+            {"status": KBBatchStatus.evaluating}
+        )
+        db.commit()
+
+    # 第二篇上传 → 400
+    r2 = c.post(
+        f"{API}/knowledge-bases/{kb_id}/documents?batch_id=b-zom",
+        files={"file": ("第二批.md", "内容二".encode(), "text/markdown")},
+        headers=_headers(),
+    )
+    assert r2.status_code == 400
+
+    # 无僵尸文档：除第一篇外无新增 Document
+    from uuid import UUID
+
+    with Local() as db:
+        docs = db.query(Document).filter_by(kb_id=UUID(kb_id)).all()
+        assert len(docs) == 1, f"留了 {len(docs)} 篇文档（应为 1）"

@@ -51,6 +51,22 @@ def get_batch(db: Session, batch_id: str) -> KBPublishBatch | None:
     )
 
 
+def ensure_batch_accepts(db: Session, kb_id: UUID, batch_id: str) -> None:
+    """G2 审查 Important-1：批次可接受性预检（无副作用，建文档前调用）。
+
+    校验与 upsert_batch_membership 同语义（跨 KB/evaluating/released 拒绝），
+    但不建行不追加——拒绝发生在 Document 落库**之前**，避免 400 后留下
+    parsing 僵尸文档（挡 sha256 去重、永不导入）。
+    """
+    batch = get_batch(db, batch_id)
+    if batch is None:
+        return  # 不存在 = 隐式创建，必然接受
+    if str(batch.kb_id) != str(kb_id):
+        raise ValueError(f"batch_id {batch_id} 已绑定其他知识库")
+    if batch.status in (KBBatchStatus.evaluating, KBBatchStatus.released):
+        raise ValueError(f"批次 {batch_id} 状态 {batch.status.value}，不接受追加文档")
+
+
 def upsert_batch_membership(db: Session, kb_id: UUID, batch_id: str, doc_id: UUID) -> KBPublishBatch:
     """把文档记入批次；批次不存在则隐式创建（status=pending，doc_ids=[doc_id]）。
 

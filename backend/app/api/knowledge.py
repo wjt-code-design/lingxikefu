@@ -206,6 +206,14 @@ def upload_document(
     except UnsupportedFileError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
 
+    # G2 审查 Important-1：批次可接受性预检前置——拒绝发生在文档落库之前，
+    # 避免 400 后留 parsing 僵尸文档（挡 sha256 去重、永不导入）。
+    if batch_id is not None:
+        try:
+            kb_publish_service.ensure_batch_accepts(db, kb_id, batch_id)
+        except ValueError as e:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+
     doc = DocumentRepository(db).create(
         kb_id=kb_id,
         name=filename,
