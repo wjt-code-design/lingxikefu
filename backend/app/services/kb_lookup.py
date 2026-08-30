@@ -17,7 +17,7 @@ import threading
 import time
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.core.config import settings
@@ -67,3 +67,25 @@ def doc_titles(db: OrmSession, doc_ids: set[uuid.UUID]) -> dict[str, str]:
         return {}
     rows = db.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
     return {str(d.id): d.name for d in rows}
+
+
+def kb_version_str(db: OrmSession, kb_id: uuid.UUID) -> str | None:
+    """KB 版本指纹：就绪文档数 + 最新文档 created_at（T10 缓存失效锚点，文档增删均变化）。
+
+    单一真源（架构三期 3 抽取）：此前 chat.py 与 knowledge_import_service.py 各持一份
+    同式拷贝，评测门禁（EvalResult.kb_version 绑定）为第三消费者——三处共用本函数，
+    防公式漂移导致版本比对错位。
+    防御：SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 再入参。
+    """
+    kb_id = uuid.UUID(str(kb_id))
+    cnt = (
+        db.scalar(
+            select(func.count(Document.id)).where(
+                Document.kb_id == kb_id,
+                Document.status == "indexed",  # DocumentStatus 就绪态（parsing/embedding/indexed/failed）
+            )
+        )
+        or 0
+    )
+    latest = db.scalar(select(func.max(Document.created_at)).where(Document.kb_id == kb_id))
+    return f"{cnt}:{latest.isoformat() if latest else ''}"

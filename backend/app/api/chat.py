@@ -31,7 +31,6 @@ from app.api.deps import get_current_user
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.tracing import set_trace_id
-from app.models.knowledge import Document
 from app.models.message import Message, MessageRole, MessageSource
 from app.models.session import Session
 from app.services import conversation_state, intent_shadow, quick_answers
@@ -42,10 +41,12 @@ from app.services.agents.router import router as agent_router
 from app.services.agents.ticket_agent import TicketAgent
 from app.services.answer_cache import put as cache_put
 
-# 大扫查 O1：KB 定位/标题查询下沉服务层；别名导入保持既有测试 mock 目标
-# （app.api.chat._latest_kb_id 重绑定本命名空间仍生效）。
+# 大扫查 O1：KB 定位/标题/版本指纹查询下沉服务层；别名导入保持既有测试 mock 目标
+# （app.api.chat._latest_kb_id / _kb_version_str 重绑定本命名空间仍生效）。
+# 三期 3：_kb_version_str 收敛为 kb_lookup.kb_version_str 单一真源（导入链/评测门禁同式）。
 from app.services.kb_lookup import doc_titles as _kb_doc_titles_sync
 from app.services.kb_lookup import get_latest_kb_id as _latest_kb_id
+from app.services.kb_lookup import kb_version_str as _kb_version_str
 from app.services.quick_answers import match_quick
 from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
@@ -94,27 +95,6 @@ def _sse(data: dict) -> str:
         logger.warning("SSE 事件名越界: %r（白名单: %s）", ev, sorted(_SSE_EVENTS))
         return _sse({"event": "error", "data": {"code": "SSE_CONTRACT", "message": f"未知 SSE 事件: {ev}"}})
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
-
-
-def _kb_version_str(db: OrmSession, kb_id: uuid.UUID) -> str | None:
-    """KB 版本指纹：就绪文档数 + 最新文档 created_at（T10 缓存失效锚点，文档增删均变化）。
-
-    防御：SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 再入参。
-    """
-    kb_id = uuid.UUID(str(kb_id))
-    from sqlalchemy import func
-
-    cnt = (
-        db.scalar(
-            select(func.count(Document.id)).where(
-                Document.kb_id == kb_id,
-                Document.status == "indexed",  # DocumentStatus 就绪态（parsing/embedding/indexed/failed）
-            )
-        )
-        or 0
-    )
-    latest = db.scalar(select(func.max(Document.created_at)).where(Document.kb_id == kb_id))
-    return f"{cnt}:{latest.isoformat() if latest else ''}"
 
 
 # ---- H2 修复：同步 DB / 阻塞调用统一搬出事件循环（run_in_threadpool） ----

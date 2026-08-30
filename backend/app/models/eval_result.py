@@ -46,6 +46,11 @@ class EvalResult(Base):
     failures: Mapped[str | None] = mapped_column(sa.Text(), nullable=True)
     # 触发来源：manual / ci / scheduled
     source: Mapped[str] = mapped_column(sa.String(16), nullable=False, default="manual")
+    # KB 版本指纹（三期 3 发布门禁 v1：本行指标"评的是哪个版本"）。
+    # 公式单一真源 kb_lookup.kb_version_str（就绪文档数:最新文档 created_at，与 chat 缓存
+    # 失效锚点同式）；触发链在每阶段完成时写入。可空：存量行 / CLI 直跑 / 版本解析失败
+    # （fail-open 不阻塞评测）不绑定，gate 端点按"当前版本未评测"处理（不误报）。
+    kb_version: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         nullable=False,

@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -32,6 +32,7 @@ from app.repositories.document_repo import (
     DocumentRepository,
 )
 from app.services import answer_cache, vector_service
+from app.services.kb_lookup import kb_version_str
 from app.services.vector_service import VectorStoreError
 from app.utils.text_splitter import split_text
 
@@ -130,20 +131,15 @@ def import_document(doc_id: UUID, db: Session):
 
 
 def _evict_stale_cache_after_import(db: Session, kb_id: UUID) -> None:
-    """P2-⑨：导入成功后按新 kb_version 清理旧语义缓存点（fail-open，不阻塞导入）。"""
+    """P2-⑨：导入成功后按新 kb_version 清理旧语义缓存点（fail-open，不阻塞导入）。
+
+    三期 3：版本公式收敛为 kb_lookup.kb_version_str 单一真源（chat/评测门禁同式，
+    此前本函数内联同式拷贝）。fail-open 边界不变：版本计算失败 → version=None →
+    仅驱逐缓存步骤跳过，_check_quick_coverage 照常收到 None（不进入受控状态）。
+    """
     version: str | None = None
     try:
-        cnt = (
-            db.scalar(
-                select(func.count(Document.id)).where(
-                    Document.kb_id == kb_id,
-                    Document.status == "indexed",
-                )
-            )
-            or 0
-        )
-        latest = db.scalar(select(func.max(Document.created_at)).where(Document.kb_id == kb_id))
-        version = f"{cnt}:{latest.isoformat() if latest else ''}"
+        version = kb_version_str(db, kb_id)
         answer_cache.evict_stale_kb(str(kb_id), version)
     except Exception:  # noqa: BLE001 - fail-open：缓存清理失败不影响导入结果
         logger.exception("KB 版本推进缓存清理失败（不阻塞导入）")

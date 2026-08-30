@@ -1707,6 +1707,33 @@
         ]
       }
     },
+    "/api/v1/admin/eval/gate": {
+      "get": {
+        "tags": [
+          "admin"
+        ],
+        "summary": "Eval Gate",
+        "description": "KB 发布门禁 v1（架构三期 3）：当前 KB 版本的评测通过状态一屏可见。\n\n三态语义：\n- passed=True/False：当前 kb_version 已有绑定评测，按 _pass_all 同阈值判（_gate_passed）；\n- passed=None：当前版本从未评测（含\"有历史评测但绑定旧版本\"），不误报。\n\n观测非阻断：不拦截导入、不自动回滚（v2 另批）。无 KB → 全 None（空态不炸）。",
+        "operationId": "eval_gate_api_v1_admin_eval_gate_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EvalGateResp"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/eval/run": {
       "post": {
         "tags": [
@@ -3085,6 +3112,47 @@
           "items"
         ],
         "title": "DocumentListResp"
+      },
+      "EvalGateResp": {
+        "properties": {
+          "kb_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kb Version"
+          },
+          "last_eval": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Eval"
+          },
+          "passed": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Passed"
+          }
+        },
+        "type": "object",
+        "title": "EvalGateResp",
+        "description": "KB 发布门禁 v1 观测面（架构三期 3，GET /admin/eval/gate）。\n\npassed 三态：True/False = 当前 kb_version 已有绑定评测（按 _pass_all 同阈值判）；\nNone = 当前版本从未评测（含\"有历史评测但绑定旧版本\"），不误报。\nlast_eval 结构：{run_id, created_at, metrics: [{metric, score, total, passed, status}]}。"
       },
       "EvalHistoryResp": {
         "properties": {

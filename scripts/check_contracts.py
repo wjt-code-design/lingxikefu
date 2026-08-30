@@ -42,6 +42,7 @@ IGNORE_EXTRA = {
     'FrontendErrorReq', 'SessionItem', 'SessionMessage', 'FeedbackItem', 'FeedbackListResp', 'FeedbackResp',
     'SessionMessageSource',
     'EvalResultItem', 'EvalHistoryResp', 'EvalTriggerReq', 'EvalTriggerResp',
+    'EvalGateResp',  # 三期 3 发布门禁 v1 观测面（GET /admin/eval/gate）：前端暂无消费页面，消费时回填契约
     # 二期 admin/内部类型（前端暂无消费页面；消费时移出并补 TS 契约）
     'IntentShadowStats', 'IntentShadowBucket', 'QuotaSettingsUpdate',
 }

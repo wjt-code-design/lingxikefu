@@ -111,8 +111,8 @@ _COVERAGE_PASS_RATIO: float = 0.5
 _COVERED_KB_VERSION: str | None = None
 
 #: covered 版本的 Redis 锚点 key（架构三期 2）。无 TTL——版本指纹单调递进
-#: （就绪文档数:最新文档 created_at，见 chat._kb_version_str），每次覆盖检查通过即覆盖写，
-#: 旧值天然被替代，无需过期淘汰。
+#: （就绪文档数:最新文档 created_at，单一真源 kb_lookup.kb_version_str），
+#: 每次覆盖检查通过即覆盖写，旧值天然被替代，无需过期淘汰。
 _REDIS_COVERED_KEY = "quick:covered_kb_version"
 
 #: Redis 不可用只警告一次（沿用 _WARNED_STALE_VERSION 的一次性去重模式，不随请求刷屏）；
@@ -162,8 +162,8 @@ def check_kb_coverage(kb_text: str, kb_version: str | None = None) -> bool:
 
     通过判据：有 KB 依据的话术占比 ≥ _COVERAGE_PASS_RATIO（即 uncovered_questions
     结果不过半）。通过且调用方
-    补传 kb_version（knowledge_import_service 导入成功后按 chat._kb_version_str
-    同式计算）时记录通过版本——双写：模块级（本进程兜底）+ Redis 锚点（跨进程生效，
+    补传 kb_version（knowledge_import_service 导入成功后按 kb_lookup.kb_version_str
+    单一真源计算）时记录通过版本——双写：模块级（本进程兜底）+ Redis 锚点（跨进程生效，
     架构三期 2），作为 quick 短路的放行依据；未通过不记录 → 新版本在 chat 端被
     is_enabled_for 判为禁用。kb_version 为 None（无法锚定版本）时只返回判定结果、
     不记录状态。

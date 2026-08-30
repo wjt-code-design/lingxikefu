@@ -33,3 +33,16 @@ class EvalTriggerResp(BaseModel):
     run_id: str
     status: str
     message: str
+
+
+class EvalGateResp(BaseModel):
+    """KB 发布门禁 v1 观测面（架构三期 3，GET /admin/eval/gate）。
+
+    passed 三态：True/False = 当前 kb_version 已有绑定评测（按 _pass_all 同阈值判）；
+    None = 当前版本从未评测（含"有历史评测但绑定旧版本"），不误报。
+    last_eval 结构：{run_id, created_at, metrics: [{metric, score, total, passed, status}]}。
+    """
+
+    kb_version: str | None = None
+    last_eval: dict | None = None
+    passed: bool | None = None
