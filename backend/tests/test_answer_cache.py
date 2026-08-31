@@ -16,6 +16,7 @@ class _FakeQdrant:
         self.collections = {COLLECTION: True}
         self.hits: list[_FakeHit] = []
         self.upserted: list[dict] = []
+        self.fail = False  # m2：模拟 Qdrant 侧失败（集合被外部删除 404 等）
 
     def get_collections(self):
         class C:
@@ -27,9 +28,13 @@ class _FakeQdrant:
         self.collections[COLLECTION] = True
 
     def search(self, **kw):
+        if self.fail:
+            raise RuntimeError("404: collection answer_cache not found")
         return self.hits
 
     def upsert(self, **kw):
+        if self.fail:
+            raise RuntimeError("404: collection answer_cache not found")
         self.upserted.append(kw)
 
 
@@ -311,3 +316,33 @@ def test_polarity_bukeyi_not_dead_entry():
 
     assert "不可以" in _POLARITY_TERMS
     assert not _polarity_conflict("不可以退货吗", "不能退货吗")
+
+
+def test_qdrant_failure_resets_ensured(monkeypatch):
+    """m2（bughunt-concurrency）：Qdrant 失败复位 _ensured——集合被外部删除后自愈重建。
+
+    旧态：_ensured 进程内恒真，ops 误删集合后 get/put 的 Qdrant 404 走 fail-open
+    只打日志 → 缓存命中率归零且重启前无自愈。修复：Qdrant 异常时复位 _ensured，
+    下次 get/put 重新 _ensure_collection 建集合。
+    """
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    qd = _FakeQdrant()
+    qd.fail = True
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: qd)
+    monkeypatch.setattr(answer_cache, "get_redis", _FakeRedis)
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type("E", (), {"dim": 768, "embed": lambda *a: [[0.1] * 768]})())
+    monkeypatch.setattr(answer_cache, "_ensured", True)  # 模拟早已 ensure 过
+
+    assert get("保修多久", "v1") is None  # fail-open 降级
+    assert answer_cache._ensured is False, "Qdrant 失败后应复位 _ensured（下次重建自愈）"
+
+    # 修复后：fail 解除 → 下次 get 重新 ensure 并正常命中
+    monkeypatch.setattr(answer_cache, "_ensured", False)
+    qd.fail = False
+    qd.hits = [_FakeHit({"question": "保修多久", "answer": "12 个月", "sources": [], "kb_version": "v1"})]
+    assert get("保修多久", "v1") is not None
+    assert answer_cache._ensured is True

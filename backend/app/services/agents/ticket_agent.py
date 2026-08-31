@@ -35,6 +35,16 @@ logger = logging.getLogger(__name__)
 _draft_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ticket-draft")
 
 
+def shutdown_draft_pool() -> None:
+    """m1（bughunt-concurrency）：lifespan 关停钩子——不排空（cancel_futures 丢弃
+    排队任务，无界队列不再把解释器拆卸拖到分钟级）。shutdown 后重建空池实例：
+    进程随即退出（重建池无线程活动，atexit 立即过）；测试内多次 lifespan 后
+    模块仍可正常 submit。"""
+    global _draft_pool
+    _draft_pool.shutdown(wait=False, cancel_futures=True)
+    _draft_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ticket-draft")
+
+
 def _schedule_draft(ticket_id: str, question: str, trace_id: str = "") -> None:
     """低风险 handoff 建单后的后台预起草调度（fire-and-forget，不阻塞 SSE）。"""
     _draft_pool.submit(draft_ticket_suggestion, ticket_id, question, trace_id)

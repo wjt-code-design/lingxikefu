@@ -35,30 +35,34 @@ def get_latest_kb_id(db: OrmSession) -> uuid.UUID | None:
 
     P1-②：与全局鉴权一致读 ``settings.TENANT_DEFAULT``，不采信可伪造 ContextVar 租户，
     消除鉴权(default)与 KB 查询(伪造)读写错位。
+
+    m4（bughunt-concurrency）：单飞模式改锁外查——旧实现锁内做 DB 查询，DB 停摆时
+    每个缓存过期窗口一个线程持锁挂 connect_timeout=5s，其余 chat 请求在锁上串行
+    排队（热路径整段冻结）。现锁外查（miss 并发各自查一次，本来 miss 即查）、
+    锁内只做缓存写入（双检防旧值覆盖新缓存）。
     """
     tenant = settings.TENANT_DEFAULT
     global _kb_cache
+    now = time.time()
+    hit = _kb_cache  # 锁外快照：tuple 一次性赋值，GIL 下读引用原子无撕裂
+    if hit and now - hit[0] < _KB_CACHE_TTL:
+        return hit[1]
+    kb = db.scalar(
+        select(KnowledgeBase)
+        .where(KnowledgeBase.tenant_id == tenant)
+        .order_by(KnowledgeBase.created_at.desc())
+        .limit(1)
+    )
+    kb_id = kb.id if kb else None
+    # SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 缓存（生产 PG 本就是 uuid）
+    if kb_id is not None and not isinstance(kb_id, uuid.UUID):
+        kb_id = uuid.UUID(str(kb_id))
     with _kb_lock:
-        now = time.time()
-        hit = _kb_cache
-        if hit and now - hit[0] < _KB_CACHE_TTL:
-            return hit[1]
-        kb = db.scalar(
-            select(KnowledgeBase)
-            .where(KnowledgeBase.tenant_id == tenant)
-            .order_by(KnowledgeBase.created_at.desc())
-            .limit(1)
-        )
-        kb_id = kb.id if kb else None
-        # SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 缓存（生产 PG 本就是 uuid）
-        if kb_id is not None and not isinstance(kb_id, uuid.UUID):
-            kb_id = uuid.UUID(str(kb_id))
-        # 仅在确有 KB 时缓存；无 KB 不缓存 → 新建后立即生效
-        if kb_id is not None:
-            _kb_cache = (now, kb_id)
-        else:
-            _kb_cache = None
-        return kb_id
+        # 双检：等锁期间他人可能已回填新鲜值（不因本次较旧查询覆盖）
+        if not (_kb_cache and time.time() - _kb_cache[0] < _KB_CACHE_TTL):
+            # 仅在确有 KB 时缓存；无 KB 不缓存 → 新建后立即生效
+            _kb_cache = (now, kb_id) if kb_id is not None else None
+    return kb_id
 
 
 def doc_titles(db: OrmSession, doc_ids: set[uuid.UUID]) -> dict[str, str]:

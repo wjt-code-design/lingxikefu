@@ -114,6 +114,18 @@ async def lifespan(_: FastAPI):
         stop_scheduler()
     except Exception:  # noqa: BLE001
         logger.exception("ticket_auto_scheduler: stop failed (non-blocking)")
+    # m1（bughunt-concurrency）：非守护线程池关停不排空——cancel_futures 丢弃排队任务，
+    # 无界队列不再把解释器拆卸拖到分钟级（进行中任务 ≤25s LLM 由拆卸等待兜底）
+    try:
+        from app.services.agents.ticket_agent import shutdown_draft_pool
+        shutdown_draft_pool()
+    except Exception:  # noqa: BLE001
+        logger.exception("ticket draft pool shutdown failed (non-blocking)")
+    try:
+        from app.services.intent_shadow import shutdown_shadow_pool
+        shutdown_shadow_pool()
+    except Exception:  # noqa: BLE001
+        logger.exception("intent shadow pool shutdown failed (non-blocking)")
     # 关闭时取消预热任务（已完成则 cancel/await 均为无害空操作）
     warmup_task.cancel()
     with suppress(asyncio.CancelledError):

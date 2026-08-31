@@ -37,6 +37,15 @@ _ensured = False
 _ensure_lock = threading.Lock()
 
 
+def _reset_ensured() -> None:
+    """m2（bughunt-concurrency）：Qdrant 侧失败（集合被 ops 误删 404 等）→ 复位
+    ensured，下次 get/put 重新 _ensure_collection 建集合自愈——旧态进程内恒真，
+    命中率归零且重启前无自愈。"""
+    global _ensured
+    with _ensure_lock:
+        _ensured = False
+
+
 def _normalize_key(query: str) -> str:
     return hashlib.sha256(query.strip().encode("utf-8")).hexdigest()
 
@@ -135,7 +144,11 @@ def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | 
             search_kwargs["query_filter"] = Filter(
                 must=[FieldCondition(key="kb_id", match=MatchValue(value=str(kb_id)))]
             )
-        hits = get_qdrant_client().search(**search_kwargs)
+        try:
+            hits = get_qdrant_client().search(**search_kwargs)
+        except Exception:
+            _reset_ensured()  # m2：集合被外部删除等 → 复位，下次重建自愈
+            raise
         if not hits or hits[0].score < settings.ANSWER_CACHE_THRESHOLD:
             return None
         p = hits[0].payload or {}
@@ -172,19 +185,23 @@ def put(query: str, answer: str, sources: list[dict], doc_ids: list[str], kb_ver
             "created_at": datetime.now().isoformat(),
         }
         vector = get_embedding_client().embed([BGE_QUERY_PREFIX + query])[0]
-        get_qdrant_client().upsert(
-            collection_name=COLLECTION,
-            points=[
-                {
-                    # M5（外部审查 2026-08-22）：确定性 point id——同一问题+库重复回填时
-                    # upsert 覆盖同一点（天然去重）。此前用 uuid4 随机 id，语义层只增不减、
-                    # 高频问句反复回填导致集合无界膨胀。（kb_id 已隔离，单租户无需再加租户段）
-                    "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{kb_id}:{query}")),
-                    "vector": vector,
-                    "payload": payload,
-                }
-            ],
-        )
+        try:
+            get_qdrant_client().upsert(
+                collection_name=COLLECTION,
+                points=[
+                    {
+                        # M5（外部审查 2026-08-22）：确定性 point id——同一问题+库重复回填时
+                        # upsert 覆盖同一点（天然去重）。此前用 uuid4 随机 id，语义层只增不减、
+                        # 高频问句反复回填导致集合无界膨胀。（kb_id 已隔离，单租户无需再加租户段）
+                        "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"{kb_id}:{query}")),
+                        "vector": vector,
+                        "payload": payload,
+                    }
+                ],
+            )
+        except Exception:
+            _reset_ensured()  # m2：同 get——回填侧失败也复位重建自愈
+            raise
         get_redis().set(
             _EXACT_PREFIX + (f"{kb_id}:" if kb_id else "") + _normalize_key(query),
             json.dumps(payload, ensure_ascii=False),

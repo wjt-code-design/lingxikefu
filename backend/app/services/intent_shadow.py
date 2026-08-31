@@ -162,6 +162,15 @@ def shadow_classify(
 _shadow_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="intent-shadow")
 
 
+def shutdown_shadow_pool() -> None:
+    """m1（bughunt-concurrency）：lifespan 关停钩子——不排空（cancel_futures 丢弃
+    排队任务）。shutdown 后重建空池实例（进程随即退出；测试内多次 lifespan 后
+    模块仍可正常 submit）。"""
+    global _shadow_pool
+    _shadow_pool.shutdown(wait=False, cancel_futures=True)
+    _shadow_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="intent-shadow")
+
+
 def maybe_shadow(
     message_id: str | uuid.UUID,
     query: str,
