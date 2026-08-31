@@ -156,24 +156,31 @@ class QuotaService:
         return max(0, self.daily_limit() - self.used_today(user_id))
 
     def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None) -> tuple[bool, int]:
-        """原子扣减闸门（P1-①）：INCR + expire + set(marker) 并入 MULTI pipeline 原子执行。
+        """原子扣减闸门（P1-①）：幂等抢占 SET NX EX 原子化 + INCR/expire MULTI pipeline。
 
         R2 幂等指纹：marker 绑定 ``sha256(user_id:content)``（``content=None`` 退化为
         ``sha256(user_id:idem_key)`` 兼容旧调用）——跨用户复用 idem_key / 同用户换
         content 均不再共享幂等标记，杜绝裸 marker 免费放行。
 
+        M8（bughunt-concurrency）：幂等标记由「先 GET 后 SET」改为 ``SET NX EX``
+        单命令原子抢占——旧两步法在并发窗口内 N 个同指纹请求都看到 marker 不存在
+        而重复扣费。抢不到 marker = 已有并发请求持锁扣费中，本次幂等命中不重复扣。
+
         返回 (allowed, used)：见模块 docstring。
         Redis / pipeline 不可用时 fail-closed 返回 (False, 0)（不产生半步脏状态）。
         """
+        marker: str | None = None
+        acquired = False
         try:
             r = self.redis
-            marker = None
             if idem_key:
                 material = content if content else idem_key
                 fingerprint = hashlib.sha256(f"{user_id}:{material}".encode()).hexdigest()
                 marker = self._idem_key(fingerprint)
-                if r.get(marker) is not None:
-                    # 幂等命中：同用户同内容此前已扣过费（重试），本次不重复扣
+                # M8：SET NX EX 原子抢占（SET 成功返回 True；key 已存在返回 None）
+                acquired = bool(r.set(marker, "1", ex=_IDEM_TTL_SECONDS, nx=True))
+                if not acquired:
+                    # 幂等命中：同用户同内容此前已扣过费（重试/并发请求），本次不重复扣
                     return True, self.used_today(user_id)
             key = self._key(user_id)
             pipe = r.pipeline()
@@ -182,12 +189,18 @@ class QuotaService:
             used = int(pipe.execute()[0])
             if used > self.daily_limit():
                 r.decr(key, n)  # 超额回滚，避免占用配额
+                if acquired and marker:
+                    r.delete(marker)  # 抢占未成立（超额拒绝）→ 释放标记，重试可重新正常扣费
                 return False, used - n
-            if marker:
-                r.set(marker, "1", ex=_IDEM_TTL_SECONDS)
             return True, used
         except Exception:  # noqa: BLE001 - Redis 不可用：fail-closed 拒绝而非放行
             logger.warning("quota try_consume: redis 不可用，fail-closed 拒绝")
+            if acquired and marker:
+                try:
+                    # 中途异常（incr 失败等）：释放已抢占的标记，避免重试被误判幂等命中而免费放行
+                    self.redis.delete(marker)
+                except Exception:  # noqa: BLE001 - 清理失败仅告警，不改变 fail-closed 返回
+                    logger.warning("quota try_consume: 异常路径清理幂等标记失败", exc_info=True)
             return False, 0
 
     def refund(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None) -> None:

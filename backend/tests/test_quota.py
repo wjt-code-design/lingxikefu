@@ -1,6 +1,10 @@
 """Quota 测试（BU-08）：端点降级 + 服务逻辑（假 Redis 注入）。"""
 from __future__ import annotations
 
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import app.models.user
 import pytest
 from app.core.database import get_db
@@ -73,8 +77,10 @@ class _FakePipeline:
         self._cmds.append(("expire", key, ttl))
         return self
 
-    def set(self, key, value, ex=None):
-        self._cmds.append(("set", key, value, ex))
+    def set(self, key, value, ex=None, nx=False):
+        if nx and self._redis.store and key in self._redis.store:
+            return None
+        self._cmds.append(("set", key, value, ex, nx))
         return self
 
     def delete(self, key):
@@ -90,7 +96,7 @@ class _FakePipeline:
             elif op == "expire":
                 results.append(self._redis.expire(key, cmd[2]))
             elif op == "set":
-                results.append(self._redis.set(key, cmd[2], ex=cmd[3]))
+                results.append(self._redis.set(key, cmd[2], ex=cmd[3], nx=cmd[4]))
             elif op == "delete":
                 results.append(self._redis.delete(key))
         return results
@@ -107,6 +113,9 @@ class _FakeRedis:
         return self.store.get(key)
 
     def incr(self, key, n=1):
+        # M8 红测窗口制造：sleep 释放 GIL，放大旧实现 get(marker)→set(marker)
+        # 的竞态窗口（新实现 marker 抢占为 SET NX 单命令，仅单线程 incr，不受影响）。
+        time.sleep(0.02)
         self.store[key] = int(self.store.get(key, 0)) + n
         return self.store[key]
 
@@ -114,7 +123,11 @@ class _FakeRedis:
         self.store[key] = int(self.store.get(key, 0)) - n
         return self.store[key]
 
-    def set(self, key, value, ex=None):
+    def set(self, key, value, ex=None, nx=False):
+        # nx 语义（M8）：key 已存在时不覆盖并返回 None（falsy）——与 redis-py 一致。
+        # nx 判断与写入在同一同步块（GIL 下无 yield 点 = 原子），模拟 SET NX 单命令语义。
+        if nx and key in self.store:
+            return None
         self.store[key] = value
         return True
 
@@ -206,3 +219,30 @@ def test_quota_refund_noop_when_not_consumed():
     qs = QuotaService(redis_client=_FakeRedis())
     qs.refund("u1", 1, idem_key="never-consumed")
     assert qs.used_today("u1") == 0
+
+
+def test_quota_concurrent_same_idem_single_charge():
+    """M8（bughunt-concurrency Major-8）：marker check-then-set 竞态 —— 并发同指纹请求只扣一次费。
+
+    旧实现 get(marker) 与 set(marker) 两步分离：并发窗口内 N 个请求都看到
+    marker=None → 全部走 incr 扣费（同一 client_msg_id 重试被重复扣）。
+    修复后幂等抢占必须为 SET NX EX 单命令原子语义。
+
+    barrier 对齐 10 线程起跑线 + incr sleep 放大窗口；多轮重复压低假绿概率。
+    断言：最终计数恰为 1（只有抢到 marker 的那个请求真正扣费）。
+    """
+    uid, idem = "u1", "req-race"
+    for rnd in range(3):
+        qs = QuotaService(redis_client=_FakeRedis())
+        barrier = threading.Barrier(10)
+
+        def _fire():
+            barrier.wait(timeout=10)
+            return qs.try_consume(uid, 1, idem_key=idem)
+
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            results = list(pool.map(lambda _: _fire(), range(10)))
+
+        assert all(a for a, _ in results), f"round {rnd}: 存在请求被拒绝 {results}"
+        used = qs.used_today(uid)
+        assert used == 1, f"round {rnd}: 并发同幂等键被扣了 {used} 次（check-then-set 竞态双扣费）"
