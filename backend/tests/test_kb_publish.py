@@ -39,6 +39,83 @@ def _headers(role: str = "admin") -> dict[str, str]:
     return {"Authorization": f"Bearer {create_access_token('u1', role)}"}
 
 
+def test_upsert_membership_no_lost_update(monkeypatch, env):
+    """M2（bughunt-concurrency）：并发上传同批次——行锁重读防陈旧快照覆盖丢 doc_id。
+
+    旧实现读 batch.doc_ids → 内存追加 → commit（读-改-写无锁）：并发上传时
+    A/B 都读到 [d1] → B 提交 [d1,d2]、A 提交 [d1,d3] → d2 从清单丢失 →
+    发布翻转按清单走，d2 永远 staged 检索不可见。修复：追加前
+    refresh(with_for_update) 行锁重读最新清单。
+    """
+    from app.services import kb_publish_service as svc
+
+    c, Local = env
+    d1, d2, d3 = str(uuid4()), str(uuid4()), str(uuid4())
+    kb, batch, _docs = _seed_batch(Local())
+    batch_id = batch.batch_id
+    # 收敛到纯净场景：清单初始仅 d1
+    with Local() as db:
+        row = db.query(KBPublishBatch).filter_by(batch_id=batch_id).first()
+        row.doc_ids = [d1]
+        db.commit()
+
+    real_get = svc.get_batch
+    fired = {"once": False}
+
+    def fake_get(db, bid):
+        got = real_get(db, bid)
+        if got is not None and not fired["once"]:
+            fired["once"] = True
+            # 模拟并发请求 B：A 首查之后追加 d2 并提交（独立会话写库）
+            with Local() as db2:
+                row2 = db2.query(KBPublishBatch).filter_by(batch_id=bid).first()
+                row2.doc_ids = [*row2.doc_ids, d2]
+                db2.commit()
+        return got
+
+    monkeypatch.setattr(svc, "get_batch", fake_get)
+    with Local() as db:
+        svc.upsert_batch_membership(db, kb.id, batch_id, uuid_mod.UUID(d3))
+    with Local() as db:
+        row = db.query(KBPublishBatch).filter_by(batch_id=batch_id).first()
+        got = {str(x) for x in row.doc_ids}
+    assert d2 in got, f"并发请求 B 追加的 d2 被陈旧快照覆盖丢失：{got}"
+    assert d3 in got, f"本次追加的 d3 丢失：{got}"
+
+
+def test_recover_orphan_evaluating_batches(env):
+    """M4（bughunt-concurrency）：启动对账——超时 evaluating 孤儿批次标 failed + admin 通知。
+
+    快检 ~20min 窗口内服务重启/崩溃/兜底失败 → 批次永久卡 evaluating
+    （publish 409、上传 400、列表永远「评测中」）。启动对账把超过阈值的
+    evaluating 批次标 failed 并通知，恢复可重发布。
+    """
+    from datetime import UTC, datetime, timedelta
+
+    import sqlalchemy as sa
+    from app.services.kb_publish_service import recover_orphan_evaluating_batches
+
+    c, Local = env
+    _kb, fresh, _docs = _seed_batch(Local(), status=KBBatchStatus.evaluating)
+    _kb2, orphan, _docs2 = _seed_batch(Local(), status=KBBatchStatus.evaluating)
+    with Local() as db:
+        # 把 orphan 的 updated_at 拨回 2 小时前（绕过 onupdate）；fresh 保持新鲜
+        db.execute(
+            sa.text("UPDATE kb_publish_batches SET updated_at = :t WHERE batch_id = :b"),
+            {"t": datetime.now(UTC) - timedelta(hours=2), "b": orphan.batch_id},
+        )
+        db.commit()
+
+    with Local() as db:
+        n = recover_orphan_evaluating_batches(db, max_age_minutes=40)
+    assert n == 1
+    with Local() as db:
+        assert db.query(KBPublishBatch).filter_by(batch_id=orphan.batch_id).first().status == KBBatchStatus.failed
+        assert db.query(KBPublishBatch).filter_by(batch_id=fresh.batch_id).first().status == KBBatchStatus.evaluating
+        notes = db.query(Notification).filter_by(resource_id=orphan.batch_id).all()
+        assert notes, "孤儿批次恢复未发 admin 通知"
+
+
 @pytest.fixture
 def env(monkeypatch):
     """测试环境：内存库 + get_db 覆盖 + 后台 job 独立会话绑定同一测试引擎。"""

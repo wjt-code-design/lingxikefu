@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
@@ -37,7 +38,9 @@ async def publish_batch(
     快检真实耗时 ~20min（LLM 逐题），故立即 202 返回；完成侧经通知中心 + 批次列表
     可查。并发/重复语义：evaluating / released 再 publish → 409。
     """
-    batch = svc.get_batch(db, batch_id)
+    # m5（bughunt-concurrency）：同步 DB 操作搬出事件循环（H2 纪律同 chat.py；
+    # PG 慢 5s 时 async 端点内直呼会冻结事件循环，chat SSE 全线停顿）
+    batch = await run_in_threadpool(svc.get_batch, db, batch_id)
     if batch is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "batch not found")
     if batch.status in (svc.KBBatchStatus.evaluating, svc.KBBatchStatus.released):
@@ -46,12 +49,12 @@ async def publish_batch(
             f"批次当前状态为 {batch.status.value}，不可重复发布"
             + ("（如需重发请先回滚）" if batch.status == svc.KBBatchStatus.released else ""),
         )
-    ok, err = svc.validate_batch_ready(db, batch)
+    ok, err = await run_in_threadpool(svc.validate_batch_ready, db, batch)
     if not ok:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, err)
     batch.status = svc.KBBatchStatus.evaluating
     batch.eval_result_id = None  # 重发布清旧锚点（新快检完成后回填）
-    db.commit()
+    await run_in_threadpool(db.commit)
     audit_log(
         db,
         actor_id=payload["sub"],

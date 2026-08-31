@@ -105,7 +105,12 @@ def upsert_batch_membership(db: Session, kb_id: UUID, batch_id: str, doc_id: UUI
         )
     doc_str = str(doc_id)
     if doc_str not in [str(d) for d in batch.doc_ids]:
-        batch.doc_ids = [*batch.doc_ids, doc_str]
+        # M2（bughunt-concurrency）：追加前行锁重读最新清单——首查快照可能已过期
+        # （并发上传同批次：A/B 都读到旧清单 → 后提交者覆盖前者 → doc_id 永远
+        # staged 检索不可见）。PG 加行锁；SQLite 降级为重读（测试引擎单连接语义成立）。
+        db.refresh(batch, with_for_update=True)
+        if doc_str not in [str(d) for d in batch.doc_ids]:
+            batch.doc_ids = [*batch.doc_ids, doc_str]
         db.commit()
     return batch
 
@@ -181,7 +186,14 @@ def spawn_quick_check(batch_id: str) -> None:
 
 
 async def _quick_check_job(batch_id: str) -> None:
-    """快检后台作业：独立会话（不依赖请求会话生命周期）→ 评测 → 落表 → 判定 → 翻转。"""
+    """快检后台作业：独立会话（不依赖请求会话生命周期）→ 评测 → 落表 → 判定 → 翻转。
+
+    M3（bughunt-concurrency）：评测前物化所需字段并 commit 结束只读事务——
+    ~20min LLM 评测期间 session 不再持有池连接 / 不留 idle-in-transaction 长事务
+    （pool_size=10 + overflow=20，少数并发发布即可拖垮全站 chat 连接配额）。
+    M4a：异常兜底换新会话——原会话可能已坏（DB 断连 → PendingRollbackError），
+    同会话重查再抛 → 兜底永远失败 → 批次永久卡 evaluating。
+    """
     from app.core.database import SessionLocal
 
     db = SessionLocal()
@@ -195,17 +207,27 @@ async def _quick_check_job(batch_id: str) -> None:
         if kb is None:
             _finish_failed(db, batch, "KB 不存在（已被删除）", None)
             return
+        # M3：物化评测所需字段 → 结束读事务（连接归还池，~20min 评测零占用）
+        kb_name = kb.name
+        kb_id_val = kb.id
+        db.commit()
+        del kb  # 防 ORM 过期属性误用（后续一律用物化值）
+
         run_id = f"{_RUN_PREFIX}-{uuid4().hex[:16]}"
-        rows = await _run_quick_check_stage(db, run_id, kb, batch_id)
+        rows = await _run_quick_check_stage(db, run_id, kb_name, kb_id_val, batch_id)
         anchor = rows[0] if rows else None
         passed = _gate_passed(rows) if rows else False
         if not passed:
             _finish_failed(db, batch, _fail_summary(rows), anchor)
             return
         # PASS → 翻转（失败则批次标 failed 可重试；评测行保留供观测）
+        # m5：同步 Qdrant RPC 搬出事件循环（async 任务内直呼会冻结全服务 SSE）
         try:
-            vector_service.set_visible_by_doc_ids(
-                [UUID(str(d)) for d in batch.doc_ids], True, batch_tag=batch.batch_id
+            await asyncio.to_thread(
+                vector_service.set_visible_by_doc_ids,
+                [UUID(str(d)) for d in batch.doc_ids],
+                True,
+                batch_tag=batch.batch_id,
             )
         except VectorStoreError as e:
             logger.exception("批次 %s 发布翻转失败（评测已 PASS）", batch_id)
@@ -220,42 +242,85 @@ async def _quick_check_job(batch_id: str) -> None:
     except Exception:  # noqa: BLE001 - 后台作业兜底：不静默，批次标 failed 留痕
         logger.exception("批次 %s 快检作业异常", batch_id)
         try:
-            batch = get_batch(db, batch_id)
-            if batch is not None and batch.status == KBBatchStatus.evaluating:
-                _finish_failed(db, batch, "快检作业异常（见服务端日志）", None)
+            # M4a：换新会话兜底（原会话可能已坏，同会话重查会再抛）
+            fresh = SessionLocal()
+            try:
+                b2 = get_batch(fresh, batch_id)
+                if b2 is not None and b2.status == KBBatchStatus.evaluating:
+                    _finish_failed(fresh, b2, "快检作业异常（见服务端日志）", None)
+            finally:
+                fresh.close()
         except Exception:  # noqa: BLE001
             logger.exception("批次 %s 异常兜底失败", batch_id)
     finally:
         db.close()
 
 
+def recover_orphan_evaluating_batches(db: Session, max_age_minutes: int = 40) -> int:
+    """M4（bughunt-concurrency）：启动对账——超时 evaluating 孤儿批次标 failed + 通知。
+
+    快检 ~20min 窗口内服务重启/崩溃/兜底失败 → 批次永久卡 evaluating
+    （publish 409、上传 400、列表永远「评测中」，唯一解法手工改库）。
+    阈值默认 40min ≈ 快检耗时（~20min）的 2 倍。返回恢复批次数。
+    """
+    from datetime import UTC, datetime, timedelta
+
+    cutoff = datetime.now(UTC) - timedelta(minutes=max_age_minutes)
+    rows = (
+        db.query(KBPublishBatch)
+        .filter_by(status=KBBatchStatus.evaluating, tenant_id=_tenant())
+        .all()
+    )
+
+    def _aware(dt: datetime) -> datetime:
+        # SQLite（测试）存 naive UTC；PG timestamptz 读回 aware——统一到 aware 再比较
+        return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+    n = 0
+    for b in rows:
+        if _aware(b.updated_at) >= cutoff:
+            continue
+        b.status = KBBatchStatus.failed
+        db.commit()  # 逐批提交：单批失败不阻塞其余恢复
+        _notify(
+            db,
+            "kb.batch.failed",
+            f"批次 {b.batch_id} 发布中断",
+            "服务重启导致快检中断，批次已标记失败，可重新发布。",
+            b.batch_id,
+        )
+        n += 1
+    return n
+
+
 async def _run_quick_check_stage(
-    db: Session, run_id: str, kb: KnowledgeBase, batch_id: str
+    db: Session, run_id: str, kb_name: str, kb_id: UUID, batch_id: str
 ) -> list[EvalResult]:
     """跑 faithfulness 快检（sample=20 + kb_id 绑定）并落 EvalResult，返回本次运行行。
 
     形态对齐 eval.py._run_stage：异常 → FAILED 占位行（同样绑定 kb_version）；
     kb_version 取"评测时刻"值（发布前文档全部 indexed，版本稳定），fail-open → None。
+    M3：kb 以物化字段（name/id）传入，job 已在评测前结束读事务。
     """
     try:
         from scripts.eval_faithfulness import run_faithfulness_eval
 
         result = await run_faithfulness_eval(
-            db, kb_name=kb.name, sample=QUICK_CHECK_SAMPLE, kb_id=kb.id
+            db, kb_name=kb_name, sample=QUICK_CHECK_SAMPLE, kb_id=kb_id
         )
     except Exception as e:  # noqa: BLE001 - 单阶段失败显式兜底（P3-⑭ 先例）
         logger.exception("批次 %s 快检执行失败（FAILED 留痕）", batch_id)
-        return _persist_eval_rows(db, run_id, [], _eval_version(db, kb), failed_reason=str(e))
+        return _persist_eval_rows(db, run_id, [], _eval_version(db, kb_id), failed_reason=str(e))
 
-    rows = _persist_eval_rows(db, run_id, result, _eval_version(db, kb))
+    rows = _persist_eval_rows(db, run_id, result, _eval_version(db, kb_id))
     logger.info("批次 %s 快检落表 %d 行（run=%s）", batch_id, len(rows), run_id)
     return rows
 
 
-def _eval_version(db: Session, kb: KnowledgeBase) -> str | None:
+def _eval_version(db: Session, kb_id: UUID) -> str | None:
     """评测时刻 KB 版本指纹（fail-open：解析失败 → None，不阻塞判定）。"""
     try:
-        return kb_lookup.kb_version_str(db, kb.id)
+        return kb_lookup.kb_version_str(db, kb_id)
     except Exception:  # noqa: BLE001
         logger.exception("快检 kb_version 解析失败（行不绑定版本）")
         return None

@@ -129,6 +129,13 @@ def draft_ticket_suggestion(
             )
             if not draft.text:
                 return  # fail-open：LLM 空/无知识库 → 草稿留空，不影响建单
+            # m7（bughunt-concurrency）：写前行锁重读校验——同一工单并发双调度都会
+            # 通过上方读检查（LLM 期间窗口），后写覆盖先写浪费且可能盖掉更优首草。
+            # 首草为准语义在写入点收口：已有草稿 → 丢弃本次结果。
+            db.refresh(t, with_for_update=True)
+            if (t.draft_suggestion or "").strip():
+                logger.info("ticket AI 预起草：并发调度已产出首草，丢弃本次结果 ticket=%s", tid)
+                return
             t.draft_suggestion = draft.text
             t.draft_kind = "ai"
             db.commit()

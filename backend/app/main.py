@@ -97,6 +97,7 @@ async def _warmup_embedding() -> None:
 async def lifespan(_: FastAPI):
     """应用生命周期：启动恢复滞留导入 → 预热 embedding（避免首个用户等冷加载）→ 启动工单自动化调度。"""
     _recover_stale_imports()
+    _recover_orphan_batches()
     # M4（外部审查 2026-08-29 核实）：create_task 仅持弱引用，保存引用防 GC 语义争议；
     # 关闭时取消并等待，避免关闭窗口内后台任务与解释器拆卸竞态（预热失败本就不阻断启动）。
     warmup_task = asyncio.create_task(_warmup_embedding())
@@ -150,6 +151,36 @@ def _recover_stale_imports() -> None:
             eng.dispose()
     except Exception:  # noqa: BLE001 - 恢复失败不阻塞启动（懒加载兜底：下一请求仍会失败化）
         logger.warning("启动导入恢复失败（不影响启动）", exc_info=True)
+
+
+def _recover_orphan_batches() -> None:
+    """进程启动：把超时 evaluating 孤儿发布批次标 failed + 通知（bughunt M4）。
+
+    快检 ~20min 窗口内进程重启/崩溃/兜底失败 → 批次永久卡 evaluating
+    （publish 409、上传 400、列表永远「评测中」）。与 _recover_stale_imports
+    同款纪律：独立短超时 engine、测试环境跳过、失败不阻塞启动。
+    """
+    if not settings.RATE_LIMIT_ENABLED:
+        return
+    try:
+        from sqlalchemy import create_engine
+        from sqlalchemy.orm import Session
+
+        from app.services.kb_publish_service import recover_orphan_evaluating_batches
+
+        eng = create_engine(settings.database_url, connect_args={"connect_timeout": 2})
+        try:
+            db = Session(eng)
+            try:
+                n = recover_orphan_evaluating_batches(db)
+                if n:
+                    logger.info("启动恢复：将 %d 个超时 evaluating 批次标记为 failed", n)
+            finally:
+                db.close()
+        finally:
+            eng.dispose()
+    except Exception:  # noqa: BLE001 - 恢复失败不阻塞启动
+        logger.warning("启动批次对账失败（不影响启动）", exc_info=True)
 
 
 app = FastAPI(**_app_kwargs, lifespan=lifespan)
