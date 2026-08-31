@@ -1760,7 +1760,7 @@
           "admin"
         ],
         "summary": "Run Eval",
-        "description": "后台异步触发评测。\n\n评测逻辑复用 scripts/eval_faithfulness.py 和 scripts/eval_recall.py 的函数，\n结果落 EvalResult 表，前端 GET /eval/history 查看。",
+        "description": "后台异步触发评测。\n\n评测逻辑复用 scripts/eval_faithfulness.py 和 scripts/eval_recall.py 的函数，\n结果落 EvalResult 表，前端 GET /eval/history 查看。\n\n并发守护（2026-08-31）：_eval_tasks 非空 → 409 拒绝。此前无检查，前端重复\n点击会叠加跑 N 个全量评测（每跑一次 = faithfulness+recall 两个 stage 共\n200 题次），LLM 限速下互相拖慢且可能触发 402 欠费；历史记录也会堆叠重复条目。\n单进程语义（本服务单实例部署）；任务完成移除引用后自动恢复可触发。",
         "operationId": "run_eval_api_v1_admin_eval_run_post",
         "requestBody": {
           "content": {

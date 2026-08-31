@@ -435,3 +435,53 @@ def test_stats_feedback_gaps(client):
     fg0 = {g["question"]: g["count"] for g in r0.json()["feedback_gaps"]}
     assert fg0.get("很久前的踩") == 1
     assert fg0.get("怎么开发票？") == 2
+
+
+def test_stats_trend_group_key_shared_params(client):
+    """PG 方言盲区回归锁（2026-08-31 线上 500）：
+
+    get_stats_trend 的按日分组表达式若在 SELECT 与 GROUP BY 中各自独立构造，
+    SQLAlchemy 会生成两组命名 bind 参数（substr_2/3 vs substr_4/5）——SQLite
+    按文本匹配表达式照常通过（本地全量绿），但 PG 解析期无法认定二者同源 →
+    GroupingError: column "sessions.created_at" must appear in the GROUP BY
+    clause（管理后台「数据统计」趋势图 500）。
+
+    修复契约：每条查询的 SELECT/GROUP BY 必须复用同一个 _day 表达式实例，
+    编译产物中 substr 的命名参数键恰好一组（2 个）。
+    断言挂在 context.compiled.params（编译期产物，方言无关）而非执行期参数
+    ——SQLite 驱动会把同一 bindparam 按 SQL 文本占位数物理展开，执行期重复
+    属正常，不能作为判据。
+    """
+    from sqlalchemy import event
+
+    substr_key_counts: list[int] = []
+
+    def _recorder(conn, cursor, statement, parameters, context, executemany):
+        compiled = getattr(context, "compiled", None)
+        params = getattr(compiled, "params", None) or {}
+        keys = [k for k in params if str(k).startswith("substr")]
+        if keys:
+            substr_key_counts.append(len(set(keys)))
+
+    # client fixture 的 engine 经 get_db override 可达：借一次会话取 bind 挂事件
+    gen = app.dependency_overrides[get_db]()
+    db = next(gen)
+    try:
+        engine = db.get_bind()
+    finally:
+        gen.close()
+
+    event.listen(engine, "before_cursor_execute", _recorder)
+    try:
+        r = client.get(f"{API}/admin/stats/trend?days=7", headers=_h(ADMIN, "admin"))
+        assert r.status_code == 200
+    finally:
+        event.remove(engine, "before_cursor_execute", _recorder)
+
+    # 防假绿：trend 端点确实执行了按日 substr 聚合查询
+    assert substr_key_counts, "未捕获到任何 substr 聚合查询——测试已失效，请检查端点实现"
+    for n in substr_key_counts:
+        assert n == 2, (
+            f"编译产物中 substr 命名参数键有 {n} 个（应为 2 个一组）——"
+            "SELECT 与 GROUP BY 未复用同一 _day 表达式实例，PG 上将报 GroupingError"
+        )

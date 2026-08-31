@@ -413,46 +413,53 @@ def get_stats_trend(
         """
         return sa.func.substr(sa.cast(col, sa.String), 1, 10)
 
-    # P2-⑧：SQL 聚合（按日分组）替代全量拉取 Python 分桶
+    # P2-⑧：SQL 聚合（按日分组）替代全量拉取 Python 分桶。
+    # PG 方言坑（2026-08-31 线上 500）：select 与 group_by 各自独立调用 _day() 会
+    # 生成两组 bind 参数（substr_2/3 vs substr_4/5），PG 解析期无法认定二者同源 →
+    # GroupingError（SQLite 按文本匹配照常通过，本地全量绿掩盖线上红）。
+    # 故每列的 _day 表达式只构造一次，select/group_by 共用同一实例。
+    day_s = _day(Session.created_at)
     s_rows = db.execute(
-        select(_day(Session.created_at), func.count())
+        select(day_s, func.count())
         .where(Session.tenant_id == tenant, Session.created_at >= since)
-        .group_by(_day(Session.created_at))
+        .group_by(day_s)
     ).all()
+    day_m = _day(Message.created_at)
     m_rows = db.execute(
-        select(_day(Message.created_at), func.count())
+        select(day_m, func.count())
         .where(Message.tenant_id == tenant, Message.created_at >= since)
-        .group_by(_day(Message.created_at))
+        .group_by(day_m)
     ).all()
+    day_t = _day(Ticket.created_at)
     t_rows = db.execute(
-        select(_day(Ticket.created_at), func.count())
+        select(day_t, func.count())
         .where(Ticket.tenant_id == tenant, Ticket.created_at >= since)
-        .group_by(_day(Ticket.created_at))
+        .group_by(day_t)
     ).all()
 
     # T1.3：工具回答按 (日, tool) 分组 + 澄清轮按日分组（口径与 stats 聚合一致：
-    # 仅 assistant、tool 非空串；clarify 为 meta.clarify=True）
+    # 仅 assistant、tool 非空串；clarify 为 meta.clarify=True）。day_m 复用上例实例。
     tool_col = Message.meta["tool"].as_string()
     tool_rows = db.execute(
-        select(_day(Message.created_at), tool_col, func.count())
+        select(day_m, tool_col, func.count())
         .where(
             Message.tenant_id == tenant,
             Message.role == MessageRole.assistant,
             Message.created_at >= since,
             tool_col.isnot(None),
         )
-        .group_by(_day(Message.created_at), tool_col)
+        .group_by(day_m, tool_col)
     ).all()
     clarify_col = Message.meta["clarify"].as_boolean()
     c_rows = db.execute(
-        select(_day(Message.created_at), func.count())
+        select(day_m, func.count())
         .where(
             Message.tenant_id == tenant,
             Message.role == MessageRole.assistant,
             Message.created_at >= since,
             clarify_col.is_(True),
         )
-        .group_by(_day(Message.created_at))
+        .group_by(day_m)
     ).all()
 
     def bucket(rows) -> dict[str, int]:

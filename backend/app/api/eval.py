@@ -14,7 +14,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session as OrmSession
 
@@ -206,7 +206,15 @@ async def run_eval(
 
     评测逻辑复用 scripts/eval_faithfulness.py 和 scripts/eval_recall.py 的函数，
     结果落 EvalResult 表，前端 GET /eval/history 查看。
+
+    并发守护（2026-08-31）：_eval_tasks 非空 → 409 拒绝。此前无检查，前端重复
+    点击会叠加跑 N 个全量评测（每跑一次 = faithfulness+recall 两个 stage 共
+    200 题次），LLM 限速下互相拖慢且可能触发 402 欠费；历史记录也会堆叠重复条目。
+    单进程语义（本服务单实例部署）；任务完成移除引用后自动恢复可触发。
     """
+    if _eval_tasks:
+        raise HTTPException(status_code=409, detail="已有评测任务在跑，请等待完成后再触发")
+
     run_id = f"manual-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:8]}"
 
     # 后台异步执行（不阻塞 HTTP 响应）；P3-⑭：持有引用防 GC 中杀，完成即释放

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Button, Card, Empty, Result, Space, Statistic, Table, Tag, Typography, message } from 'antd';
-import { BarChartOutlined, PlayCircleOutlined, ReloadOutlined } from '@ant-design/icons';
+import { Button, Card, Empty, Result, Space, Statistic, Table, Tag, Tooltip, Typography, message } from 'antd';
+import { BarChartOutlined, PlayCircleOutlined, ReloadOutlined, ThunderboltOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { getEvalHistory, getEvalLatest, runEval } from '@/api/eval';
 import './EvalPage.css';
@@ -56,15 +56,22 @@ export function EvalPage() {
 
   const triggerMutation = useMutation({
     mutationFn: (params: { limit?: number }) => runEval(params),
-    onSuccess: () => {
-      message.success('评测已启动，请稍后刷新');
+    onSuccess: (_, variables) => {
+      message.success(variables.limit ? '抽样评测已启动，请稍后刷新' : '评测已启动，请稍后刷新');
       setTimeout(() => {
         qc.invalidateQueries({ queryKey: ['eval-history'] });
         qc.invalidateQueries({ queryKey: ['eval-latest'] });
       }, 5000);
     },
-    onError: () => {
-      message.error('启动评测失败');
+    onError: (err) => {
+      // 409：后端并发守护（已有评测在跑）——提示等待而非笼统"失败"；
+      // ApiError.code 为字符串状态码（client.ts toApiError 归一化）
+      const apiErr = err as { code?: string; message?: string };
+      if (apiErr?.code === '409') {
+        message.warning(apiErr.message || '已有评测任务在跑，请等待完成后再触发');
+      } else {
+        message.error(apiErr?.message || '启动评测失败');
+      }
     },
   });
 
@@ -162,14 +169,25 @@ export function EvalPage() {
       {/* 操作区 */}
       <div className="eval-actions">
         <Space>
-          <Button
-            type="primary"
-            icon={<PlayCircleOutlined />}
-            loading={triggerMutation.isPending}
-            onClick={() => triggerMutation.mutate({ limit: 0 })}
-          >
-            运行全部评测
-          </Button>
+          <Tooltip title="全量 100 题，faithfulness + recall 双阶段，耗时约 35 分钟起；仅全量结果计入发布门禁">
+            <Button
+              type="primary"
+              icon={<PlayCircleOutlined />}
+              loading={triggerMutation.isPending}
+              onClick={() => triggerMutation.mutate({ limit: 0 })}
+            >
+              运行全部评测
+            </Button>
+          </Tooltip>
+          <Tooltip title="只跑前 20 题快速观察趋势；抽样结果不计入发布门禁（门禁仅认全量）">
+            <Button
+              icon={<ThunderboltOutlined />}
+              loading={triggerMutation.isPending}
+              onClick={() => triggerMutation.mutate({ limit: 20 })}
+            >
+              快速抽样（20 题）
+            </Button>
+          </Tooltip>
           <Button
             icon={<ReloadOutlined />}
             onClick={() => {

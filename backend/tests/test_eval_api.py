@@ -330,3 +330,37 @@ async def test_do_eval_import_failure_writes_failed_record(monkeypatch):
     assert recall_done, (
         f"faithfulness 模块缺失不应阻塞 recall 阶段: {[r.metric for r in written]}"
     )
+
+
+def test_eval_run_rejects_concurrent_trigger(client, monkeypatch):
+    """并发守护：已有评测任务在跑时再次触发 → 409（防重复点击叠加跑）。
+
+    2026-08-31 实测缺陷：run_eval 无并发检查，前端连点 3 次 = 3 个全量评测
+    并发（6 stage ≈ 300 次 LongCat 调用），限速下互相拖慢且可能触发 402 欠费。
+    守护语义：_eval_tasks 非空 → 409；任务完成移除引用后恢复可触发。
+    """
+    from app.api import eval as eval_module
+
+    release = threading.Event()
+
+    async def _fake_do_eval(run_id, limit=0, kb_name=None):
+        await asyncio.to_thread(release.wait, 10)
+
+    monkeypatch.setattr("app.api.eval._do_eval", _fake_do_eval)
+
+    r1 = client.post(f"{API}/admin/eval/run", json={}, headers=_h(ADMIN, "admin"))
+    assert r1.status_code == 200, f"首次触发应成功: HTTP {r1.status_code}"
+
+    # 任务仍在集合中（门控未放行）→ 第二次触发必须被拒
+    r2 = client.post(f"{API}/admin/eval/run", json={}, headers=_h(ADMIN, "admin"))
+    assert r2.status_code == 409, f"并发触发未被拒绝: HTTP {r2.status_code} {r2.text}"
+    # 全局异常处理器把 HTTPException 包装为 {code, message, request_id}（非 FastAPI 裸 detail）
+    assert "评测" in r2.json().get("message", "")
+
+    release.set()
+    # 第一个任务完成、引用移除后 → 恢复可触发（守护不得永久锁死）
+    deadline = time.time() + 8
+    while time.time() < deadline and eval_module._eval_tasks:
+        time.sleep(0.02)
+    r3 = client.post(f"{API}/admin/eval/run", json={}, headers=_h(ADMIN, "admin"))
+    assert r3.status_code == 200, f"任务完成后应恢复可触发: HTTP {r3.status_code}"
