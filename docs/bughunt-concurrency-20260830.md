@@ -1,6 +1,13 @@
 # 红队扫查报告：并发 / 共享状态 / 降级路径（2026-08-30）
 
-> **入库注记（2026-08-31）**：本报告原存于 `.superpowers/sdd/bughunt-concurrency.md`（被 `.gitignore` 整体忽略，从未入库）。为保关键审计产物可溯源，复制本副本入库；`docs/` 下本副本为**查阅真源**。处置状态：**C1、M8 已修复**（2026-08-31，TDD 红测先行：`test_redis_client_timeout.py`、`test_chat_api.py::test_chat_quota_redis_calls_off_event_loop`、`test_quota.py::test_quota_concurrent_same_idem_single_charge`）；M1-M7、m* 及 Minor 余项仍挂账，按优先级排入后续批次。
+> **入库注记（2026-08-31）**：本报告原存于 `.superpowers/sdd/bughunt-concurrency.md`（被 `.gitignore` 整体忽略，从未入库）。为保关键审计产物可溯源，复制本副本入库；`docs/` 下本副本为**查阅真源**。
+>
+> **处置状态（2026-08-31 全量结算）**：**Critical 1/1 修复，Major 8/8 修复，Minor 6/8 修复**。
+> - Critical：C1 修复（Redis socket 超时 + chat 热路径线程化）；
+> - Major：M1（quick 门禁 fail-closed）、M2（批次清单行锁追加）、M3（评测期事务提前结束）、M4（孤儿批次兜底换会话 + 启动对账）、M5（极性词表补没/未/无/别/莫）、M6（gen 早期异常退款收口）、M7（clarify 回写行锁）、M8（SET NX 原子抢占 + refund Lua token 归属校验）；
+> - Minor 已修：m1（线程池关停不排空）、m2（_ensured 404 自愈）、m4（kb_lookup 单飞）、m5（publish/快检同步调用线程化）、m6（「不可以」死条目入词表）、m7（双草稿写前校验）；
+> - **挂账（2）**：m3（精确层 get→delete 竞态误删新值——自愈良性，仅多一次 RAG miss，报告原文标注良性）、m8（INCR 成功后异常 → 已扣费但 fail-closed——方向保守少放行，报告原文"记录在案"）。
+> 全部修复 TDD 红测先行（watch-it-fail），红测清单见各提交信息。
 
 范围：quick_answers / intent_shadow / kb_publish_service / answer_cache / quota / ticket_agent+kb_lookup / chat.py 流式段，及其跨模块契约（redis_client、database、kb_publish.py、knowledge.py、eval_faithfulness、ticket_service、vector_service）。
 方法：逐条过猎捕清单，每个发现给出「谁/何时/怎么触发」的具体推演链。已验证为**无问题**的高危疑点附在文末（防回归误报）。
