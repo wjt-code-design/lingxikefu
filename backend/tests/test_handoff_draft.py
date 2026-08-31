@@ -356,10 +356,10 @@ def chat_client(monkeypatch):
         def left_today(self, _uid):
             return 10
 
-        def try_consume(self, _uid, n=1, idem_key=None):
+        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):
             return (True, 0)
 
-        def refund(self, _uid, n=1, idem_key=None):
+        def refund(self, _uid, n=1, idem_key=None, content=None, token=None):
             return 0
 
     monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())

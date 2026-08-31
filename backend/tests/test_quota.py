@@ -138,6 +138,21 @@ class _FakeRedis:
     def expire(self, key, ttl):
         return True
 
+    def eval(self, script, numkeys, *keys_and_args):
+        # 仅模拟 quota._REFUND_LUA 语义：KEYS[1]=marker KEYS[2]=counter
+        # ARGV[1]=expected_token ARGV[2]=n —— 原子「GET 校验归属 → DECRBY → DEL」。
+        from app.services.quota import _REFUND_LUA
+
+        if script != _REFUND_LUA:
+            raise NotImplementedError("FakeRedis.eval 仅支持 quota._REFUND_LUA")
+        marker, counter = keys_and_args[0], keys_and_args[1]
+        expected, n = keys_and_args[2], int(keys_and_args[3])
+        if self.store.get(marker) == expected:
+            self.store[counter] = int(self.store.get(counter, 0)) - n
+            self.store.pop(marker, None)
+            return 1
+        return 0
+
 
 class _NoPipelineRedis(_FakeRedis):
     """pipeline 不可用（MULTI 建立即失败）——try_consume 必须 fail-closed 且无脏状态。"""
@@ -246,3 +261,32 @@ def test_quota_concurrent_same_idem_single_charge():
         assert all(a for a, _ in results), f"round {rnd}: 存在请求被拒绝 {results}"
         used = qs.used_today(uid)
         assert used == 1, f"round {rnd}: 并发同幂等键被扣了 {used} 次（check-then-set 竞态双扣费）"
+
+
+def test_quota_refund_rejects_wrong_token():
+    """M8 收尾：refund 必须校验 marker 归属（token）——错误 token 不得退他人费。
+
+    竞态（bughunt M8「免费放行」链的退款侧）：同 client_msg_id 并发请求
+    A（SET NX 抢到锁并扣费）/ B（NX 抢不到 → 幂等命中放行，未扣费）。
+    B 失败退款时，旧实现只看 marker 存在即 DECR+DEL——退掉 A 的钱并删 A 的锁；
+    A 随后 refund 无动作（marker 已删）→ 净双错：A 白扣 + B 免费。
+
+    修复：try_consume 抢占时 marker 值携带请求级 token，refund 用 Lua 原子
+    「GET 校验归属 → DECRBY → DEL」，token 不匹配即无动作。
+    """
+    qs = QuotaService(redis_client=_FakeRedis())
+    uid, idem, content = "u1", "req-tok", "同一问题"
+    ok_a, _ = qs.try_consume(uid, 1, idem_key=idem, content=content, token="tok-A")
+    assert ok_a
+    # B 同指纹并发到达：NX 抢不到 → 幂等命中放行（未扣费）
+    ok_b, _ = qs.try_consume(uid, 1, idem_key=idem, content=content, token="tok-B")
+    assert ok_b
+    assert qs.used_today(uid) == 1
+    # B 失败退款：token 不匹配持锁者 A → 必须无动作（不退费、不删 A 的锁）
+    qs.refund(uid, 1, idem_key=idem, content=content, token="tok-B")
+    assert qs.used_today(uid) == 1, "错误 token 的 refund 退掉了持锁者 A 的配额（归属未校验）"
+    # A 的正常退款仍有效（marker 未被 B 误删），退后同指纹重试可重新扣费
+    qs.refund(uid, 1, idem_key=idem, content=content, token="tok-A")
+    assert qs.used_today(uid) == 0
+    ok_c, used_c = qs.try_consume(uid, 1, idem_key=idem, content=content, token="tok-C")
+    assert ok_c and used_c == 1

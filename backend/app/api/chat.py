@@ -215,8 +215,13 @@ async def chat_stream(
     #    R2：client_msg_id 作幂等键 —— 断连重试同一请求不重复扣费
     #    P4：超额统一走 HTTP 429（不再 HTTP200+SSE error 双面不一致——客户端语义应看状态码）
     #    C1：try_consume 内是同步 Redis，必须搬出事件循环线程（否则 Redis 挂起冻结全服务）
+    #    M8 收尾：quota_token 为请求级归属凭证——try_consume 与全部 refund 路径成对传递，
+    #    refund 按 token 校验 marker 归属后才回滚（幂等命中的并发请求退款不误退持锁者配额）
     quota = get_quota_service()
-    allowed, _ = await run_in_threadpool(quota.try_consume, str(user_id), 1, req.client_msg_id)
+    quota_token = uuid.uuid4().hex
+    allowed, _ = await run_in_threadpool(
+        quota.try_consume, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+    )
     if not allowed:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "今日问答额度已用完")
 
@@ -237,7 +242,9 @@ async def chat_stream(
         s.updated_at = datetime.now(UTC)
         db.commit()
     except Exception:
-        await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)
+        await run_in_threadpool(
+            quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+        )
         raise
 
     kb_id = await run_in_threadpool(_latest_kb_id, db)
@@ -266,10 +273,16 @@ async def chat_stream(
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
         if await request.is_disconnected():
             logger.info("chat stream aborted: client disconnected (pre)")
-            await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额，不白扣
+            # R2：断连回滚配额，不白扣（token 校验归属）
+            await run_in_threadpool(
+                quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+            )
             return
         if kb_id is None:
-            await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)  # R2：无知识库未生成 → 不扣费
+            # R2：无知识库未生成 → 不扣费（token 校验归属）
+            await run_in_threadpool(
+                quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+            )
             yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
             return
 
@@ -552,7 +565,9 @@ async def chat_stream(
             # S1：未交付出口统一退款（error 事件/断连/异常），单一收口防泄漏也防双退；
             # done 已置 consumed=False（交付成立不退）。quota.refund 内部幂等标记再兜底一层。
             if consumed:
-                await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)
+                await run_in_threadpool(
+                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+                )
                 consumed = False
             # P2-2：Agent 降级排水——正常结束/断连/异常全路径统一计数 + 结构化日志
             # （防静默改路径：降级率从此可统计、可告警）

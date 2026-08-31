@@ -35,6 +35,20 @@ logger = logging.getLogger(__name__)
 #: R2：幂等标记 TTL（与配额计数 key 一致，48h 自动清理）
 _IDEM_TTL_SECONDS = 60 * 60 * 48
 
+#: M8 收尾：refund 原子脚本——「GET 校验 marker 归属（token）→ DECRBY → DEL」单命令原子执行。
+#: 旧三步（GET 判存在 → DECR → DEL）非原子：GET 与 DEL 之间 marker 可被同指纹重试请求
+#: 重新抢占（换主），refund 会退掉新请求的费并删掉新锁；且幂等命中放行的并发请求 B
+#: （未扣费）退款时会误退持锁者 A 的配额。KEYS[1]=marker KEYS[2]=counter
+#: ARGV[1]=expected_token ARGV[2]=n
+_REFUND_LUA = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('DECRBY', KEYS[2], ARGV[2])
+  redis.call('DEL', KEYS[1])
+  return 1
+end
+return 0
+"""
+
 #: 架构一期 6：每日上限的 app_settings KV 键（覆盖 settings.DAILY_QUOTA_LIMIT）
 DAILY_LIMIT_KV_KEY = "quota.daily_limit"
 
@@ -155,8 +169,8 @@ class QuotaService:
     def left_today(self, user_id: str) -> int:
         return max(0, self.daily_limit() - self.used_today(user_id))
 
-    def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None) -> tuple[bool, int]:
-        """原子扣减闸门（P1-①）：幂等抢占 SET NX EX 原子化 + INCR/expire MULTI pipeline。
+    def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None, token: str | None = None) -> tuple[bool, int]:
+        """原子扣减闸门（P1-①）：幂等抢占 SET NX 原子化 + INCR/expire MULTI pipeline。
 
         R2 幂等指纹：marker 绑定 ``sha256(user_id:content)``（``content=None`` 退化为
         ``sha256(user_id:idem_key)`` 兼容旧调用）——跨用户复用 idem_key / 同用户换
@@ -165,6 +179,10 @@ class QuotaService:
         M8（bughunt-concurrency）：幂等标记由「先 GET 后 SET」改为 ``SET NX EX``
         单命令原子抢占——旧两步法在并发窗口内 N 个同指纹请求都看到 marker 不存在
         而重复扣费。抢不到 marker = 已有并发请求持锁扣费中，本次幂等命中不重复扣。
+
+        M8 收尾：``token`` 为请求级归属凭证（chat 层生成 uuid4，与 refund 成对传递）。
+        抢占成功时写入 marker 值；``refund`` 按值校验归属后才回滚——防止幂等命中的
+        并发请求（未扣费）误退持锁者的配额。不传 token 时退化为旧值 ``"1"``（兼容）。
 
         返回 (allowed, used)：见模块 docstring。
         Redis / pipeline 不可用时 fail-closed 返回 (False, 0)（不产生半步脏状态）。
@@ -177,8 +195,8 @@ class QuotaService:
                 material = content if content else idem_key
                 fingerprint = hashlib.sha256(f"{user_id}:{material}".encode()).hexdigest()
                 marker = self._idem_key(fingerprint)
-                # M8：SET NX EX 原子抢占（SET 成功返回 True；key 已存在返回 None）
-                acquired = bool(r.set(marker, "1", ex=_IDEM_TTL_SECONDS, nx=True))
+                # M8：SET NX 原子抢占（SET 成功返回 True；key 已存在返回 None）
+                acquired = bool(r.set(marker, token or "1", ex=_IDEM_TTL_SECONDS, nx=True))
                 if not acquired:
                     # 幂等命中：同用户同内容此前已扣过费（重试/并发请求），本次不重复扣
                     return True, self.used_today(user_id)
@@ -203,11 +221,13 @@ class QuotaService:
                     logger.warning("quota try_consume: 异常路径清理幂等标记失败", exc_info=True)
             return False, 0
 
-    def refund(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None) -> None:
-        """失败回滚（P1-①）：按与 try_consume 相同的指纹定位标记并清除，回滚已扣配额。
+    def refund(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None, token: str | None = None) -> None:
+        """失败回滚（P1-①）：按与 try_consume 相同的指纹定位标记，校验归属后原子回滚。
 
-        回滚入参（含 content）与扣费入参一致才命中同一枚标记；回滚后删除标记，
-        重试（同一请求）将重新正常扣费。marker 不存在 = 未扣费，无动作。
+        回滚入参（含 content、token）与扣费入参一致才命中同一枚标记；``token`` 与
+        扣费时传入的请求级凭证必须匹配（Lua 原子 GET 比较 → DECRBY → DEL），
+        防止幂等命中放行的并发请求退款时误退持锁者的配额、或换主窗口退错费。
+        marker 不存在 / 值不匹配 = 本次未持有扣费，无动作。
         Redis 不可达时 fail-open（不阻塞主流程）。
         """
         try:
@@ -216,10 +236,8 @@ class QuotaService:
                 material = content if content else idem_key
                 fingerprint = hashlib.sha256(f"{user_id}:{material}".encode()).hexdigest()
                 marker = self._idem_key(fingerprint)
-                if r.get(marker) is None:
-                    return  # 未扣费（或已回滚）→ 无动作
-                r.decr(self._key(user_id), n)
-                r.delete(marker)
+                # M8 收尾：Lua 原子「归属校验 → DECRBY → DEL」（token 不匹配无动作）
+                r.eval(_REFUND_LUA, 2, marker, self._key(user_id), token or "1", n)
             else:
                 r.decr(self._key(user_id), n)
         except Exception:  # noqa: BLE001 - fail-open：回滚失败不阻塞
