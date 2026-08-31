@@ -127,6 +127,9 @@ _FALLBACK_NOTED = False
 #: 已对哪个漂移版本警告过（chat 禁用路径日志一次性：同版本重复请求不刷屏）。
 _WARNED_STALE_VERSION: str | None = None
 
+#: M1：已对哪个版本的"无法判定 fail-closed"警告过（同一次性去重模式）。
+_WARNED_UNAVAILABLE: str | None = None
+
 
 def _redis_set_covered(kb_version: str) -> None:
     """covered 版本写 Redis（跨进程锚点，Celery worker 写、API/chat 进程读）。
@@ -144,16 +147,28 @@ def _redis_set_covered(kb_version: str) -> None:
             logger.warning("covered 版本写 Redis 失败（跨进程门控暂不可用，退回模块级状态）", exc_info=True)
 
 
-def _covered_version() -> str | None:
-    """最近通过覆盖检查的 kb_version：Redis 优先（跨进程），缺失/不可用回退模块级。"""
+#: M1（bughunt-concurrency）哨兵：Redis 读失败且本进程无模块级兜底（API 进程常态）
+#: ——无法判定 covered，调用方 is_enabled_for 对此 fail-closed（禁用 quick 回落 RAG）。
+#: 区别于 None（"从未通过检查"的正常向后兼容态）。
+_REDIS_UNAVAILABLE = object()
+
+
+def _covered_version() -> str | None | object:
+    """最近通过覆盖检查的 kb_version：Redis 优先（跨进程），缺失/不可用回退模块级。
+
+    M1：Redis 读失败时——本进程跑过覆盖检查（worker 导入进程）则模块级仍可信；
+    否则返回 _REDIS_UNAVAILABLE 哨兵（调用方 fail-closed），不再静默放行陈旧话术。
+    """
     global _REDIS_WARNED, _FALLBACK_NOTED
     try:
         value = get_redis().get(_REDIS_COVERED_KEY)
-    except Exception:  # noqa: BLE001 - fail-open
+    except Exception:  # noqa: BLE001
         if not _REDIS_WARNED:
             _REDIS_WARNED = True
-            logger.warning("covered 版本读 Redis 失败（回退模块级状态，仅本进程门控生效）", exc_info=True)
-        return _COVERED_KB_VERSION
+            logger.warning("covered 版本读 Redis 失败（无模块级兜底时禁用 quick 回落 RAG）", exc_info=True)
+        if _COVERED_KB_VERSION:
+            return _COVERED_KB_VERSION  # 本进程跑过覆盖检查：模块级状态可信
+        return _REDIS_UNAVAILABLE  # API 进程常态：无法判定 → 调用方 fail-closed
     _REDIS_WARNED = False  # 恢复可达：重置一次性警告
     if value:
         return value
@@ -204,6 +219,17 @@ def is_enabled_for(kb_version: str | None) -> bool:
     if kb_version is None:
         return True
     covered = _covered_version()
+    if covered is _REDIS_UNAVAILABLE:
+        # M1 fail-closed：Redis 读失败且无模块级兜底（API 进程常态）→ 无法判定覆盖状态，
+        # 禁用 quick 回落 RAG（损失秒回，防 KB 换血后旧话术静默放行——宁慢勿错）。
+        global _WARNED_UNAVAILABLE
+        if kb_version != _WARNED_UNAVAILABLE:
+            _WARNED_UNAVAILABLE = kb_version
+            logger.warning(
+                "quick 覆盖状态无法判定（Redis 读失败且无模块级兜底），命中话术回落 RAG（版本 %s）",
+                kb_version,
+            )
+        return False
     if covered is None or kb_version == covered:
         return True
     global _WARNED_STALE_VERSION

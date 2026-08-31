@@ -66,6 +66,28 @@ def test_check_fail_does_not_record(monkeypatch):
     assert quick_answers.is_enabled_for("7:2026-03-01") is True  # 从未通过 → 向后兼容放行
 
 
+def test_quick_fail_closed_when_redis_down_without_module_state(monkeypatch):
+    """M1（bughunt-concurrency）：Redis 读失败且本进程无模块级兜底 → fail-closed 禁用 quick。
+
+    API 进程常态：模块级 _COVERED_KB_VERSION 恒 None（只有导入进程写过）。旧实现
+    Redis 读失败回退 None → covered is None → 放行——KB 换血后旧话术静默放行且
+    _FALLBACK_NOTED 分支永不满足（零告警）。修复：无法判定 covered 时 fail-closed
+    （禁用 quick 回落 RAG，宁慢勿错）；本进程跑过检查（worker）时模块级仍可信。
+    """
+    def _boom():
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(quick_answers, "get_redis", _boom)
+    monkeypatch.setattr(quick_answers, "_COVERED_KB_VERSION", None)
+    assert quick_answers.is_enabled_for("6:2026-02-01") is False, (
+        "Redis 读失败且无模块级兜底时必须 fail-closed（旧实现静默放行陈旧话术）"
+    )
+    # worker 进程：模块级有值 → 仍可判定（不受 fail-closed 影响）
+    monkeypatch.setattr(quick_answers, "_COVERED_KB_VERSION", "5:2026-01-01")
+    assert quick_answers.is_enabled_for("5:2026-01-01") is True
+    assert quick_answers.is_enabled_for("6:2026-02-01") is False
+
+
 def test_disabled_warns_once_per_version(monkeypatch, caplog):
     """chat.py 禁用路径日志一次性：同版本重复请求只 warning 一次。"""
     monkeypatch.setattr(quick_answers, "_COVERED_KB_VERSION", "5:2026-01-01")
@@ -140,8 +162,14 @@ def test_check_redis_write_failure_still_records_module(monkeypatch, caplog):
     assert len(redis_warns) == 1
 
 
-def test_no_redis_no_module_state_always_enabled(monkeypatch):
-    """无 Redis（key 缺失）且无模块态 → 恒放行：与现状完全一致（向后兼容硬约束）。"""
+def test_no_redis_no_module_state_semantics(monkeypatch):
+    """Redis 不可用语义（M1 修复后更新）：key 缺失 vs 连接失败分流。
+
+    - key 缺失（Redis 可达，从未跑过覆盖检查）→ 放行：向后兼容硬约束不变；
+    - 连接失败且无模块态（API 进程常态）→ fail-closed 禁用（bughunt M1：
+      旧 fail-open 会静默放行 KB 换血后的陈旧话术且零告警）；
+    - kb_version=None（无版本可比）→ 恒放行，不触碰 Redis。
+    """
     monkeypatch.setattr(quick_answers, "_COVERED_KB_VERSION", None)
     assert quick_answers.is_enabled_for("9:2026-05-01") is True  # 空仓 fake（key 不存在）
     assert quick_answers.is_enabled_for(None) is True
@@ -150,7 +178,7 @@ def test_no_redis_no_module_state_always_enabled(monkeypatch):
         raise ConnectionError("redis down")
 
     monkeypatch.setattr(quick_answers, "get_redis", _boom)
-    assert quick_answers.is_enabled_for("9:2026-05-01") is True  # Redis 挂 + 无模块态 → 同现状
+    assert quick_answers.is_enabled_for("9:2026-05-01") is False  # M1：读失败 fail-closed
 
 
 def test_kb_version_none_skips_redis(monkeypatch):

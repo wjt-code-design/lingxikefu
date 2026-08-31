@@ -282,3 +282,32 @@ def test_polarity_synonym_families_hit():
     assert not _polarity_conflict("不能退货", "确实不能退")
     # 条件词（超过/之外）与否定词不同类，仍拦
     assert _polarity_conflict("超过7天能退吗", "不能退货")
+
+
+def test_polarity_negative_prefixes_mei_wei_wu():
+    """M5（bughunt-concurrency）：极性词表补「没/未/无/别/莫」——高频口语否定翻转必须拦。
+
+    旧词表缺「没/未/无」："没发货可退" vs "发货了可退" 两问极性类均为空集 →
+    相等 → 语义缓存串答（B 拿到 A 的反向答案），实体锁定在无数体句时恒放行。
+    """
+    from app.services.answer_cache import _polarity_conflict
+
+    assert _polarity_conflict("没发货可以退款吗", "发货了可以退款吗")
+    assert _polarity_conflict("未激活可以换货吗", "已激活可以换货吗")
+    assert _polarity_conflict("无货什么时候补", "有货吗")
+    assert _polarity_conflict("别拆封保修吗", "保修吗")  # 别：单侧否定
+    # 同极性仍互相命中（词表从宽：不误拦同向问句）
+    assert not _polarity_conflict("没发货可以退款吗", "没发货怎么退款")
+    assert not _polarity_conflict("未激活可以换货吗", "未激活怎么换货")
+
+
+def test_polarity_bukeyi_not_dead_entry():
+    """m6（bughunt-concurrency）：canon 死条目「不可以」修复——入词表后被真实采集。
+
+    旧态：「不可以」不在 _POLARITY_TERMS，canon 映射不可达（行为靠「不」+「不可」
+    两个子串巧合收敛）；后人按 canon 表扩词会误以为已覆盖。入表后显式生效。
+    """
+    from app.services.answer_cache import _POLARITY_TERMS, _polarity_conflict
+
+    assert "不可以" in _POLARITY_TERMS
+    assert not _polarity_conflict("不可以退货吗", "不能退货吗")

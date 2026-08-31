@@ -75,7 +75,10 @@ def _entities_ok(query: str, cached_question: str) -> bool:
 #: "保修/不保修"类翻转；单字噪声（"不锈钢/不错"）只造成良性 miss。词表只增不减
 #: 单调加严（子串词恒共生，等集判定不会因扩表产生新的错误命中）。
 _POLARITY_TERMS = (
-    "不", "不能", "无法", "不可", "不支持", "不提供", "非", "超过", "以外", "之后",
+    "不", "不能", "无法", "不可", "不可以", "不支持", "不提供", "非", "超过", "以外", "之后",
+    # M5（bughunt-concurrency）：高频口语否定前缀——"没发货"vs"发货了"一词之差翻转，
+    # 旧表缺「没/未/无」致两问极性类均为空集而串答。单字噪声（"无理由/不锈钢"）只造成良性 miss。
+    "没", "未", "无", "别", "莫",
 )
 #: 同义否定 → 规范类（H3 债清偿）："无法/不可/不可以"与"不能"同极性，不归一则
 #: 跨家族句子集合永不相等 → 高频否定问句缓存命中率结构性为 0。
@@ -88,8 +91,14 @@ def _polarity_classes(text: str) -> frozenset:
     归并是必须的：裸"不"⊂"不能"，含"不能"的句子原始集合恒多出"不"，
     与任何不含裸"不"字面的否定家族（如"无法"）永不等。同极性合并不产生
     新的错误命中（只会回收良性 miss），保持词表"只增不减"不变量。
+
+    M5 扩表（没/未/无/别/莫）后子串消除前置：裸"无"⊂"无法"，命中"无法"的
+    句子不再让裸"无"产生独立类（否则"无法退货"{"无","不能"} 与"不能退货"
+    {"不能"} 永不等，跨家族归一命中被破坏）。
     """
-    classes = [_POLARITY_CANON.get(t, t) for t in _POLARITY_TERMS if t in text]
+    hits = [t for t in _POLARITY_TERMS if t in text]
+    hits = [t for t in hits if not any(t != o and t in o for o in hits)]
+    classes = [_POLARITY_CANON.get(t, t) for t in hits]
     return frozenset(c for c in classes if not any(o != c and c in o for o in classes))
 
 
