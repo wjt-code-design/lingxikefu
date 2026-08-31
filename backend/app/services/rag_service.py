@@ -29,6 +29,7 @@ from app.services.clarify import ClarifyError, generate_clarify
 from app.services.pipeline import Pipeline
 from app.services.retrieval_service import RetrievalError, RetrievedChunk
 from app.services.session_context import extract_topic
+from app.utils.text_splitter import clean_snippet
 
 logger = logging.getLogger(__name__)
 
@@ -311,8 +312,9 @@ def _to_sources(chunks: list[RetrievedChunk]) -> list[dict]:
             "chunk_id": c.chunk_id,
             "doc_id": c.doc_id,
             "score": round(c.score, 4),
-            # 字段名对齐前端契约 MessageSource.snippet（SSE 契约 §1.4）
-            "snippet": c.text[:200],
+            # 字段名对齐前端契约 MessageSource.snippet（SSE 契约 §1.4）；
+            # UI 审查高2：清洗 markdown + 句界截断，避免来源面板渲染源码
+            "snippet": clean_snippet(c.text),
         }
         for c in chunks
     ]

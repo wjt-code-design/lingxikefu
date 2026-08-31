@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Button, Checkbox, Form, Input, Typography, message } from 'antd';
+import { Alert, Button, Checkbox, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
 import { me, register } from '@/api/auth';
 import { useAuthStore } from '@/store/authStore';
@@ -11,16 +11,19 @@ import { useAuthStore } from '@/store/authStore';
  * Phase 2 task 12：品牌化布局改造（左品牌区/右表单区，样式在 AuthLayout.css）；
  * 新增「已阅读并同意《服务条款》《隐私政策》」勾选框，勾选后才允许提交
  * （条款/政策链接为 # 占位，无实际文档页）。
- * 表单提交/校验/路由跳转逻辑保持完全不变。
+ * UI 审查 2026-08-31 高1：失败反馈改为「持久内联 Alert + toast」双通道——toast 3s
+ * 自动消失，自动化/慢速浏览场景下用户对结果完全不可见；Alert 持久展示直到下次提交。
  */
 export function RegisterPage() {
   const navigate = useNavigate();
   const [form] = Form.useForm<{ email: string; phone?: string; password: string }>();
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const onFinish = async (values: { email: string; phone?: string; password: string }) => {
     setLoading(true);
+    setError(null);
     try {
       // 后端 register 直接返回 AuthResp（含 token），无需二次登录请求
       const resp = await register({ email: values.email, phone: values.phone, password: values.password });
@@ -33,7 +36,9 @@ export function RegisterPage() {
       message.success('注册成功，已自动登录');
       navigate('/chat');
     } catch (e) {
-      message.error((e as ApiError).message || '注册失败');
+      const msg = (e as ApiError).message || '注册失败，请稍后重试';
+      setError(msg);
+      message.error(msg);
     } finally {
       setLoading(false);
     }
@@ -101,6 +106,11 @@ export function RegisterPage() {
             </a>
           </Checkbox>
         </Form.Item>
+        {error && (
+          <Form.Item style={{ marginBottom: 8 }}>
+            <Alert type="error" showIcon message={error} role="alert" />
+          </Form.Item>
+        )}
         <Form.Item style={{ marginBottom: 8 }}>
           <Button
             type="primary"

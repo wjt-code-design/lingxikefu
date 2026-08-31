@@ -23,6 +23,7 @@ from app.schemas.knowledge_search import (
     KnowledgeSearchResp,
 )
 from app.services.retrieval_service import RetrievalError, search_kb
+from app.utils.text_splitter import clean_snippet
 
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
@@ -81,7 +82,7 @@ async def search_knowledge(
                 doc_title=doc_titles.get(c.doc_id, ""),
                 kb_id=c.kb_id,
                 kb_name=kb_name,
-                snippet=c.text[:200],
+                snippet=clean_snippet(c.text),
                 score=c.score,
                 dense_score=c.dense_score,
             )

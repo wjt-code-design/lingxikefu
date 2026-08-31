@@ -36,6 +36,7 @@ from app.services.retrieval_service import search_kb
 from app.services.session_context import build_handoff_summary
 from app.services.ticket_automation import auto_start_processing
 from app.services.user_profile_service import get_profile as get_user_profile
+from app.utils.text_splitter import clean_snippet
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -508,7 +509,7 @@ async def suggest_reply(
                 chunk_id=c.chunk_id,
                 doc_id=c.doc_id or None,
                 doc_title=titles.get(c.doc_id, ""),
-                snippet=c.text[:200],
+                snippet=clean_snippet(c.text),
                 score=round(c.score, 4),
             )
             for c in draft.chunks

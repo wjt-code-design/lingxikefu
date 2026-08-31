@@ -1,8 +1,8 @@
-"""text_splitter 单测：分块策略 + 参数边界。"""
+"""text_splitter 单测：分块策略 + 参数边界 + snippet 清洗（UI 审查高2）。"""
 from __future__ import annotations
 
 import pytest
-from app.utils.text_splitter import split_text
+from app.utils.text_splitter import clean_snippet, split_text
 
 
 def test_empty_text_returns_empty():
@@ -61,3 +61,37 @@ def test_invalid_params_raise():
         split_text("x", chunk_size=10, chunk_overlap=10)
     with pytest.raises(ValueError, match="overlap"):
         split_text("x", chunk_size=10, chunk_overlap=-1)
+
+
+# ---------- clean_snippet（UI 审查 2026-08-31 高2：来源面板渲染原始 Markdown） ----------
+
+
+def test_clean_snippet_strips_markdown_markup():
+    text = "## 五、发货提醒\n\n**重要**：拍下后 `48 小时`内发货。\n- 华东仓发中通\n- 华南仓发圆通"
+    out = clean_snippet(text, limit=200)
+    assert "##" not in out
+    assert "**" not in out
+    assert "`" not in out
+    assert "发货提醒" in out
+    assert "华东仓发中通" in out
+    assert "华南仓发圆通" in out
+
+
+def test_clean_snippet_truncates_at_sentence_boundary():
+    head = "这是第一句话。"
+    filler = "内容" * 40
+    out = clean_snippet(head + filler + "。尾部句子。", limit=20)
+    assert len(out) <= 20
+    assert out.endswith("。")
+    assert out.startswith(head)
+
+
+def test_clean_snippet_hard_cut_without_punctuation():
+    out = clean_snippet("甲" * 300, limit=50)
+    assert len(out) <= 50
+    assert out == "甲" * 50
+
+
+def test_clean_snippet_short_text_untouched():
+    assert clean_snippet("保修期 12 个月。", limit=200) == "保修期 12 个月。"
+    assert clean_snippet("", limit=200) == ""

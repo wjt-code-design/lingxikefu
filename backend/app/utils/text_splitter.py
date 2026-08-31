@@ -59,3 +59,38 @@ def _hard_split(text: str, size: int, overlap: int) -> list[str]:
             break
         start = max(end - overlap, 0)
     return out
+
+
+# ---------- snippet 清洗（UI 审查 2026-08-31 高2） ----------
+# chunk 保留 markdown 标记（见 split_text：标题行保留在块首），直接硬截 200 字符会把
+# `## 五、发货提醒` 等源码和句中半截话透给前端来源面板。展示层统一经 clean_snippet。
+
+_MD_HEADER_RE = re.compile(r"^[ \t]*#{1,6}[ \t]*", re.MULTILINE)  # 行首标题标记（保留标题文字）
+_MD_BULLET_RE = re.compile(r"^[ \t]*[-*+][ \t]+", re.MULTILINE)  # 行首列表标记（保留列表文字）
+_MD_INLINE_RE = re.compile(r"\*{1,3}|_{2,3}|`{1,3}")  # 行内强调/代码标记（单 _ 保留，防误伤标识符）
+_MD_TABLE_RE = re.compile(r"^[ \t]*\|", re.MULTILINE)  # 表格行首竖线
+_NEWLINE_RE = re.compile(r"[ \t]*\n+[ \t]*")  # 换行归一为单个空格
+_SENTENCE_END = "。！？；!?)）\"”』」"
+
+
+def clean_snippet(text: str, limit: int = 200) -> str:
+    """清洗 chunk 原文为展示用摘录：剥 markdown 标记 + 优先句界截断。
+
+    - 超长时截到最后一个句末标点（在 limit 内），避免从句中截断；
+    - 无任何句末标点则硬切到 limit（不补省略号，保持长度契约 <= limit）；
+    - 纯展示用途，不参与检索/缓存键。
+    """
+    if not text:
+        return ""
+    out = _MD_HEADER_RE.sub("", text)
+    out = _MD_BULLET_RE.sub("", out)
+    out = _MD_INLINE_RE.sub("", out)
+    out = _MD_TABLE_RE.sub("", out)
+    out = _NEWLINE_RE.sub(" ", out).strip()
+    if len(out) > limit:
+        cut = -1
+        for i in range(limit):
+            if out[i] in _SENTENCE_END:
+                cut = i
+        out = out[: cut + 1] if cut >= 0 else out[:limit]
+    return out
