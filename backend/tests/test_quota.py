@@ -161,6 +161,80 @@ class _NoPipelineRedis(_FakeRedis):
         raise ConnectionError("redis pipeline unavailable")
 
 
+class _ExecuteFailRedis(_FakeRedis):
+    """m8 红测：pipeline.execute 服务端已应用（INCR 生效）但响应丢失 → 客户端 ConnectionError。"""
+
+    def pipeline(self, transaction=True):
+        pipe = _FakePipeline(self)
+        real_execute = pipe.execute
+
+        def _execute():
+            real_execute()  # 服务端 MULTI/EXEC 已生效：INCR 落库
+            raise ConnectionError("response lost")
+
+        pipe.execute = _execute  # type: ignore[method-assign]
+        return pipe
+
+
+class _OneShotPipelineFailRedis(_FakeRedis):
+    """首次 pipeline() 构造失败（瞬断），之后恢复——用于断言「INCR 前异常释放 marker
+    后，同一 redis 上的重试可正常扣费」。"""
+
+    def __init__(self):
+        super().__init__()
+        self._fail_next = True
+
+    def pipeline(self, transaction=True):
+        if self._fail_next:
+            self._fail_next = False
+            raise ConnectionError("transient pipeline failure")
+        return _FakePipeline(self)
+
+
+def test_quota_incr_then_error_keeps_marker_for_idempotent_retry():
+    """m8（bughunt-concurrency Minor-8）：INCR 生效后异常——保留 marker，重试幂等放行不双扣。
+
+    旧态：except 分支无条件 delete(marker) → 已扣费（INCR 生效）且无幂等标记 →
+    客户端重试再扣一次（双扣）。修复：分段异常处理——INCR 之后的异常保留 marker，
+    重试同指纹命中幂等标记直接放行（已扣费的重试不重复扣）。
+    """
+    qs = QuotaService(redis_client=_ExecuteFailRedis())
+    uid, idem, content = "u1", "req-xyz", "退款多久到账"
+    ok1, used1 = qs.try_consume(uid, 1, idem_key=idem, content=content)
+    assert ok1 is False and used1 == 0  # fail-closed（响应丢失）
+    assert qs.used_today(uid) == 1, "服务端 INCR 已生效（响应丢失不回滚计数）"
+    # 重试（同指纹）→ 幂等命中放行，不重复扣费
+    ok2, used2 = qs.try_consume(uid, 1, idem_key=idem, content=content)
+    assert ok2 and used2 == 1, "已扣费的重试必须幂等放行（不得双扣）"
+    assert qs.used_today(uid) == 1
+
+
+def test_quota_pre_incr_error_still_releases_marker():
+    """m8 分段对照：INCR 之前异常（未扣费）仍释放 marker——重试正常扣费，不免费放行。
+
+    code-review 修正（假覆盖修复）：断言必须在**同一 redis 实例**上做——
+    旧版用全新 _FakeRedis 做第二次断言，无论 marker 是否释放都会通过（假绿）。
+    pipeline 构造已归入 INCR 前段：SET NX 成功后构造失败 → 走「INCR 前异常
+    释放 marker」分支；恢复后同指纹重试正常扣费。
+    """
+    uid, idem = "u1", "req-no-incr"
+    r = _OneShotPipelineFailRedis()
+    qs = QuotaService(redis_client=r)
+    ok, _ = qs.try_consume(uid, 1, idem_key=idem, content="你好")
+    assert ok is False
+    assert qs.used_today(uid) == 0
+    # 同一 redis 实例上断言 marker 已释放（真实覆盖，不再依赖第二次调用的偶然通过）
+    import hashlib as _hl  # noqa: PLC0415
+
+    fingerprint = _hl.sha256(f"{uid}:你好".encode()).hexdigest()
+    marker = f"quota:idem:{fingerprint}"
+    assert marker not in r.store, "INCR 前异常必须释放幂等标记（重试不得免费放行）"
+    # 同一 redis（已恢复）重试 → SET NX 重新成功 → 正常扣费（而非幂等免费放行）
+    ok2, used2 = qs.try_consume(uid, 1, idem_key=idem, content="你好")
+    assert ok2 and used2 == 1
+    assert qs.used_today(uid) == 1
+
+
 def test_quota_try_consume_idempotent():
     """R2/P1-①：同用户同 client_msg_id 同 content 重试 —— 不重复扣费。"""
     qs = QuotaService(redis_client=_FakeRedis())

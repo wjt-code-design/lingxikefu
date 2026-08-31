@@ -116,6 +116,29 @@ def _polarity_conflict(query: str, cached_question: str) -> bool:
     return _polarity_classes(query) != _polarity_classes(cached_question)
 
 
+#: m3（bughunt-concurrency）：CAS 删除——当前值仍等于读取快照才删（Lua 单命令原子执行）。
+#: 旧实现无条件 delete：KB 升版瞬间「A 读旧值 → 并发 put 写入新值 → A 的 delete 误删
+#: 新值」的 RMW 竞态窗口，自愈但白耗一次 RAG 管线。
+_DEL_IF_UNCHANGED_LUA = """
+local v = redis.call('GET', KEYS[1])
+if v and v == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+"""
+
+
+def _delete_exact_if_unchanged(key: str, expected: str) -> None:
+    """精确层条件删除：值仍等于读取快照才删，否则跳过（并发已回填新值）。
+
+    fail-open：eval 不可用/失败时不删（最坏多留一条旧值，由 TTL/下次覆盖兜底）。
+    """
+    try:
+        get_redis().eval(_DEL_IF_UNCHANGED_LUA, 1, key, expected)
+    except Exception:  # noqa: BLE001 - fail-open
+        logger.debug("answer_cache CAS 删除失败（fail-open，保留旧值待 TTL）", exc_info=True)
+
+
 def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | None:
     """缓存命中（精确→语义）。返回 payload 或 None（fail-open 恒不抛）。
 
@@ -134,7 +157,8 @@ def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | 
             payload = json.loads(exact)
             if payload.get("kb_version") == kb_version and (kb_id is None or payload.get("kb_id") == str(kb_id)):
                 return payload
-            r.delete(key)  # 版本/kb 过期清理
+            # m3：CAS 删除（值仍等于读取快照才删），防误删并发回填的新版本值
+            _delete_exact_if_unchanged(key, exact)
         # 2) 语义层（Qdrant + 阈值 + 实体锁定 + 版本 + kb 过滤）
         vector = get_embedding_client().embed([BGE_QUERY_PREFIX + query])[0]
         search_kwargs: dict = dict(collection_name=COLLECTION, query_vector=vector, limit=1)

@@ -1,8 +1,17 @@
 """答案缓存单测（T10）：实体锁定 / KB 版本失效 / 开关 / fail-open。mock 掉 Qdrant/Redis。"""
 from __future__ import annotations
 
+import json
+
 from app.services import answer_cache
-from app.services.answer_cache import COLLECTION, _entities_ok, _polarity_conflict, get, put
+from app.services.answer_cache import (
+    COLLECTION,
+    _entities_ok,
+    _normalize_key,
+    _polarity_conflict,
+    get,
+    put,
+)
 
 
 class _FakeHit:
@@ -346,3 +355,55 @@ def test_qdrant_failure_resets_ensured(monkeypatch):
     qd.hits = [_FakeHit({"question": "保修多久", "answer": "12 个月", "sources": [], "kb_version": "v1"})]
     assert get("保修多久", "v1") is not None
     assert answer_cache._ensured is True
+
+
+class _EvalRedis(_FakeRedis):
+    """带 compare-and-delete eval 的假 Redis（模拟 m3 Lua 脚本语义：值仍等于预期才删）。
+
+    race_key/fresh 提供竞态窗口注入：eval 到达前模拟并发 put 已把值覆盖为 fresh
+    （复现「A 读旧值 → B put 新值 → A 的删除命令到达」时序）。
+    """
+
+    def __init__(self, race_key: str | None = None, fresh: str | None = None):
+        super().__init__()
+        self.race_key = race_key
+        self.fresh = fresh
+
+    def eval(self, script, numkeys, *args):  # noqa: ANN002, ANN003 - 仅实现 CAS 语义
+        key, expected = args[0], args[1]
+        if self.race_key and key == self.race_key and self.fresh is not None:
+            self.store[key] = self.fresh  # 并发 put 先于本次 eval 落库
+        v = self.store.get(key)
+        if v is not None and v == expected:
+            self.store.pop(key, None)
+            return 1
+        return 0
+
+
+def test_get_stale_exact_does_not_delete_concurrent_fresh_value(monkeypatch):
+    """m3（bughunt-concurrency）：精确层 get→delete RMW 竞态不得误删并发回填的新值。
+
+    推演：KB 升版瞬间，A get 读到旧版本值 → B put 写入 v2 新值到同 key →
+    A 的无条件 delete 把 B 的新值清掉 → 下次 miss 多走一次 RAG（自愈但白耗管线）。
+    修复：CAS 语义删除（Lua：当前值仍等于读取快照才删）。
+    """
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    qd = _FakeQdrant()
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: qd)
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type("E", (), {"dim": 768, "embed": lambda *a: [[0.1] * 768]})())
+
+    key = answer_cache._EXACT_PREFIX + _normalize_key("保修多久")
+    stale = json.dumps({"question": "保修多久", "answer": "旧答案", "kb_version": "v1"}, ensure_ascii=False)
+    fresh = json.dumps({"question": "保修多久", "answer": "新答案", "kb_version": "v2"}, ensure_ascii=False)
+    r = _EvalRedis(race_key=key, fresh=fresh)
+    r.store[key] = stale
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+
+    assert get("保修多久", "v2") is None  # 精确层 stale → 走语义层 miss（正确行为）
+    # 旧实现：delete 到达时无条件删 → fresh 被误清（store 无 key）；
+    # 修复后：CAS 比对失败（值已≠快照）→ 跳过删除 → fresh 保留
+    assert r.store.get(key) == fresh, "并发回填的新版本值不得被 stale 清理误删"

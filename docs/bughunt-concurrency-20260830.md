@@ -6,7 +6,10 @@
 > - Critical：C1 修复（Redis socket 超时 + chat 热路径线程化）；
 > - Major：M1（quick 门禁 fail-closed）、M2（批次清单行锁追加）、M3（评测期事务提前结束）、M4（孤儿批次兜底换会话 + 启动对账）、M5（极性词表补没/未/无/别/莫）、M6（gen 早期异常退款收口）、M7（clarify 回写行锁）、M8（SET NX 原子抢占 + refund Lua token 归属校验）；
 > - Minor 已修：m1（线程池关停不排空）、m2（_ensured 404 自愈）、m4（kb_lookup 单飞）、m5（publish/快检同步调用线程化）、m6（「不可以」死条目入词表）、m7（双草稿写前校验）；
-> - **挂账（2）**：m3（精确层 get→delete 竞态误删新值——自愈良性，仅多一次 RAG miss，报告原文标注良性）、m8（INCR 成功后异常 → 已扣费但 fail-closed——方向保守少放行，报告原文"记录在案"）。
+> - **挂账（2）→ 2026-09-01 清账**：m3（精确层 get→delete 竞态误删新值——已修：CAS 删除 Lua
+>   「值仍等于读取快照才删」，`answer_cache._delete_exact_if_unchanged`，红测先行）；m8（INCR
+>   成功后异常已扣费无标记——已修：try_consume 分段异常语义，INCR 后异常保留 marker 供重试
+>   幂等放行、INCR 前异常仍释放 marker，双测覆盖）。**Minor 8/8 全部修复**。
 > 全部修复 TDD 红测先行（watch-it-fail），红测清单见各提交信息。
 
 范围：quick_answers / intent_shadow / kb_publish_service / answer_cache / quota / ticket_agent+kb_lookup / chat.py 流式段，及其跨模块契约（redis_client、database、kb_publish.py、knowledge.py、eval_faithfulness、ticket_service、vector_service）。
