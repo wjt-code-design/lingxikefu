@@ -11,9 +11,10 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user, require_admin, require_roles
@@ -64,6 +65,8 @@ class TicketItem(BaseModel):
     # 一期 4 时间戳补发：逐状态流转时间（此前只写不下发；closed 无独立列，用 updated_at）
     processing_at: str | None = None
     resolved_at: str | None = None
+    # UI 审查低19：关联会话主题（列表页"主题"列数据源；仅 list 端点填充，get 单查不冗余 join）
+    session_title: str | None = None
 
 
 class TicketListResp(BaseModel):
@@ -157,20 +160,43 @@ def list_tickets(
     status: TicketStatus | None = Query(default=None),
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    keyword: str | None = Query(None, max_length=100, description="工单号/会话号搜索（去横线归一化，支持 8 位短号）"),
     payload: dict = Depends(require_roles("admin", "agent")),
     db: OrmSession = Depends(get_db),
 ) -> TicketListResp:
-    """工单列表（agent/admin）。"""
+    """工单列表（agent/admin）。keyword 搜工单号/会话号（UI 审查中6）。
+
+    归一化（code-review 修正 PG 方言）：SQL 端 replace('-','') 把 CAST 文本归一成
+    无横线形态——SQLite（sa.Uuid 存 hex32）不变、PG（原生 uuid 列 CAST 出带横线
+    文本）去横线——keyword 侧去横线小写后 ilike，两方言下 dashed 完整号、8 位短号、
+    会话号前缀均可命中（此前仅 SQLite 测试库验证，PG 下完整号静默零结果）。
+    """
     tenant = settings.TENANT_DEFAULT
     cond = [Ticket.tenant_id == tenant]
     if status:
         cond.append(Ticket.status == status)
+    if keyword:
+        kw = f"%{keyword.strip().lower().replace('-', '')}%"
+        norm_id = func.replace(func.lower(func.cast(Ticket.id, sa.String)), "-", "")
+        norm_sid = func.replace(func.lower(func.cast(Ticket.session_id, sa.String)), "-", "")
+        cond.append(or_(norm_id.ilike(kw), norm_sid.ilike(kw)))
     total = db.scalar(select(func.count(Ticket.id)).where(*cond)) or 0
     rows = (
         db.scalars(select(Ticket).where(*cond).order_by(Ticket.updated_at.desc()).offset((page - 1) * size).limit(size))
         .all()
     )
-    return TicketListResp(items=[_item(t) for t in rows], total=total)
+    # UI 审查低19：批量取关联会话主题（避免 N+1），列表页"主题"列展示
+    session_ids = {t.session_id for t in rows}
+    title_map: dict[uuid.UUID, str | None] = {}
+    if session_ids:
+        for s in db.scalars(select(Session).where(Session.id.in_(session_ids))).all():
+            title_map[s.id] = s.title
+    items = []
+    for t in rows:
+        item = _item(t)
+        item.session_title = title_map.get(t.session_id)
+        items.append(item)
+    return TicketListResp(items=items, total=total)
 
 
 @router.get("/{ticket_id}", response_model=TicketItem)

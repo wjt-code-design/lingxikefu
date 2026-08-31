@@ -11,9 +11,11 @@ import type {
   UserListResp,
 } from '@/contracts/api';
 
-/** GET /admin/users → UserListResp */
-export async function listUsers(page = 1, size = 20): Promise<UserListResp> {
-  const r = await http.get<UserListResp>('/admin/users', { params: { page, size } });
+/** GET /admin/users → UserListResp（keyword 搜邮箱/手机号，UI 审查中7） */
+export async function listUsers(page = 1, size = 20, keyword?: string): Promise<UserListResp> {
+  const r = await http.get<UserListResp>('/admin/users', {
+    params: { page, size, keyword: keyword || undefined },
+  });
   return r.data;
 }
 

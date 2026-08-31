@@ -77,6 +77,33 @@ def test_list_tickets_status_filter(client):
     assert r2.json()["total"] == 0
 
 
+def test_list_tickets_keyword_search(client):
+    """UI 审查中6：keyword 搜工单号/会话号（uuid 去横线归一化，8 位短号前缀可命中）。"""
+    t0 = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h()).json()
+    tid = t0["ticket_id"]
+    # 完整工单号（dashed）可命中
+    r1 = client.get(f"{API}/tickets?keyword={tid}", headers=_agent_h())
+    assert r1.status_code == 200 and r1.json()["total"] == 1
+    # 列表页展示的 8 位短号（dashed uuid 前 8 位 == 纯 hex 前 8 位）可命中
+    r2 = client.get(f"{API}/tickets?keyword={tid.replace('-', '')[:8]}", headers=_agent_h())
+    assert r2.json()["total"] == 1
+    # 会话号前缀可命中
+    r3 = client.get(f"{API}/tickets?keyword={str(SID).replace('-', '')[:12]}", headers=_agent_h())
+    assert r3.json()["total"] == 1
+    # 不命中
+    r4 = client.get(f"{API}/tickets?keyword=ffffffff", headers=_agent_h())
+    assert r4.json()["total"] == 0
+
+
+def test_list_tickets_returns_session_title(client):
+    """UI 审查低19：列表项携带关联会话主题（批量 join，无 N+1）。"""
+    client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h())
+    r = client.get(f"{API}/tickets", headers=_agent_h())
+    items = r.json()["items"]
+    assert len(items) == 1
+    assert items[0]["session_title"] is None  # fixture 会话无标题 → null（前端展示 —）
+
+
 def test_status_transition_valid_and_invalid(client):
     """合法迁移 open→processing→resolved→closed；非法迁移（open→resolved 直接跳）拒绝。"""
     t0 = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h()).json()

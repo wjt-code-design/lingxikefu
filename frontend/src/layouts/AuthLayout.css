@@ -150,6 +150,20 @@
   color: var(--color-brand-dark);
   text-decoration: underline;
 }
+/* UI 审查低15：死链改 Button type="link" 后的行内按钮样式（去按钮默认留白，继承文字节奏） */
+.auth-card__extra .auth-card__link,
+.auth-card__terms .auth-card__link {
+  padding: 0;
+  height: auto;
+  font-size: inherit;
+  line-height: inherit;
+  color: var(--color-brand-dark);
+}
+.auth-card__extra .auth-card__link:hover,
+.auth-card__terms .auth-card__link:hover {
+  color: var(--color-brand-dark);
+  text-decoration: underline;
+}
 .auth-card__terms {
   color: var(--text-3);
   font-size: 13px;

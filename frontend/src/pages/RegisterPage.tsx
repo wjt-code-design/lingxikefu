@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { MouseEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Alert, Button, Checkbox, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
@@ -45,12 +44,11 @@ export function RegisterPage() {
   };
 
   // 占位提示：条款/政策文档页尚未上线，不实现实际跳转
-  const openTerms = (e: MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
+  // UI 审查低15：href="#" 死链语义 → Button type="link"（真按钮语义，可聚焦可键盘操作）
+  const openTerms = () => {
     message.info('《服务条款》即将上线，敬请期待');
   };
-  const openPrivacy = (e: MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
+  const openPrivacy = () => {
     message.info('《隐私政策》即将上线，敬请期待');
   };
 
@@ -71,7 +69,8 @@ export function RegisterPage() {
             { type: 'email', message: '邮箱格式不正确' },
           ]}
         >
-          <Input size="large" placeholder="you@example.com" autoComplete="email" />
+          {/* UI 审查低14：type="email" —— 移动端弹邮箱键盘 + 原生表单语义 */}
+          <Input size="large" type="email" placeholder="you@example.com" autoComplete="email" />
         </Form.Item>
         <Form.Item name="phone" label="手机号（可选）">
           <Input size="large" placeholder="手机号" autoComplete="tel" />
@@ -97,13 +96,13 @@ export function RegisterPage() {
             className="auth-card__terms"
           >
             我已阅读并同意
-            <a href="#" onClick={openTerms}>
+            <Button type="link" onClick={openTerms} className="auth-card__link">
               《服务条款》
-            </a>
+            </Button>
             和
-            <a href="#" onClick={openPrivacy}>
+            <Button type="link" onClick={openPrivacy} className="auth-card__link">
               《隐私政策》
-            </a>
+            </Button>
           </Checkbox>
         </Form.Item>
         {error && (

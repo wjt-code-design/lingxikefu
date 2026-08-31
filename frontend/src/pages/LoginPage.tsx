@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import type { MouseEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
@@ -47,8 +46,8 @@ export function LoginPage() {
   };
 
   // 占位提示：后端暂无密码重置流程，不实现实际跳转
-  const onForgotPassword = (e: MouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
+  // UI 审查低15：href="#" 死链语义 → Button type="link"（真按钮语义）
+  const onForgotPassword = () => {
     message.info('密码重置功能开发中，敬请期待');
   };
 
@@ -76,9 +75,9 @@ export function LoginPage() {
           <Input.Password size="large" placeholder="密码" autoComplete="current-password" />
         </Form.Item>
         <div className="auth-card__extra">
-          <a href="#" onClick={onForgotPassword}>
+          <Button type="link" onClick={onForgotPassword} className="auth-card__link">
             忘记密码？
-          </a>
+          </Button>
         </div>
         <Form.Item style={{ marginBottom: 8 }}>
           <Button type="primary" htmlType="submit" size="large" block loading={loading}>

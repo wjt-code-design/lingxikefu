@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Select, Space, Tag, Typography, message } from 'antd';
+import { Input, Select, Space, Tag, Typography, message } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { AppTable } from '@/components/common/AppTable';
 import { listUsers, updateUserRole } from '@/api/admin';
@@ -26,10 +27,21 @@ const ROLE_OPTIONS = [
  */
 export function UsersPage() {
   const [page, setPage] = useState(1);
+  // UI 审查中7：keyword 搜邮箱/手机号（300ms 防抖，服务端过滤）
+  const [keyword, setKeyword] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedKeyword(keyword.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
 
   const { data, isFetching } = useQuery({
-    queryKey: ['admin-users', page],
-    queryFn: () => listUsers(page, 20),
+    queryKey: ['admin-users', page, debouncedKeyword],
+    queryFn: () => listUsers(page, 20, debouncedKeyword || undefined),
     placeholderData: (prev) => prev, // 翻页保留旧数据（骨架过渡）
   });
 
@@ -78,6 +90,14 @@ export function UsersPage() {
     <div className="page users-page page-atmo">
       <div className="users-page__header">
         <Typography.Title level={3}>用户管理</Typography.Title>
+        <Input
+          allowClear
+          prefix={<SearchOutlined />}
+          placeholder="搜邮箱 / 手机号"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          style={{ width: 240, marginTop: 8 }}
+        />
       </div>
       <AppTable<UserItem>
         rowKey="user_id"

@@ -172,6 +172,8 @@ export interface TicketItem {
   // AI 预起草（架构二期 1）：low risk handoff 建单后后台草拟的回复；draft_kind "ai"=AI 预起草
   draft_suggestion?: string | null;
   draft_kind?: string | null;
+  /** UI 审查低19：关联会话主题（仅列表端点填充） */
+  session_title?: string | null;
   // 逐状态流转时间戳（一期 4 补发；closed 无独立列，用 updated_at）
   processing_at?: string | null;
   resolved_at?: string | null;

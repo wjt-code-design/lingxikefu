@@ -100,7 +100,7 @@ const FALLBACK_MENUS: Record<Role, string[]> = {
     '/agent/customers',
     '/agent/kb-search',
   ],
-  user: ['/chat', '/tickets', '/faq', '/help'],
+  user: ['/chat', '/tickets', '/faq'], // 低20：/help 已重定向 /faq，不再单列
 };
 
 /**

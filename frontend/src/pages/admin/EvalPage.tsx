@@ -24,13 +24,15 @@ interface EvalLatestResp {
 }
 
 const METRIC_LABELS: Record<string, string> = {
+  qa: '回答正确率',
   faithfulness: '忠实度',
   recall: '召回率',
   citation: '引用合法率',
   refuse: '诚实拒答率',
   refuse_qa: '误拒答率',
-  handoff: '转人工率',
+  handoff: '转人工命中率',
   chitchat: '闲聊引导率',
+  honesty: '诚实题召回率',
 };
 
 function scoreColor(score: number): string {
@@ -168,7 +170,8 @@ export function EvalPage() {
 
       {/* 操作区 */}
       <div className="eval-actions">
-        <Space>
+        {/* UI 审查低21：默认 8px 间距偏挤，放宽到 12px */}
+        <Space size={12}>
           <Tooltip title="全量 100 题，faithfulness + recall 双阶段，耗时约 35 分钟起；仅全量结果计入发布门禁">
             <Button
               type="primary"

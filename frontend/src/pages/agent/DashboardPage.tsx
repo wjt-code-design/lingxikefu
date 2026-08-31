@@ -174,13 +174,14 @@ export function DashboardPage() {
       ) : (
         <>
           <div className="dash-kpis">
-            <KpiCard label="待办工单" value={stats.todo} caption="open + processing" accent="warning" />
+            {/* UI 审查中8：KPI 副文案去中英混杂、口径说明化 */}
+            <KpiCard label="待办工单" value={stats.todo} caption="待处理 + 处理中" accent="warning" />
             <KpiCard label="处理中" value={stats.processing} accent="brand" />
             <KpiCard label="已解决" value={stats.resolved} accent="success" />
             <KpiCard
               label="今日会话"
               value={todaySessions}
-              caption={`最近 ${sessions.length} 条会话`}
+              caption={`统计自最近 ${sessions.length} 条会话`}
               accent="brand"
             />
           </div>

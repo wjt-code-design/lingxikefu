@@ -37,7 +37,8 @@ ROLE_DEFS: list[RoleDef] = [
     RoleDef(
         role="user",
         name="用户",
-        menus=["/chat", "/tickets", "/faq", "/help"],
+        # UI 审查低20：/help 已重定向 /faq，菜单不再单列（避免出现两个"帮助中心"）
+        menus=["/chat", "/tickets", "/faq"],
         scope="user_self",
     ),
 ]

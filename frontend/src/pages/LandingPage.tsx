@@ -96,7 +96,8 @@ export function LandingPage() {
                 desc: '售后问题不用等，深夜也有人答',
               },
             ].map((f) => (
-              <Col xs={24} sm={8} key={f.title}>
+              // UI 审查低17：md 起三列——窄视口（586px 等）不再三卡并排挤成 3 行
+              <Col xs={24} md={8} key={f.title}>
                 <Card className="landing__feature">
                   <div className="landing__feature-icon">{f.icon}</div>
                   <Typography.Title level={5}>{f.title}</Typography.Title>

@@ -1,11 +1,16 @@
 import { http } from './client';
 import { type StatusUpdateReq, type TicketItem, type TicketListResp, type TicketStatus } from '@/contracts/api';
 
-/** 工单列表（agent/admin；status 可选过滤） */
-export function listTickets(status?: TicketStatus, page = 1, size = 20): Promise<TicketListResp> {
+/** 工单列表（agent/admin；status 可选过滤；keyword 搜工单号/会话号，UI 审查中6） */
+export function listTickets(
+  status?: TicketStatus,
+  page = 1,
+  size = 20,
+  keyword?: string
+): Promise<TicketListResp> {
   return http
     .get<TicketListResp>('/tickets', {
-      params: { status: status ?? undefined, page, size },
+      params: { status: status ?? undefined, page, size, keyword: keyword || undefined },
     })
     .then((r) => r.data);
 }

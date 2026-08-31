@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Select, Space, Typography, message } from 'antd';
+import { Input, Select, Space, Typography, message } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag, TICKET_STATUS_TEXT as STATUS_TEXT } from '@/components/common/AppTable';
@@ -33,11 +34,22 @@ export function TicketsPage() {
   const navigate = useNavigate();
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<TicketStatus | undefined>(undefined);
+  // UI 审查中6：keyword 搜工单号/会话号（300ms 防抖，服务端过滤）
+  const [keyword, setKeyword] = useState('');
+  const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedKeyword(keyword.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [keyword]);
+
   const { data, isFetching } = useQuery({
-    queryKey: ['tickets', status, page],
-    queryFn: () => listTickets(status, page, 20),
+    queryKey: ['tickets', status, page, debouncedKeyword],
+    queryFn: () => listTickets(status, page, 20, debouncedKeyword || undefined),
     placeholderData: (prev) => prev,
   });
 
@@ -65,6 +77,17 @@ export function TicketsPage() {
       dataIndex: 'ticket_id',
       width: 120,
       render: (v: string) => <Typography.Text code>{v.slice(0, 8)}</Typography.Text>,
+    },
+    {
+      title: '主题',
+      dataIndex: 'session_title',
+      ellipsis: true,
+      render: (v: string | undefined | null) =>
+        v ? (
+          <Typography.Text ellipsis={{ tooltip: v }}>{v}</Typography.Text>
+        ) : (
+          <Typography.Text type="secondary">—</Typography.Text>
+        ),
     },
     {
       title: '状态',
@@ -106,19 +129,33 @@ export function TicketsPage() {
 
   return (
     <div className="agent-tickets page-atmo">
-      <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          工单列表
-        </Typography.Title>
-        <Select<TicketStatus | undefined>
-          style={{ width: 140 }}
-          value={status}
-          onChange={(v) => {
-            setStatus(v);
-            setPage(1);
-          }}
-          options={STATUS_OPTIONS}
-        />
+      <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }} wrap>
+        <Space align="center" wrap>
+          <Typography.Title level={3} style={{ margin: 0 }}>
+            工单列表
+          </Typography.Title>
+          {/* UI 审查中6：列表按 updated_at 倒序，展示列却是创建时间——口径提示消除"排序不一致"观感 */}
+          <Typography.Text type="secondary">按最近更新排序</Typography.Text>
+        </Space>
+        <Space wrap>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="搜工单号 / 会话号"
+            value={keyword}
+            onChange={(e) => setKeyword(e.target.value)}
+            style={{ width: 200 }}
+          />
+          <Select<TicketStatus | ''>
+            style={{ width: 130 }}
+            value={status ?? ''}
+            onChange={(v) => {
+              setStatus(v || undefined);
+              setPage(1);
+            }}
+            options={STATUS_OPTIONS}
+          />
+        </Space>
       </Space>
       <AppTable<TicketItem>
         rowKey="ticket_id"

@@ -1,5 +1,6 @@
 .faq__quick-start {
-  margin-bottom: var(--space-8);
+  /* UI 审查低13：与后续区块垂直节奏对齐（原 space-8 明显大于其他区块间距） */
+  margin-bottom: var(--space-6);
   padding: var(--space-6);
   background: linear-gradient(135deg, rgba(83, 159, 216, 0.05) 0%, rgba(83, 159, 216, 0.02) 100%);
   border: 1px solid var(--border);

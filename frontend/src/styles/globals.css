@@ -319,9 +319,10 @@ body {
 .kpi-card__caption {
   font-size: 12px;
   color: var(--text-4);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  /* UI 审查中3：允许换行，窄卡下不再省略号截断（"近 14 天 140 …"） */
+  white-space: normal;
+  overflow: visible;
+  min-width: 0;
   margin-top: 8px;
 }
 .kpi-card__foot {
@@ -1100,16 +1101,22 @@ body {
 .chat-msg__text h1,
 .chat-msg__text h2,
 .chat-msg__text h3 {
-  margin: 4px 0 3px;
-  padding: 4px 10px;
+  margin: 8px 0 4px;
+  padding: 0 0 0 7px;
   font-size: 13px;
-  font-weight: 600;
-  line-height: 1.35;
-  text-align: center;
-  background: var(--color-brand-soft, rgba(83,159,216,0.12));
-  border-bottom: 2px solid var(--color-brand, #539FD8);
-  border-radius: 8px;
+  font-weight: 650;
+  line-height: 1.4;
+  text-align: left;
+  color: var(--text-1);
+  /* UI 审查中4：渐变横条似按钮不可点 → 降级为左竖线小节标题（层级收敛，不再喧宾夺主） */
+  background: none;
+  border-bottom: none;
+  border-radius: 0;
+  border-left: 3px solid var(--color-brand, #539FD8);
   white-space: normal;
+}
+.chat-msg__text h1 {
+  font-size: 14px;
 }
 /* GFM 表格（remark-gfm）：发丝线 + 表头浅底 + 隔行微色 */
 .chat-msg__text table {
@@ -1526,6 +1533,8 @@ body > textarea[style*="visibility:hidden"] {
   min-height: 0;
   overflow-y: auto;
   padding-right: 2px;
+  /* UI 审查中9：滚动区底部留呼吸位，末项不再贴/叠 footer */
+  padding-bottom: 6px;
 }
 .wb-session-group {
   margin-bottom: 12px;
@@ -1546,7 +1555,11 @@ body > textarea[style*="visibility:hidden"] {
   flex-shrink: 0;
   display: flex;
   justify-content: center;
-  padding-top: 6px;
+  /* UI 审查中9：与滚动列表做视觉分隔，不再叠压最后一项 */
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 8px;
+  background: var(--color-surface);
 }
 .wb-history-footer button {
   font-size: 12px;
@@ -2045,6 +2058,10 @@ body > textarea[style*="visibility:hidden"] {
   padding: 14px 20px 6px !important;
   margin: 0 !important;
   font-weight: 500 !important;
+}
+/* UI 审查低17：侧栏折叠（64px）时分组标题塞不下被截成"我…/客…/运…"——整行隐藏 */
+.admin-layout__sider.ant-layout-sider-collapsed .side-nav .ant-menu-item-group-title {
+  display: none;
 }
 .app-workbench .admin-layout__main {
   background: var(--bg-page); /* 浅冷灰 #F2F5F8（tokens.css 覆盖） */
@@ -2923,7 +2940,9 @@ body > textarea[style*="visibility:hidden"] {
 /* task 9：首屏快捷问题场景化卡片（图标 + 标题 + 描述） */
 .chat-container__hot {
   display: grid;
-  grid-template-columns: repeat(auto-fit, 220px);
+  /* UI 审查低18：min(220px,100%) —— 窄视口下单列撑满（不再约 300px 居中两侧大留白），
+     宽视口维持 220px 起步的多列自动排布 */
+  grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
   justify-content: center;
   gap: 10px;
   width: 100%;

@@ -349,10 +349,10 @@ export function FaqPage() {
         <div className="faq__cats" role="tablist" aria-label="问题分类">
           <button
             type="button"
-            className={`faq__cat ${activeCat === 'all' && !query ? 'is-active' : ''}`}
+            className={`faq__cat ${activeCat === 'all' || !!query.trim() ? 'is-active' : ''}`}
             onClick={() => handleCatChange('all')}
             role="tab"
-            aria-selected={activeCat === 'all' && !query}
+            aria-selected={activeCat === 'all' || !!query.trim()}
           >
             全部
           </button>

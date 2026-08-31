@@ -10,7 +10,7 @@ from uuid import UUID
 import sqlalchemy as sa
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import require_admin
@@ -44,16 +44,21 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 def list_users(
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
+    keyword: str | None = Query(None, max_length=100, description="邮箱/手机号模糊搜索"),
     _: dict = Depends(require_admin),
     db: OrmSession = Depends(get_db),
 ) -> UserListResp:
-    """分页列出租户内用户（account 取 email/phone 兜底）。"""
+    """分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。"""
     tenant = settings.TENANT_DEFAULT
-    total = db.scalar(select(func.count(User.id)).where(User.tenant_id == tenant)) or 0
+    cond = [User.tenant_id == tenant]
+    if keyword:
+        kw = f"%{keyword.strip()}%"
+        cond.append(or_(User.email.ilike(kw), User.phone.ilike(kw)))
+    total = db.scalar(select(func.count(User.id)).where(*cond)) or 0
     rows = (
         db.scalars(
             select(User)
-            .where(User.tenant_id == tenant)
+            .where(*cond)
             .order_by(User.created_at.desc())
             .offset((page - 1) * size)
             .limit(size)

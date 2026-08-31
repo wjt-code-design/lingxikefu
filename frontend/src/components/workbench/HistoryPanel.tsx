@@ -135,17 +135,20 @@ export function HistoryPanel() {
     if (!searchQuery.trim()) return sessions.items;
     const q = searchQuery.toLowerCase();
     return sessions.items.filter((s) => {
-      const title = (isStaff ? customerOf(s) : s.title) || '';
-      return title.toLowerCase().includes(q);
+      // UI 审查中9：标题与客户标识都可搜（staff 视角此前只搜邮箱）
+      const title = (s.title || '').toLowerCase();
+      const customer = customerOf(s).toLowerCase();
+      return title.includes(q) || customer.includes(q);
     });
-  }, [sessions, searchQuery, isStaff]);
+  }, [sessions, searchQuery]);
 
   const sessionGroups = useMemo(() => groupByDate(filteredSessions), [filteredSessions]);
   const recentGroups = useMemo(() => capGroups(sessionGroups, RECENT_LIMIT), [sessionGroups]);
 
   const renderSessionRow = (s: SessionItem, keyPrefix: string) => {
-    const title = isStaff ? customerOf(s) : (s.title || '新对话');
-    const avatar = (isStaff ? customerOf(s)?.[0] : s.title?.[0] || '客').toUpperCase();
+    // UI 审查中9：会话标题优先（内容摘要，辨识度高），无标题时 staff 回落客户标识、用户回落"新对话"
+    const title = s.title || (isStaff ? customerOf(s) : '新对话');
+    const avatar = (title[0] || '客').toUpperCase();
     return (
       <SessionRow
         key={`${keyPrefix}${s.id}`}

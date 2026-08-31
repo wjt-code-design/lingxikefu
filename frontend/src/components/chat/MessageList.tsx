@@ -56,6 +56,9 @@ export function MessageList({
 
   useEffect(() => {
     if (!stickToBottom.current) return;
+    // UI 审查中10：欢迎页（无消息且非流式）不自动滚底——endRef 在欢迎块之后，
+    // mount 即 scrollIntoView 会把欢迎语滚出视口（586px 窄视口最明显）。
+    if (messages.length === 0 && !isStreaming) return;
     // C6：rAF 节流合并同一帧内多次滚动 —— 高速吐字时避免 smooth 动画排队抖动；
     // 流式中用 auto 即时定位（逐 token 不排队），非流式（新消息/历史加载）保留 smooth 平滑体验。
     const raf = requestAnimationFrame(() => {
