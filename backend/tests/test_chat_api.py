@@ -367,6 +367,77 @@ def test_chat_stream_error_event_refunds_quota(client, monkeypatch):
         assert [m.role for m in msgs] == [MessageRole.user]
 
 
+def test_chat_quota_redis_calls_off_event_loop(client, monkeypatch):
+    """C1（bughunt-concurrency Critical-1）：chat 热路径同步 Redis 调用必须搬出事件循环线程。
+
+    quota.try_consume（请求入口，每请求必经）与 quota.refund（finally 退款路径）
+    内部是同步 Redis 调用；若在事件循环线程直接执行，Redis 挂起（非宕机）会
+    冻结整个事件循环——所有并发请求堆积，服务整体不可用。
+
+    探测手段：asyncio.get_running_loop() 在事件循环线程内成功返回、在
+    run_in_threadpool 的 worker 线程内抛 RuntimeError。断言两次调用均不在
+    事件循环线程执行。
+    """
+    import asyncio
+
+    tc, Local, _calls = client
+
+    seen: dict[str, bool | None] = {"try_consume": None, "refund": None}
+
+    class ProbedQuota:
+        """记录 try_consume / refund 执行线程是否为事件循环线程。"""
+
+        def try_consume(self, *_a, **_k):
+            try:
+                asyncio.get_running_loop()
+                seen["try_consume"] = True  # 事件循环线程执行（红态：可冻结全服务）
+            except RuntimeError:
+                seen["try_consume"] = False  # worker 线程（绿态）
+            return (True, 0)
+
+        def refund(self, *_a, **_k):
+            try:
+                asyncio.get_running_loop()
+                seen["refund"] = True
+            except RuntimeError:
+                seen["refund"] = False
+            return 0
+
+    class _ErrorStream:
+        """yield error 事件触发 finally 退款路径（对齐 rag_service 真实序列）。"""
+
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
+
+    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: ProbedQuota())
+
+    # 成功流：探测 try_consume
+    monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert seen["try_consume"] is False, (
+        "quota.try_consume 在事件循环线程执行（同步 Redis 挂起将冻结整个服务）"
+    )
+
+    # error 流：探测 finally 中的 refund
+    monkeypatch.setattr("app.api.chat.stream_answer", _ErrorStream())
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    assert '"event": "error"' in r.text
+    assert seen["refund"] is False, (
+        "quota.refund 在事件循环线程执行（同步 Redis 挂起将冻结整个服务）"
+    )
+
+
 def test_chat_stream_foreign_session_404(client):
     tc, *_ = client
     # 他人 session（user 不同，表中不存在）

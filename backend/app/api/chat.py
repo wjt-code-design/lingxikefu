@@ -214,8 +214,9 @@ async def chat_stream(
     # 2) 配额原子扣减闸门（M2：try_consume 修复 TOCTOU，fail-closed 超额拒答）
     #    R2：client_msg_id 作幂等键 —— 断连重试同一请求不重复扣费
     #    P4：超额统一走 HTTP 429（不再 HTTP200+SSE error 双面不一致——客户端语义应看状态码）
+    #    C1：try_consume 内是同步 Redis，必须搬出事件循环线程（否则 Redis 挂起冻结全服务）
     quota = get_quota_service()
-    allowed, _ = quota.try_consume(str(user_id), 1, idem_key=req.client_msg_id)
+    allowed, _ = await run_in_threadpool(quota.try_consume, str(user_id), 1, req.client_msg_id)
     if not allowed:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "今日问答额度已用完")
 
@@ -236,7 +237,7 @@ async def chat_stream(
         s.updated_at = datetime.now(UTC)
         db.commit()
     except Exception:
-        quota.refund(str(user_id), 1, req.client_msg_id)
+        await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)
         raise
 
     kb_id = await run_in_threadpool(_latest_kb_id, db)
@@ -265,10 +266,10 @@ async def chat_stream(
         # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
         if await request.is_disconnected():
             logger.info("chat stream aborted: client disconnected (pre)")
-            quota.refund(str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额，不白扣
+            await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)  # R2：断连回滚配额，不白扣
             return
         if kb_id is None:
-            quota.refund(str(user_id), 1, req.client_msg_id)  # R2：无知识库未生成 → 不扣费
+            await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)  # R2：无知识库未生成 → 不扣费
             yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
             return
 
@@ -551,7 +552,7 @@ async def chat_stream(
             # S1：未交付出口统一退款（error 事件/断连/异常），单一收口防泄漏也防双退；
             # done 已置 consumed=False（交付成立不退）。quota.refund 内部幂等标记再兜底一层。
             if consumed:
-                quota.refund(str(user_id), 1, req.client_msg_id)
+                await run_in_threadpool(quota.refund, str(user_id), 1, req.client_msg_id)
                 consumed = False
             # P2-2：Agent 降级排水——正常结束/断连/异常全路径统一计数 + 结构化日志
             # （防静默改路径：降级率从此可统计、可告警）
