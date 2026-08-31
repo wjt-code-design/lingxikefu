@@ -184,6 +184,21 @@ def _update_conv_state_locked(db: OrmSession, session_id: uuid.UUID, message: st
     return new_state
 
 
+def _mark_clarifying_locked(db: OrmSession, session_id: uuid.UUID) -> dict:
+    """M7（bughunt-concurrency）：clarify 回写走行锁重读——与 _update_conv_state_locked
+    同款纪律。旧实现用请求视角的内存快照整 blob 覆盖：同会话并发请求在流式期间
+    写入的槽位/主题被旧快照覆盖丢失（clarify_count 也基于旧快照多算）。
+    单请求内因 SQLAlchemy 身份映射（locked is s）行为不变。
+    """
+    locked = db.scalar(select(Session).where(Session.id == session_id).with_for_update())
+    if locked is None:
+        raise RuntimeError(f"session not found: {session_id}")
+    new_state = conversation_state.mark_clarifying(locked.conv_state)
+    locked.conv_state = new_state
+    db.commit()
+    return new_state
+
+
 @router.post("/stream")
 async def chat_stream(
     req: ChatStreamReq,
@@ -267,96 +282,120 @@ async def chat_stream(
         set_trace_id(trace_id)
         # S1（外部审查 2026-08-28）：配额已在上方原子扣减（R2 扣费在生成前），gen 一旦开始
         # 执行即「已扣费未交付」。consumed=True 表示配额仍被持有：未成功交付（done）的任何
-        # 出口（error 事件/断连/异常）都由下方 finally 统一退款；done 分支在 assistant 落库
+        # 出口（error 事件/断连/异常）都由 finally 统一退款；done 分支在 assistant 落库
         # 成功后置 False（计费成立，不再退）。此前 error 事件只转发不退款——用户额度被静默侵蚀。
+        # M6（bughunt-concurrency）：try/finally 包住整个 gen 体——此前退款 finally 只护住
+        # 内层 try（LLM 生成段），_fetch_history/Router/ImageAgent 等早期异常直接冒泡
+        # （已扣费无退款无 error 事件）；现在退款+降级排水是真正的单一收口。
         consumed = True
-        # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
-        if await request.is_disconnected():
-            logger.info("chat stream aborted: client disconnected (pre)")
-            # R2：断连回滚配额，不白扣（token 校验归属）
-            await run_in_threadpool(
-                quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-            )
-            return
-        if kb_id is None:
-            # R2：无知识库未生成 → 不扣费（token 校验归属）
-            await run_in_threadpool(
-                quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-            )
-            yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
-            return
-
-        # 组装历史（最近 6 条，供 RAG 上下文；不含当前问题）
-        history = await _fetch_history(db, session_id, user_msg.id)
-
-        # 批次B：会话状态机——读旧状态 → 消息推进 → 写回 + 生成 prompt 提示（fail-open：
-        # 任何异常降级为无状态，问答照常；conv_state=None 的旧会话按 new_state 处理）
-        conv_state = None  # 批次C：try 前初始化——except 降级后仍需读 clarify_count
+        ctx: SharedContext | None = None
+        prepared = False  # M6：前置段（历史/状态机/Router/ImageAgent/订单工具）完成标志
         try:
-            # P2-⑥：行锁读改写（防止并发丢更新）——helper 内重读最新行并提交
-            conv_state = await run_in_threadpool(_update_conv_state_locked, db, session_id, req.content)
-            state_hint = conversation_state.to_prompt_hint(conv_state)
-        except Exception:  # noqa: BLE001 - fail-open
-            logger.exception("conv_state 更新失败（降级无状态，问答照常）")
-            db.rollback()
-            state_hint = None
+            # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
+            if await request.is_disconnected():
+                logger.info("chat stream aborted: client disconnected (pre)")
+                # R2：断连回滚配额，不白扣（token 校验归属）
+                await run_in_threadpool(
+                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+                )
+                consumed = False  # 本路径已显式退款，外层 finally 不再重复退
+                return
+            if kb_id is None:
+                # R2：无知识库未生成 → 不扣费（token 校验归属）
+                await run_in_threadpool(
+                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+                )
+                consumed = False  # 同上：显式退款后置位，防外层 finally 双退
+                yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
+                return
 
-        # 批次C：澄清额度 = MAX_CLARIFY - 已用次数（conv_state 为 None 视为 0 已用）
-        clarify_left = max(
-            0, conversation_state.MAX_CLARIFY - (conv_state or {}).get("clarify_count", 0)
-        )
+            # 组装历史（最近 6 条，供 RAG 上下文；不含当前问题）
+            history = await _fetch_history(db, session_id, user_msg.id)
 
-        # v1.1 Router 前置编排（方案书 §2.1）：前置意图分类（单一真源，规则式零 LLM）
-        # + 决定执行计划（agents_invoked）。非阻塞关键词匹配，无需搬线程池。
-        ctx = SharedContext(
-            query=req.content,
-            kb_id=kb_id,
-            kb_version=kb_version,
-            user_id=str(user_id),
-            session_id=session_id,
-            message_id=user_msg.id,
-            history=history,
-            db=db,  # 请求级会话：Ticket Agent 建单复用（同事务语义）
-            image_paths=req.image_paths,  # v1.3 图片理解
-            trace_id=trace_id,  # P0-1：请求级 trace_id 贯通 Router/各 Agent
-            # 架构一期 4：移交摘要随 ctx 下发（Ticket Agent 建单时持久化进 tickets.summary）。
-            # 取材 = history + 当前消息：_fetch_history 排除当前 user_msg，而触发移交的
-            # 当前消息恰是坐席最需要的诉求（单轮移交 history 为空时摘要仍可打包）。
-            # conv_state 用上方行锁读改写的最新值（fail-open 为 None，build 容错）。
-            handoff_summary=build_handoff_summary(
-                [*history, {"role": "user", "content": req.content}], conv_state
-            ),
-            # 架构二期 1（L2 预起草）：handoff 风险判别（low=知识型可 AI 预起草改道，
-            # high=显式人工/投诉/情绪不可改道）。入参 = 当前消息 + 行锁读改写的最新
-            # conv_state（fail-open 为 None，判别容错按无主题=high 处理）。
-            handoff_risk=classify_handoff_risk(req.content, conv_state),
-        )
-        ctx = agent_router.route(ctx)
-
-        # v1.3 图片理解：如果 Router 决定调用 Image Agent 且有图片，则执行图片理解
-        if IMAGE_AGENT in ctx.agents_invoked and ctx.image_paths:
-            ctx = await image_agent.run(ctx)
-
-        # 批次D：订单工具分支——槽位有订单号 + 订单类主题 → 查单模板回答（零 LLM，
-        # 事实型查询不冒幻觉）；查不到/异常回落 RAG（fail-open，不阻断）
-        order_info = None
-        # P0-2：经注册表取工具描述（元数据 + 执行函数），不再直接依赖具体模块
-        order_tool_desc = TOOL_REGISTRY.get("order_query")
-        _order_slot = (conv_state or {}).get("slots", {}).get(conversation_state.SLOT_ORDER_NO)
-        if _order_slot and order_tool_desc and (conv_state or {}).get("topic") in order_tool_desc.topics:
+            # 批次B：会话状态机——读旧状态 → 消息推进 → 写回 + 生成 prompt 提示（fail-open：
+            # 任何异常降级为无状态，问答照常；conv_state=None 的旧会话按 new_state 处理）
+            conv_state = None  # 批次C：try 前初始化——except 降级后仍需读 clarify_count
             try:
-                order_info = await run_in_threadpool(order_tool_desc.executor, _order_slot)
-            except Exception:  # noqa: BLE001 - 工具异常回落 RAG
-                logger.exception("订单工具查询失败（回落 RAG）")
-                order_info = None
+                # P2-⑥：行锁读改写（防止并发丢更新）——helper 内重读最新行并提交
+                conv_state = await run_in_threadpool(_update_conv_state_locked, db, session_id, req.content)
+                state_hint = conversation_state.to_prompt_hint(conv_state)
+            except Exception:  # noqa: BLE001 - fail-open
+                logger.exception("conv_state 更新失败（降级无状态，问答照常）")
+                db.rollback()
+                state_hint = None
 
-        assistant_parts: list[str] = []
-        source_payloads: list[dict] = []
-        intent = "qa"  # R-2：默认 qa，收到 intent 事件后用真实判定
-        ticket_id: str | None = None  # T1：handoff 建单结果（fail-open，None=未建/失败）
-        first_token_ms: float | None = None  # R-3：首字时延埋点（毫秒）
-        cache_hit = False  # T10：缓存命中标记（落库 meta + 跳过回填）
-        t0 = time.monotonic()
+            # 批次C：澄清额度 = MAX_CLARIFY - 已用次数（conv_state 为 None 视为 0 已用）
+            clarify_left = max(
+                0, conversation_state.MAX_CLARIFY - (conv_state or {}).get("clarify_count", 0)
+            )
+
+            # v1.1 Router 前置编排（方案书 §2.1）：前置意图分类（单一真源，规则式零 LLM）
+            # + 决定执行计划（agents_invoked）。非阻塞关键词匹配，无需搬线程池。
+            ctx = SharedContext(
+                query=req.content,
+                kb_id=kb_id,
+                kb_version=kb_version,
+                user_id=str(user_id),
+                session_id=session_id,
+                message_id=user_msg.id,
+                history=history,
+                db=db,  # 请求级会话：Ticket Agent 建单复用（同事务语义）
+                image_paths=req.image_paths,  # v1.3 图片理解
+                trace_id=trace_id,  # P0-1：请求级 trace_id 贯通 Router/各 Agent
+                # 架构一期 4：移交摘要随 ctx 下发（Ticket Agent 建单时持久化进 tickets.summary）。
+                # 取材 = history + 当前消息：_fetch_history 排除当前 user_msg，而触发移交的
+                # 当前消息恰是坐席最需要的诉求（单轮移交 history 为空时摘要仍可打包）。
+                # conv_state 用上方行锁读改写的最新值（fail-open 为 None，build 容错）。
+                handoff_summary=build_handoff_summary(
+                    [*history, {"role": "user", "content": req.content}], conv_state
+                ),
+                # 架构二期 1（L2 预起草）：handoff 风险判别（low=知识型可 AI 预起草改道，
+                # high=显式人工/投诉/情绪不可改道）。入参 = 当前消息 + 行锁读改写的最新
+                # conv_state（fail-open 为 None，判别容错按无主题=high 处理）。
+                handoff_risk=classify_handoff_risk(req.content, conv_state),
+            )
+            ctx = agent_router.route(ctx)
+
+            # v1.3 图片理解：如果 Router 决定调用 Image Agent 且有图片，则执行图片理解
+            if IMAGE_AGENT in ctx.agents_invoked and ctx.image_paths:
+                ctx = await image_agent.run(ctx)
+
+            # 批次D：订单工具分支——槽位有订单号 + 订单类主题 → 查单模板回答（零 LLM，
+            # 事实型查询不冒幻觉）；查不到/异常回落 RAG（fail-open，不阻断）
+            order_info = None
+            # P0-2：经注册表取工具描述（元数据 + 执行函数），不再直接依赖具体模块
+            order_tool_desc = TOOL_REGISTRY.get("order_query")
+            _order_slot = (conv_state or {}).get("slots", {}).get(conversation_state.SLOT_ORDER_NO)
+            if _order_slot and order_tool_desc and (conv_state or {}).get("topic") in order_tool_desc.topics:
+                try:
+                    order_info = await run_in_threadpool(order_tool_desc.executor, _order_slot)
+                except Exception:  # noqa: BLE001 - 工具异常回落 RAG
+                    logger.exception("订单工具查询失败（回落 RAG）")
+                    order_info = None
+
+            assistant_parts: list[str] = []
+            source_payloads: list[dict] = []
+            intent = "qa"  # R-2：默认 qa，收到 intent 事件后用真实判定
+            ticket_id: str | None = None  # T1：handoff 建单结果（fail-open，None=未建/失败）
+            first_token_ms: float | None = None  # R-3：首字时延埋点（毫秒）
+            cache_hit = False  # T10：缓存命中标记（落库 meta + 跳过回填）
+            t0 = time.monotonic()
+            prepared = True  # M6：前置段全部完成（此行未达 = 异常/提前 return）
+
+        finally:
+            # M6 收口：前置段异常冒泡时（prepared=False 且 consumed=True）退款——
+            # 此前退款 finally 只护 LLM 生成段，前置段异常已扣费但无退款无 error 事件。
+            # 前置段正常结束（prepared=True）不在此退，由内层段 finally 统一收口。
+            # 断连/无 KB 路径已显式退款并置 consumed=False，此处跳过（防双退）。
+            if consumed and not prepared:
+                await run_in_threadpool(
+                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+                )
+                consumed = False
+            # 前置段异常时 ctx 可能已构建（Router 记录的降级需排水）；正常路径由
+            # 内层段 finally 排水（drain 不幂等，双调用会双计数，此处条件化防重复）
+            if not prepared and ctx is not None:
+                drain_degraded(ctx.degraded, trace_id=trace_id)
         try:
             # BUG-09：RAG/LLM 生成前再确认连接（检索可能耗时数秒）
             if await request.is_disconnected():
@@ -475,8 +514,9 @@ async def chat_stream(
                     # 大扫查修复：转移逻辑收归 conversation_state.mark_clarifying（单一真源）
                     if data.get("clarify"):
                         try:
-                            s.conv_state = conversation_state.mark_clarifying(s.conv_state)
-                            await run_in_threadpool(db.commit)
+                            # M7（bughunt-concurrency）：行锁重读合并——旧实现用请求视角
+                            # 快照整 blob 覆盖，并发请求刚写入的槽位/主题丢失
+                            await run_in_threadpool(_mark_clarifying_locked, db, session_id)
                         except Exception:  # noqa: BLE001 - fail-open
                             logger.exception("clarify 状态写回失败（不影响响应）")
                             db.rollback()

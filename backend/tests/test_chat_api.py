@@ -439,6 +439,81 @@ def test_chat_quota_redis_calls_off_event_loop(client, monkeypatch):
     )
 
 
+def test_chat_stream_early_failure_refunds_quota(client, monkeypatch):
+    """M6（bughunt-concurrency）：gen 内层 try 之前的异常 → 已扣费必须退款。
+
+    _fetch_history / agent_router.route / image_agent.run 等位于退款 finally
+    所属的 try 之前：此处异常从 gen 直接冒泡，finally 永不进入 → 配额白扣
+    + 会话留无回复消息。修复：外层 try/finally 包住整个 gen 体，退款与
+    降级排水成为真正的「单一收口」。
+    """
+    tc, Local, calls = client
+
+    async def _boom(*_a, **_k):
+        raise RuntimeError("db glitch")
+
+    monkeypatch.setattr("app.api.chat._fetch_history", _boom)
+    monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
+
+    try:
+        tc.post(
+            f"{API}/chat/stream",
+            json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
+            headers=_headers(),
+        )
+        # 旧实现：流中断无退款；新实现：退款后流中断（两者响应形态都可接受）
+    except Exception:  # noqa: BLE001 - 流式响应中途断开在测试客户端表现为异常
+        pass
+    assert calls["consumed"] == 0, (
+        f"gen 早期异常未退款（consumed={calls['consumed']}）——配额被静默侵蚀"
+    )
+    # user 消息已落库（扣费在落库后），不断言库态
+
+
+def test_chat_clarify_writeback_row_lock(client, monkeypatch):
+    """M7（bughunt-concurrency）：clarify 回写必须走行锁重读，防并发丢更新。
+
+    同会话并发：请求 B 在请求 A 流式期间写入了新 conv_state（新槽位/主题）；
+    A 流到 done 用自己的旧快照 mark_clarifying 整 blob 覆盖 → B 的槽位丢失。
+    修复：回写前 with_for_update 重读最新行再合并。
+    """
+    tc, Local, calls = client
+    monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
+
+    import uuid as _uuid
+
+    sid = "11111111-1111-1111-1111-111111111111"
+
+    # 请求 A 携带 clarify 的 done；并发写库发生在 A 流式期间（复现旧快照竞态）
+    class _ClarifyStream:
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            yield ("intent", {"intent": "qa"})
+            # 模拟并发请求 B：在 A 流式期间写入带新槽位的 conv_state（独立会话绕过 A 的身份映射）
+            with Local() as db2:
+                row = db2.get(Session, _uuid.UUID(sid))
+                row.conv_state = {"topic": "订单", "slots": {"order_no": "SO999"}, "clarify_count": 0}
+                db2.commit()
+            yield ("token", {"delta": "请补充订单号"})
+            yield ("sources", {"sources": []})
+            yield ("done", {"message_id": "", "clarify": True})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _ClarifyStream())
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": sid, "content": "退款什么时候到", "stream": True},
+        headers=_headers(),
+    )
+    assert r.status_code == 200
+    with Local() as db3:
+        row = db3.get(Session, _uuid.UUID(sid))
+        state = row.conv_state or {}
+        assert state.get("stage") == "clarifying", f"clarify 状态未写回：{state}"
+        assert state.get("slots", {}).get("order_no") == "SO999", (
+            f"并发写入的槽位被旧快照覆盖丢失：{state}"
+        )
+
+
 def test_chat_stream_foreign_session_404(client):
     tc, *_ = client
     # 他人 session（user 不同，表中不存在）
