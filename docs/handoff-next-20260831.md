@@ -1,6 +1,7 @@
 # 工作交接文档：灵犀智能客服系统（2026-08-31）
 
 > 交接对象：接手本项目的 AI 助手。本文档假设你零上下文——所有路径/命令/状态截至 2026-08-31，master @ `0575c14`，CI #71 绿。
+> （勘误 2026-08-31 日终：HEAD 此后已推进——`b16766f` 交接文档、`9f5ec1f` C1/M8 修复；下同。）
 
 ---
 
@@ -12,12 +13,12 @@
 
 ## 二、当前状态（全部已核实）
 
-- **仓库**：master @ `0575c14`，工作区干净，与 origin 同步，CI #70/#71 连续绿。
-- **测试**：679 passed / 8 skipped / 0 failed（8 skip = PG 密码认证 5 + reportlab 缺失 2 + 既有标记 1，均为环境因素）。
+- **仓库**：master @ `0575c14`，工作区干净，与 origin 同步，CI #70/#71 连续绿。（勘误 2026-08-31：HEAD 已推进至 `9f5ec1f`，见文档头部勘误。）
+- **测试**：679 passed / 8 skipped / 0 failed（8 skip = PG 密码认证 5 + reportlab 缺失 2 + 既有标记 1，均为环境因素）。（勘误 2026-08-31：679 为**收集总量**非 passed；按 8 skip 口径 passed = 671。）
 - **ruff**：0.16.4，零 error（扫 `app tests alembic scripts`）。
 - **迁移**：最新 head = 0020（alembic 对称已验证）。
 - **契约**：`generate_openapi.py` + `check_contracts.py` PASS 无新增漂移。
-- **评测基线（CI 全量 100 题权威口径）**：qa 93.8% / refuse 8/8 = 100% / citation 97.9%，PASS（LongCat 充值后实测，存档 `eval-and-samples/results/longcat-refill-verify-20260830.json`）。
+- **评测基线（CI 全量 100 题权威口径）**：qa 93.8% / refuse 8/8 = 100% / citation 97.9%，PASS（LongCat 充值后实测，存档 `eval-and-samples/results/longcat-refill-verify-20260830.json`）。（勘误 2026-08-31：该实测 qa 为 **76/79 = 96.2%**；93.8% 是 08-28 基线 run1 的 76/81，此处系张冠李戴。）
 
 ## 三、两天已完成的工作（08-29/30）
 
@@ -32,7 +33,7 @@
 4. **批次 H**（4 任务）：订单号 Unicode 边界修复（贴汉字单号 6 消费方修复）、配额双检+connect_timeout、语义缓存同义否定极大类归并、观测性打包
 5. **门禁 v2**（3 任务）：chunk 级 visible staged 通道 + 回填脚本对账、batch 状态机+抽样快检+翻转发布/回滚（0020）、观测列表端点
 6. **批次 I**：数据期决策门槛文档 + 周检查清单 + 四期立项说明
-7. **深度扫查**（08-31）：并发/状态/降级 + 死代码 + 口径交叉核数，无 Critical/Major 炸雷
+7. **深度扫查**（08-31）：并发/状态/降级 + 死代码 + 口径交叉核数（勘误 2026-08-31：并发扫查实际发现 **Critical 1 / Major 8 / Minor 8**，见 `docs/bughunt-concurrency-20260830.md`——C1/M8 已于 08-31 修复，其余挂账）
 
 ### 累计
 
