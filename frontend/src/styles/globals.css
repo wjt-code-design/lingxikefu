@@ -2275,6 +2275,32 @@ body > textarea[style*="visibility:hidden"] {
   background: var(--color-brand-deep);
   border-color: var(--color-brand-deep);
 }
+/* a11y C批：widget 域（/faq /widget）主按钮同族品牌蓝对比度不足，同法域内覆盖 */
+.widget-shell .ant-btn-primary {
+  background: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+}
+.widget-shell .ant-btn-primary:not(:disabled):hover,
+.widget-shell .ant-btn-primary:not(:disabled):active,
+.widget-shell .ant-btn-primary:not(:disabled):focus-visible {
+  background: var(--color-brand-deep);
+  border-color: var(--color-brand-deep);
+}
+/* a11y C批：用户侧意见反馈页——次要文案/字数统计 2.33:1 → text-3（4.77:1 AA），主按钮同族 */
+.user-feedback-page .ant-typography-secondary,
+.user-feedback-page .ant-input-data-count {
+  color: var(--text-3) !important;
+}
+.user-feedback-page .ant-btn-primary:not(:disabled) {
+  background: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+}
+.user-feedback-page .ant-btn-primary:not(:disabled):hover,
+.user-feedback-page .ant-btn-primary:not(:disabled):active,
+.user-feedback-page .ant-btn-primary:not(:disabled):focus-visible {
+  background: var(--color-brand-deep);
+  border-color: var(--color-brand-deep);
+}
 .landing__bg {
   position: absolute;
   inset: 0;
@@ -2470,7 +2496,8 @@ body > textarea[style*="visibility:hidden"] {
 
 .preview-msg--user {
   align-self: flex-end;
-  background: var(--color-brand);
+  /* a11y（axe 实测）：品牌蓝 #539fd8 白字 2.86:1 —— 加深至 brand-dark 4.95:1（auth/landing 同族修法） */
+  background: var(--color-brand-dark);
   color: white;
   border-bottom-right-radius: 4px;
 }

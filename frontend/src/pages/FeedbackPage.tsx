@@ -33,7 +33,7 @@ export default function FeedbackPage() {
   };
 
   return (
-    <div className="page" style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px' }}>
+    <div className="page user-feedback-page" style={{ maxWidth: 720, margin: '0 auto', padding: '24px 16px' }}>
       <Button
         type="text"
         icon={<ArrowLeftOutlined />}

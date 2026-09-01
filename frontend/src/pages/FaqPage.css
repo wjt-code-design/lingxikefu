@@ -123,7 +123,8 @@
   border-radius: var(--radius-md);
   background: var(--color-brand-soft);
   border: 1px solid var(--border);
-  color: var(--color-brand-dark);
+  /* a11y（axe 实测）：brand-dark on brand-soft(白底) ≈4.4:1 未达 AA，加深至 brand-deep */
+  color: var(--color-brand-deep);
   font-size: 13px;
   line-height: 1.6;
 }
@@ -195,7 +196,8 @@
 .faq__cat.is-active {
   background: var(--color-brand-soft);
   border-color: var(--color-brand);
-  color: var(--color-brand-dark);
+  /* a11y：同 faq__notice，brand-soft 底上 brand-dark 未达 AA，加深至 brand-deep */
+  color: var(--color-brand-deep);
   font-weight: 600;
 }
 .faq__cat-icon {
