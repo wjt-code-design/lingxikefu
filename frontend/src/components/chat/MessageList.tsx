@@ -10,6 +10,7 @@ import { StageIndicator } from './StageIndicator';
 export interface StreamView {
   stage: ChatStage;
   tokens: string;
+  reasoning?: string; // 思维链累积（开思考时先于 tokens 到达，"思考中"气泡展示）
   error?: { code: string; message: string };
 }
 
@@ -68,7 +69,7 @@ export function MessageList({
       });
     });
     return () => cancelAnimationFrame(raf);
-  }, [messages.length, stream?.tokens.length, isStreaming]);
+  }, [messages.length, stream?.tokens.length, stream?.reasoning?.length, isStreaming]);
 
   // 历史消息折叠：默认只显示最近 8 条，超过则折叠
   const RECENT_COUNT = 8;
@@ -152,6 +153,17 @@ export function MessageList({
           </div>
           <div className="chat-msg__bubble">
             <StageIndicator stage={stream.stage as 'retrieving' | 'generating'} />
+            {/* 思维链气泡（感知 TTFT）：reasoning 先于内容到达（~2s），滚动展示"思考中"；
+                有内容输出后自动收起为一行摘要，不干扰正文阅读。不落历史（finalize 不保留）。 */}
+            {stream.reasoning && !stream.tokens && (
+              <div className="chat-msg__reasoning" aria-live="polite">
+                <div className="chat-msg__reasoning-head">
+                  <span className="chat-msg__reasoning-dot" aria-hidden="true" />
+                  思考中…
+                </div>
+                <div className="chat-msg__reasoning-body">{stream.reasoning.slice(-160)}</div>
+              </div>
+            )}
             {stream.tokens && (
               <MarkdownContent
                 content={stream.tokens}

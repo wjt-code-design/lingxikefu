@@ -28,6 +28,12 @@ class FakeChat:
     def __init__(self):
         self.calls = []
 
+    async def stream_events(self, messages, model=None, **kw):
+        """思维链透传契约：rag_service 现消费 stream_events（reasoning/content 分型）。"""
+        self.calls.append((messages, model))
+        for c in "你好":
+            yield ("content", c)
+
     async def stream(self, messages, model=None, **kw):
         self.calls.append((messages, model))
         for c in "你好":

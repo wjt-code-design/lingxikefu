@@ -10,6 +10,7 @@ export type ChatStage = 'idle' | 'retrieving' | 'generating' | 'done' | 'error';
 export interface ChatStreamState {
   stage: ChatStage;
   tokens: string;
+  reasoning: string; // 思维链累积（开思考时先于 tokens 到达；仅流式过程展示，finalize 不落历史）
   sources: MessageSource[];
   messageId?: string;
   userMessageId?: string; // R2/C4：本次提问的后端真 id（done 回传，本地消息 id 对齐用）
@@ -19,7 +20,7 @@ export interface ChatStreamState {
   error?: { code: string; message: string };
 }
 
-const INITIAL: ChatStreamState = { stage: 'idle', tokens: '', sources: [] };
+const INITIAL: ChatStreamState = { stage: 'idle', tokens: '', reasoning: '', sources: [] };
 
 /**
  * 流式兜底超时（L8）。
@@ -38,6 +39,9 @@ function applyEvent(state: ChatStreamState, ev: SSEEvent): ChatStreamState {
       return state;
     case 'token':
       return { ...state, tokens: state.tokens + ev.data.delta };
+    case 'reasoning':
+      // 思维链增量：累积供"思考中"气泡展示（先于 token 到达，用户感知首反馈）
+      return { ...state, reasoning: state.reasoning + ev.data.delta };
     case 'sources':
       return { ...state, sources: ev.data.sources };
     case 'done':
@@ -91,7 +95,7 @@ export function useChatStream() {
     const token = useAuthStore.getState().token;
 
     const base = import.meta.env.VITE_API_BASE || API_PREFIX;
-    setState({ stage: 'retrieving', tokens: '', sources: [] });
+    setState({ stage: 'retrieving', tokens: '', reasoning: '', sources: [] });
     // 兜底超时：超时则中止 fetch 并转超时错误（区分于用户主动 reset 的静默中止）
     let timedOut = false;
     const timer = setTimeout(() => {

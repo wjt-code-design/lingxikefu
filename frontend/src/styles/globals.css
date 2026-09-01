@@ -998,6 +998,53 @@ main h1.ant-typography {
   border-top-left-radius: 4px;
 }
 
+/* ---------- 思维链气泡（感知 TTFT：开思考时 reasoning 先于内容 ~2s 到达） ---------- */
+/* a11y C批沿用 text-3（4.77:1 AA）：思考内容为次要信息，弱化但不失对比度 */
+.chat-msg__reasoning {
+  margin: 2px 0 8px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--color-brand-soft, #f0f7fd);
+  border: 1px dashed var(--border);
+  max-height: 132px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.chat-msg__reasoning-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  margin-bottom: 4px;
+}
+.chat-msg__reasoning-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--color-brand);
+  animation: chat-reasoning-pulse 1.2s ease-in-out infinite;
+}
+@keyframes chat-reasoning-pulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.1); }
+}
+.chat-msg__reasoning-body {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-3);
+  overflow: hidden;
+  word-break: break-word;
+}
+/* 弱动效偏好：不播放脉冲动画（a11y prefers-reduced-motion） */
+@media (prefers-reduced-motion: reduce) {
+  .chat-msg__reasoning-dot {
+    animation: none;
+  }
+}
+
 /* ---------- 人工客服消息气泡（P2：role='agent'） ---------- */
 /* self 视角下 agent 是"对面的客服"——和 AI 一样居左，但用客服色系区分 */
 .chat-msg--agent {

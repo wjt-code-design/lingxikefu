@@ -279,8 +279,13 @@ async def stream_answer(
         )
         client = get_chat_client()
         # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（唯一 provider longcat，模型名单一真源）
-        async for delta in client.stream(messages):
-            yield ("token", {"delta": delta})
+        # 思维链透传（感知 TTFT）：reasoning 先于 content 到达（~2s），Chat 层转发前端展示
+        # "思考中"；reasoning 不进缓存/不落库，仅作为流式过程反馈。
+        async for kind, delta in client.stream_events(messages):
+            if kind == "reasoning":
+                yield ("reasoning", {"delta": delta})
+            else:
+                yield ("token", {"delta": delta})
         yield ("sources", {"sources": _to_sources(result.chunks)})
         # Chat 层回填答案缓存时复用该 key；避免在 done 分支再次执行 rewrite。
         # 这是内部流事件字段，Chat 只向前端转发自己的 done 数据，因而不扩展 SSE 契约。

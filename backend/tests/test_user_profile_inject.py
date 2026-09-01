@@ -86,6 +86,12 @@ def patch(monkeypatch):
         def __init__(self):
             self.calls = []
 
+        async def stream_events(self, messages, model=None, **kw):  # type: ignore[no-untyped-def]
+            # 思维链透传契约：rag_service 消费 stream_events（reasoning/content 分型）
+            self.calls.append(messages)
+            captured["messages"] = messages
+            yield ("content", "好")
+
         async def stream(self, messages, model=None, **kw):  # type: ignore[no-untyped-def]
             self.calls.append(messages)
             captured["messages"] = messages

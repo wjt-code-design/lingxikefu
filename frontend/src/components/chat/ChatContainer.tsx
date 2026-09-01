@@ -164,7 +164,7 @@ export function ChatContainer({
   /** 点击 AI 回复 → 右栏溯源面板切换（点哪条看哪条；answerSource 透出选中消息的快捷话术标记） */
   onSelectMessage?: (msgId: string, sources: MessageSource[], answerSource?: string) => void;
 }) {
-  const { stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, stop, stream } = useChatStream();
+  const { stage, tokens, reasoning, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, stop, stream } = useChatStream();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   // P3-⑫：会话 ref（每 render 同步）——历史加载/建议等在途回调用它做 stale 守卫
@@ -690,7 +690,7 @@ export function ChatContainer({
         )}
         <MessageList
           messages={messages}
-          stream={{ stage, tokens, error }}
+          stream={{ stage, tokens, reasoning, error }}
           layout={chatLayout}
           onRate={onRate}
           selectedMsgId={selectedMsgId}

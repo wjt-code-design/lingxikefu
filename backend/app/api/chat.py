@@ -85,7 +85,7 @@ class ChatStreamReq(BaseModel):
 
 
 #: SSE 事件名白名单（C2：与前端 contracts/api.ts SSEEvent union 对齐，防事件名漂移）
-_SSE_EVENTS = frozenset({"stage", "intent", "token", "sources", "done", "error"})
+_SSE_EVENTS = frozenset({"stage", "intent", "reasoning", "token", "sources", "done", "error"})
 
 
 def _sse(data: dict) -> str:
@@ -495,6 +495,10 @@ async def chat_stream(
                         ticket_id = ctx.ticket_id
                 elif event == "stage":
                     yield _sse({"event": "stage", "data": data})
+                elif event == "reasoning":
+                    # 思维链透传（感知 TTFT）：只转发给前端展示"思考中"，不落库、
+                    # 不计 first_token_ms（该指标语义=内容首字，保持口径可比）。
+                    yield _sse({"event": "reasoning", "data": data})
                 elif event == "token":
                     if first_token_ms is None:
                         first_token_ms = round((time.monotonic() - t0) * 1000, 1)

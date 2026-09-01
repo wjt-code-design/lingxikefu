@@ -69,6 +69,44 @@ describe('useChatStream 停止生成（H3）', () => {
   });
 });
 
+describe('useChatStream 思维链透传（感知 TTFT）', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('reasoning 事件累积、先于 token 展示', async () => {
+    const pending: string[] = [
+      'data: {"event":"stage","data":{"stage":"generating"}}\n\n',
+      'data: {"event":"reasoning","data":{"delta":"用户问退货政策"}}\n\n',
+      'data: {"event":"reasoning","data":{"delta":"，资料有条款"}}\n\n',
+      'data: {"event":"token","data":{"delta":"退货政策如下"}}\n\n',
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: () =>
+                Promise.resolve(
+                  pending.length > 0
+                    ? { done: false, value: new TextEncoder().encode(pending.shift()!) }
+                    : { done: true, value: undefined }
+                ),
+            }),
+          },
+        })
+      )
+    );
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '退货' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.reasoning).toBe('用户问退货政策，资料有条款');
+    expect(result.current.tokens).toBe('退货政策如下');
+  });
+});
+
 describe('useChatStream SSE 401 续期重试（B2）', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
