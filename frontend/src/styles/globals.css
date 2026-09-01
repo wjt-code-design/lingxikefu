@@ -2257,6 +2257,18 @@ body > textarea[style*="visibility:hidden"] {
   overflow: hidden;
   padding: 64px 24px 40px;
 }
+/* a11y（axe 实测）：落地页主按钮白字 on 品牌蓝 #539fd8 仅 2.86:1 —— 与 auth 域同族修法
+   （AuthLayout.css ②），主按钮改用达标的 brand-dark（4.95:1），hover/active 加深至 brand-deep */
+.landing .ant-btn-primary {
+  background: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+}
+.landing .ant-btn-primary:not(:disabled):hover,
+.landing .ant-btn-primary:not(:disabled):active,
+.landing .ant-btn-primary:not(:disabled):focus-visible {
+  background: var(--color-brand-deep);
+  border-color: var(--color-brand-deep);
+}
 .landing__bg {
   position: absolute;
   inset: 0;

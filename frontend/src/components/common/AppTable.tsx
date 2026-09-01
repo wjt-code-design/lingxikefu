@@ -1,6 +1,7 @@
 import { Table, Tag } from 'antd';
 import type { TableProps } from 'antd';
 import type { ReactNode } from 'react';
+import { useEffect, useRef } from 'react';
 import { TableSkeleton } from './Skeleton';
 
 /**
@@ -15,30 +16,45 @@ export function AppTable<T extends object>(props: TableProps<T>) {
   const { rowClassName, pagination, loading, columns, ...rest } = props;
   const colCount = columns?.length ?? 4;
   const isLoading = !!loading;
+  const scopeRef = useRef<HTMLDivElement>(null);
+
+  // axe scrollable-region-focusable：antd 内部滚动体（.ant-table-body）无法透传 tabIndex，
+  // 渲染后对实际可滚动的滚动体补 tabindex=0（键盘可达）；不可滚动时移除避免噪音。
+  useEffect(() => {
+    const root = scopeRef.current;
+    if (!root) return;
+    root.querySelectorAll<HTMLElement>('.ant-table-body').forEach((el) => {
+      const scrollable = el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight;
+      if (scrollable) el.tabIndex = 0;
+      else el.removeAttribute('tabindex');
+    });
+  });
 
   return (
-    <Table<T>
-      columns={columns}
-      size="middle"
-      sticky={{ offsetHeader: 0 }}
-      scroll={{ x: 'max-content' }}
-      rowClassName={(record, index, indent) => {
-        const custom =
-          typeof rowClassName === 'function' ? rowClassName(record, index, indent) : rowClassName;
-        return ['app-table-row', custom].filter(Boolean).join(' ');
-      }}
-      pagination={{ showSizeChanger: false, ...pagination }}
-      loading={false /* 用自定义骨架替代 AntD 默认 Spin */}
-      locale={{
-        ...rest.locale,
-        emptyText: isLoading ? (
-          <TableSkeleton rows={6} columns={colCount} />
-        ) : (
-          rest.locale?.emptyText
-        ),
-      }}
-      {...rest}
-    />
+    <div ref={scopeRef}>
+      <Table<T>
+        columns={columns}
+        size="middle"
+        sticky={{ offsetHeader: 0 }}
+        scroll={{ x: 'max-content' }}
+        rowClassName={(record, index, indent) => {
+          const custom =
+            typeof rowClassName === 'function' ? rowClassName(record, index, indent) : rowClassName;
+          return ['app-table-row', custom].filter(Boolean).join(' ');
+        }}
+        pagination={{ showSizeChanger: false, ...pagination }}
+        loading={false /* 用自定义骨架替代 AntD 默认 Spin */}
+        locale={{
+          ...rest.locale,
+          emptyText: isLoading ? (
+            <TableSkeleton rows={6} columns={colCount} />
+          ) : (
+            rest.locale?.emptyText
+          ),
+        }}
+        {...rest}
+      />
+    </div>
   );
 }
 

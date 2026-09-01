@@ -151,6 +151,7 @@ export function LogsPage() {
             <Select
               className="logs-filter__select"
               placeholder="全部动作"
+              aria-label="按动作筛选"
               allowClear
               value={action}
               onChange={setAction}

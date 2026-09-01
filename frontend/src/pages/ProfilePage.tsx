@@ -72,6 +72,7 @@ export function ProfilePage() {
         {quotaTotal ? (
           <Progress
             percent={quotaPercent}
+            aria-label={`对话额度已使用 ${quotaPercent}%`}
             strokeColor={quotaPercent > 50 ? '#4DA07F' : quotaPercent > 20 ? '#E0A86A' : '#D97A7A'}
             trailColor="var(--border)"
             showInfo={false}

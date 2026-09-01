@@ -50,8 +50,10 @@ export default function FeedbackPage() {
 
       <Card>
         <Form form={form} layout="vertical" onFinish={onFinish}>
+          {/* role=radiogroup：antd 仅在该 div 注入 aria-required，补 role 后属性才合法（axe aria-allowed-attr）。
+              antd RadioGroupProps 类型未声明 role，走 spread 透传（运行时落在根 div 上） */}
           <Form.Item name="type" label="反馈类型" initialValue="suggestion" rules={[{ required: true }]}>
-            <Radio.Group>
+            <Radio.Group {...({ role: 'radiogroup' } as const)}>
               <Radio.Button value="bug">问题反馈</Radio.Button>
               <Radio.Button value="suggestion">功能建议</Radio.Button>
               <Radio.Button value="other">其他</Radio.Button>
