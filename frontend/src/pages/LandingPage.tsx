@@ -49,7 +49,8 @@ export function LandingPage() {
         <div className="landing__glow landing__glow--3" />
       </div>
 
-      <div className="landing__content">
+      {/* a11y：内容主体语义化为 main（id 供全局 skip-link 跳转；region 违规随内容入 landmark 消除） */}
+      <main id="main-content" className="landing__content">
         <section className="landing__hero">
           <div className="landing__badge">灵犀 · 智能客服</div>
           <Typography.Title className="landing__title">
@@ -113,7 +114,7 @@ export function LandingPage() {
           <span>© 2026 灵犀</span>
           <Link to="/faq">帮助中心</Link>
         </footer>
-      </div>
+      </main>
     </div>
   );
 }

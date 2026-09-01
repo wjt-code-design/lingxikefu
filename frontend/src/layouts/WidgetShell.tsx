@@ -51,9 +51,10 @@ export function WidgetShell() {
           <UserMenu />
         </Space>
       </div>
-      <div className="widget-shell__body" id="main-content">
+      {/* a11y：内容主体语义化为 main（落地/FAQ/挂件共用外壳；id 供全局 skip-link 跳转） */}
+      <main className="widget-shell__body" id="main-content">
         <Outlet />
-      </div>
+      </main>
     </div>
   );
 }

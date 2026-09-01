@@ -208,8 +208,8 @@ export function KnowledgePage() {
       <Typography.Title level={1}>知识库管理</Typography.Title>
 
       <div className="kb-layout page-atmo">
-        {/* 左侧：知识库树形导航 */}
-        <aside className="kb-sidebar">
+        {/* 左侧：知识库树形导航（a11y：aria-label 与主导航 aside 区分，消 landmark-unique） */}
+        <aside className="kb-sidebar" aria-label="知识库分类导航">
           <div className="kb-sidebar__header">
             <span className="kb-sidebar__title">知识库</span>
             <Button

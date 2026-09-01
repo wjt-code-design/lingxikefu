@@ -52,7 +52,8 @@ export function WorkbenchLayout() {
     <div className="wb">
       {/* A+：默认满宽对话（仅全局导航占侧栏）；历史/溯源收起为抽屉，对话区拿到最大宽度 */}
       <div className="wb-grid">
-        <main className="wb-col wb-col--main">
+        {/* a11y：外层 AdminLayout Content 已是 main（#main-content），此处降级为 section 避免重复 main landmark */}
+        <section className="wb-col wb-col--main" aria-label="对话窗口">
           <div className="wb-chat-toolbar">
             <Button type="text" icon={<CommentOutlined />} onClick={() => setPanel('history')}>
               历史会话
@@ -68,7 +69,7 @@ export function WorkbenchLayout() {
             selectedMsgId={selectedMsgId}
             onSelectMessage={onSelectMessage}
           />
-        </main>
+        </section>
       </div>
 
       {/* 抽屉：历史左滑、溯源右滑（桌面/移动一致） */}

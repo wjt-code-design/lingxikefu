@@ -57,6 +57,7 @@ export function AdminLayout() {
         collapsedWidth={64}
         width={220}
         className="admin-layout__sider"
+        aria-label="主导航侧栏"
       >
         <div className="admin-layout__logo">灵犀</div>
         <SideNav />
