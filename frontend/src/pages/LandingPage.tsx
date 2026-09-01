@@ -101,7 +101,8 @@ export function LandingPage() {
               <Col xs={24} md={8} key={f.title}>
                 <Card className="landing__feature">
                   <div className="landing__feature-icon">{f.icon}</div>
-                  <Typography.Title level={5}>{f.title}</Typography.Title>
+                  {/* a11y：level 2（视觉字号由 CSS pin）——h1 下 h5 跳级 axe heading-order */}
+                  <Typography.Title level={2} className="landing__feature-title">{f.title}</Typography.Title>
                   <Typography.Text type="secondary">{f.desc}</Typography.Text>
                 </Card>
               </Col>

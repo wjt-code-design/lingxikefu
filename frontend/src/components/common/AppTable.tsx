@@ -20,14 +20,28 @@ export function AppTable<T extends object>(props: TableProps<T>) {
 
   // axe scrollable-region-focusable：antd 内部滚动体（.ant-table-body）无法透传 tabIndex，
   // 渲染后对实际可滚动的滚动体补 tabindex=0（键盘可达）；不可滚动时移除避免噪音。
+  // axe empty-table-header：antd 滚动占位 th（.ant-table-cell-scrollbar）无表头语义，
+  // 降级为 presentation 并移出无障碍树（仅 aria-hidden 不够，表格算法仍见 th）。
+  // 数据到达 / 列宽测量会使 rc-table 重建表头节点，故用 MutationObserver 重放，
+  // 仅观察 childList（自身属性变更不触发，避免回环）。
   useEffect(() => {
     const root = scopeRef.current;
     if (!root) return;
-    root.querySelectorAll<HTMLElement>('.ant-table-body').forEach((el) => {
-      const scrollable = el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight;
-      if (scrollable) el.tabIndex = 0;
-      else el.removeAttribute('tabindex');
-    });
+    const apply = () => {
+      root.querySelectorAll<HTMLElement>('.ant-table-body').forEach((el) => {
+        const scrollable = el.scrollWidth > el.clientWidth || el.scrollHeight > el.clientHeight;
+        if (scrollable) el.tabIndex = 0;
+        else el.removeAttribute('tabindex');
+      });
+      root.querySelectorAll<HTMLElement>('.ant-table-cell-scrollbar').forEach((el) => {
+        el.setAttribute('role', 'presentation');
+        el.setAttribute('aria-hidden', 'true');
+      });
+    };
+    apply();
+    const mo = new MutationObserver(apply);
+    mo.observe(root, { childList: true, subtree: true });
+    return () => mo.disconnect();
   });
 
   return (

@@ -42,6 +42,15 @@
   background: var(--color-brand-soft);
 }
 
+/* a11y：替代 List.Item.Meta 的行内容排版（Meta title 硬编码 h4 造成标题跳级） */
+.feedback-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
 /* 评语区：amber 浅底，区分正文 */
 .feedback-comment {
   display: inline-block;

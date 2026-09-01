@@ -43,7 +43,8 @@ export default function FeedbackPage() {
         返回
       </Button>
 
-      <Title level={2} style={{ marginBottom: 8 }}>意见反馈</Title>
+      {/* a11y：页面主标题语义 h1（axe page-has-heading-one），视觉保持 24px */}
+      <Title level={1} style={{ marginBottom: 8, fontSize: 24 }}>意见反馈</Title>
       <Text type="secondary" style={{ display: 'block', marginBottom: 24 }}>
         您的建议能帮助我们改进产品，所有反馈都会被认真对待
       </Text>

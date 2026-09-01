@@ -149,7 +149,8 @@ export function DashboardPage() {
           <div className="dash-grid">
             <section className="dash-card">
               <header className="dash-card__head">
-                <Typography.Title level={5} className="dash-card__title">
+                {/* a11y：level 2（视觉字号由 .dash-card__title pin 14px）——h1 下 h5 跳级 axe heading-order */}
+                <Typography.Title level={2} className="dash-card__title">
                   待办工单
                 </Typography.Title>
                 <span className="dash-card__count">—</span>
@@ -189,7 +190,7 @@ export function DashboardPage() {
           <div className="dash-grid">
             <section className="dash-card">
               <header className="dash-card__head">
-                <Typography.Title level={5} className="dash-card__title">
+                <Typography.Title level={2} className="dash-card__title">
                   待办工单
                 </Typography.Title>
                 <span className="dash-card__count">{todoTickets.length}</span>

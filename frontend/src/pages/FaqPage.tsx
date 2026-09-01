@@ -288,7 +288,8 @@ export function FaqPage() {
         <section className="faq__quick-start">
           <div className="faq__quick-start-head">
             <RocketOutlined className="faq__quick-start-icon" />
-            <Typography.Title level={4} className="faq__quick-start-title">快速开始</Typography.Title>
+            {/* a11y：level 2（视觉字号由 .faq__quick-start-title pin）——避免 h4 早于 h1 且跳级 */}
+            <Typography.Title level={2} className="faq__quick-start-title">快速开始</Typography.Title>
           </div>
           <div className="faq__quick-start-steps">
             <div className="faq__quick-step">
@@ -411,13 +412,14 @@ export function FaqPage() {
           /* 分类态：按当前分类分组展示 */
           visibleCats.map((cat) => (
             <section key={cat.key} className="faq__section" aria-labelledby={`faq-sec-${cat.key}`}>
-              <h3 id={`faq-sec-${cat.key}`} className="faq__section-title">
+              {/* a11y：h2（视觉字号由 .faq__section-title pin）——h1 下 h3 跳级 axe heading-order */}
+              <h2 id={`faq-sec-${cat.key}`} className="faq__section-title">
                 <span className="faq__section-icon" aria-hidden="true">
                   {cat.icon}
                 </span>
                 {cat.name}
                 <span className="faq__section-count">{cat.items.length}</span>
-              </h3>
+              </h2>
               <div className="faq__list">
                 {cat.items.map((item, idx) => {
                   const id = `${cat.key}::${idx}`;

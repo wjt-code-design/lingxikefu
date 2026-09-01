@@ -53,29 +53,24 @@ export function FeedbackPage() {
             renderItem={(s) => {
               const meta = SUGGESTION_META[s.type] ?? SUGGESTION_META.other;
               return (
+                /* a11y：不用 List.Item.Meta（其 title 硬编码 h4，h1 下跳级 axe heading-order），自定义行内容 */
                 <List.Item key={s.id}>
-                  <List.Item.Meta
-                    title={
-                      <Space size={8} wrap>
-                        <Tag color={meta.color}>{meta.text}</Tag>
-                        <Typography.Text type="secondary">
-                          {s.user_account || '未知用户'} · {new Date(s.created_at).toLocaleString('zh-CN')}
-                        </Typography.Text>
-                      </Space>
-                    }
-                    description={
-                      <>
-                        <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 3 }}>
-                          {s.content}
-                        </Typography.Paragraph>
-                        {s.contact ? (
-                          <span className="feedback-comment">
-                            <Typography.Text type="secondary">联系方式：{s.contact}</Typography.Text>
-                          </span>
-                        ) : null}
-                      </>
-                    }
-                  />
+                  <div className="feedback-item">
+                    <Space size={8} wrap>
+                      <Tag color={meta.color}>{meta.text}</Tag>
+                      <Typography.Text type="secondary">
+                        {s.user_account || '未知用户'} · {new Date(s.created_at).toLocaleString('zh-CN')}
+                      </Typography.Text>
+                    </Space>
+                    <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 3 }}>
+                      {s.content}
+                    </Typography.Paragraph>
+                    {s.contact ? (
+                      <span className="feedback-comment">
+                        <Typography.Text type="secondary">联系方式：{s.contact}</Typography.Text>
+                      </span>
+                    ) : null}
+                  </div>
                 </List.Item>
               );
             }}
@@ -97,33 +92,28 @@ export function FeedbackPage() {
             size="small"
             dataSource={items}
             renderItem={(f, i) => (
+              /* a11y：同上，避免 List.Item.Meta 的硬编码 h4 */
               <List.Item key={i}>
-                <List.Item.Meta
-                  title={
-                    <Space size={8}>
-                      <Tag color={f.role === 'user' ? 'blue' : 'green'}>
-                        {f.role === 'user' ? '用户问题' : '客服回答'}
-                      </Tag>
-                      <Typography.Text type="secondary">
-                        {new Date(f.created_at).toLocaleString('zh-CN')}
+                <div className="feedback-item">
+                  <Space size={8}>
+                    <Tag color={f.role === 'user' ? 'blue' : 'green'}>
+                      {f.role === 'user' ? '用户问题' : '客服回答'}
+                    </Tag>
+                    <Typography.Text type="secondary">
+                      {new Date(f.created_at).toLocaleString('zh-CN')}
+                    </Typography.Text>
+                  </Space>
+                  <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 3 }}>
+                    {f.message_content}
+                  </Typography.Paragraph>
+                  {f.comment ? (
+                    <span className="feedback-comment">
+                      <Typography.Text type="danger">
+                        用户评语：{f.comment}
                       </Typography.Text>
-                    </Space>
-                  }
-                  description={
-                    <>
-                      <Typography.Paragraph style={{ marginBottom: 0 }} ellipsis={{ rows: 3 }}>
-                        {f.message_content}
-                      </Typography.Paragraph>
-                      {f.comment ? (
-                        <span className="feedback-comment">
-                          <Typography.Text type="danger">
-                            用户评语：{f.comment}
-                          </Typography.Text>
-                        </span>
-                      ) : null}
-                    </>
-                  }
-                />
+                    </span>
+                  ) : null}
+                </div>
               </List.Item>
             )}
           />

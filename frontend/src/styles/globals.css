@@ -95,6 +95,12 @@ body {
 .landing__feature {
   animation: card-in var(--dur-page) var(--ease-out) both;
 }
+/* a11y：特性卡标题语义 h2（axe heading-order），视觉保持原 h5 尺寸 */
+.landing__feature h2.ant-typography {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 600;
+}
 .landing__feature:nth-child(1) { animation-delay: 0ms; }
 .landing__feature:nth-child(2) { animation-delay: 80ms; }
 .landing__feature:nth-child(3) { animation-delay: 160ms; }
