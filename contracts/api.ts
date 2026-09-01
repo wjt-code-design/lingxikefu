@@ -209,7 +209,7 @@ export type SSEEvent =
   | { event: 'reasoning'; data: { delta: string } } // 思维链增量（LongCat 开思考时；前端展示"思考中"，不落库不回放）
   | { event: 'token'; data: { delta: string } }
   | { event: 'sources'; data: { sources: MessageSource[] } }
-  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean; clarify?: boolean; tool?: string; answer_source?: string } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存；批次C 澄清轮标记；批次D 工具回答标记（如 order_query，与落库 meta 同源）；answer_source=quick 快捷话术回答（SourcePanel 区分「预置话术无引用」空态）
+  | { event: 'done'; data: { message_id: string; ticket_id?: string; user_message_id?: string; cache_hit?: boolean; clarify?: boolean; tool?: string; answer_source?: string; answer?: string } } // T1：handoff 建单后带工单号；R2/C4：user_message_id 供前端本地消息 id 对齐；T10：cache_hit 标记答案来自缓存；批次C 澄清轮标记；批次D 工具回答标记（如 order_query，与落库 meta 同源）；answer_source=quick 快捷话术回答（SourcePanel 区分「预置话术无引用」空态）；answer=引用校正后全文（LLM 路径 done 携带，前端用其替换流式累积文本，保证所见=落库）
   | { event: 'error'; data: { code: string; message: string } };
 
 // ---------- Chat · Stream Request ----------

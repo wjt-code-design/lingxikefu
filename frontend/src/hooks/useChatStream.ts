@@ -48,6 +48,9 @@ function applyEvent(state: ChatStreamState, ev: SSEEvent): ChatStreamState {
       return {
         ...state,
         stage: 'done',
+        // 引用校正（2026-09-02）：LLM 路径 done 携带校正后全文（落库/缓存同源），
+        // 替换流式累积文本保证「所见=落库」；其他路径无此字段则保留已收 tokens。
+        tokens: ev.data.answer ?? state.tokens,
         messageId: ev.data.message_id,
         userMessageId: ev.data.user_message_id, // R2/C4：后端 user 消息真 id
         ticketId: ev.data.ticket_id, // T1：handoff 建单工单号

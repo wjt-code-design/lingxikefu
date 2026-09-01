@@ -213,6 +213,40 @@ class TestLongCatChat:
         assert asyncio.run(collect()) == ["正式回答"]
 
 
+class TestSharedClientLifecycle:
+    """共享 AsyncClient 生命周期（2026-09-02 pitfall-sweep）：关闭幂等 + 关后可重建。"""
+
+    def test_close_shared_client_idempotent_and_rebuildable(self):
+        import asyncio
+
+        import app.llm_clients.chat as chat_mod
+
+        async def run():
+            c1 = await chat_mod._get_shared_client()
+            assert c1 is not None and not c1.is_closed
+            await chat_mod.close_shared_client()
+            assert c1.is_closed
+            # 幂等：再次关闭无异常
+            await chat_mod.close_shared_client()
+            # 关闭后 _get_shared_client 重建新实例
+            c2 = await chat_mod._get_shared_client()
+            assert c2 is not None and not c2.is_closed and c2 is not c1
+            # 清理模块状态，防跨测试残留
+            await chat_mod.close_shared_client()
+
+        asyncio.run(run())
+        assert chat_mod._shared_client is None
+
+    def test_lifespan_shutdown_calls_close(self):
+        """main.lifespan shutdown 段引用 close_shared_client（防被误删，删了必红）。"""
+        import inspect
+
+        import app.main as m
+
+        src = inspect.getsource(m.lifespan)
+        assert "close_shared_client" in src
+
+
 class TestChatRouting:
     def test_routes_longcat(self, monkeypatch):
         monkeypatch.setattr(settings, "CHAT_PROVIDER", "longcat")

@@ -130,6 +130,14 @@ async def lifespan(_: FastAPI):
     warmup_task.cancel()
     with suppress(asyncio.CancelledError):
         await warmup_task
+    # 共享 LLM AsyncClient 优雅关闭（2026-09-02 pitfall-sweep）：keep-alive 连接随进程
+    # 拆卸由 GC 兜底本可接受，显式 aclose 释放 TCP/TLS 资源并避免解释器拆卸期告警。
+    try:
+        from app.llm_clients.chat import close_shared_client
+
+        await close_shared_client()
+    except Exception:  # noqa: BLE001
+        logger.exception("shared chat client close failed (non-blocking)")
 
 
 def _recover_stale_imports() -> None:

@@ -107,6 +107,74 @@ describe('useChatStream 思维链透传（感知 TTFT）', () => {
   });
 });
 
+describe('useChatStream 引用校正替换（所见=落库）', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('done 携带 answer（校正后全文）时替换流式累积 tokens', async () => {
+    const pending: string[] = [
+      'data: {"event":"stage","data":{"stage":"generating"}}\n\n',
+      'data: {"event":"token","data":{"delta":"配色可选 [来源1]"}}\n\n',
+      'data: {"event":"done","data":{"message_id":"m1","answer":"配色可选 [来源2]"}}\n\n',
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: () =>
+                Promise.resolve(
+                  pending.length > 0
+                    ? { done: false, value: new TextEncoder().encode(pending.shift()!) }
+                    : { done: true, value: undefined }
+                ),
+            }),
+          },
+        })
+      )
+    );
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '颜色' } as never);
+    });
+    await act(async () => {});
+    // 流式期间显示原始标记，done 用落库同源的校正全文替换
+    expect(result.current.tokens).toBe('配色可选 [来源2]');
+  });
+
+  it('done 无 answer 字段（快捷话术/工具路径）时保留已收 tokens', async () => {
+    const pending: string[] = [
+      'data: {"event":"token","data":{"delta":"预置话术"}}\n\n',
+      'data: {"event":"done","data":{"message_id":"","answer_source":"quick"}}\n\n',
+    ];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: () =>
+                Promise.resolve(
+                  pending.length > 0
+                    ? { done: false, value: new TextEncoder().encode(pending.shift()!) }
+                    : { done: true, value: undefined }
+                ),
+            }),
+          },
+        })
+      )
+    );
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '退货' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.tokens).toBe('预置话术');
+  });
+});
+
 describe('useChatStream SSE 401 续期重试（B2）', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

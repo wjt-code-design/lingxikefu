@@ -600,6 +600,9 @@ async def chat_stream(
                         done_data["tool"] = data["tool"]  # 大扫查O2：工具回答透传（与 meta 同源）
                     if data.get("answer_source"):
                         done_data["answer_source"] = data["answer_source"]  # 快捷话术透传（前端空态区分）
+                    if data.get("fixed_content"):
+                        # 引用校正透传（2026-09-02）：前端用校正全文替换流式累积文本（所见=落库）
+                        done_data["answer"] = data["fixed_content"]
                     yield _sse({"event": "done", "data": done_data})
                 elif event == "error":
                     # S1：error = 已扣费但未交付（rag_service 两个 error 源都在扣费后），

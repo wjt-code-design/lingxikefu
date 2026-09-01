@@ -43,6 +43,18 @@ async def _get_shared_client() -> httpx.AsyncClient:
     return _shared_client
 
 
+async def close_shared_client() -> None:
+    """关闭共享 AsyncClient（lifespan shutdown 调用）：释放 keep-alive 连接池。
+
+    幂等：未创建/已关闭均为无害空操作；下次请求经 _get_shared_client 重建。
+    """
+    global _shared_client
+    async with _client_lock:
+        if _shared_client is not None and not _shared_client.is_closed:
+            await _shared_client.aclose()
+        _shared_client = None
+
+
 class OpenAILikeChatClient(ChatClient):
     """OpenAI 兼容端点客户端（流式/非流式），固定 LongCat provider。"""
 
