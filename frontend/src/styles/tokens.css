@@ -18,7 +18,9 @@
 :root {
   /* ---- 品牌：海盐蓝系 ---- */
   --color-brand: #539fd8;
-  --color-brand-dark: #3e7cb1;
+  /* a11y（axe 实测）：#3e7cb1 白底仅 4.06:1 未达 AA 4.5:1，加深至 4.95:1——
+     brand-dark 是全站链接/强调色，一处改全站文本链接达标（视觉深半步，仍在品牌色系） */
+  --color-brand-dark: #3874a6;
   --color-brand-deep: #2e5d85; /* 侧栏 / 深强调 */
   --color-brand-soft: rgba(83, 159, 216, 0.10);
   --color-brand-pale: #96c8e8;

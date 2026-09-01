@@ -53,7 +53,8 @@ export function LoginPage() {
 
   return (
     <div className="auth-card">
-      <Typography.Title level={3} className="auth-card__title" style={{ marginBottom: 8 }}>
+      {/* a11y：level={1} 渲染 h1（页面主标题语义），视觉字号由 .auth-card__title 控制 */}
+      <Typography.Title level={1} className="auth-card__title">
         登录灵犀客服
       </Typography.Title>
       <Typography.Paragraph className="auth-card__sub">

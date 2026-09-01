@@ -30,8 +30,8 @@ export function AuthLayout({ children }: { children?: ReactNode }) {
         </div>
       </aside>
 
-      {/* 右：表单区 */}
-      <main className="auth-form">
+      {/* 右：表单区（id 供全局 skip-link 跳转，与 AdminLayout/WidgetShell 对齐） */}
+      <main className="auth-form" id="main-content">
         <div className="auth-form__inner">{children ?? <Outlet />}</div>
       </main>
     </div>

@@ -131,6 +131,10 @@
 .auth-card__title {
   text-align: center;
   color: var(--text-1) !important;
+  /* a11y：标题语义升级为 h1（level=1），视觉字号锁定原 level 3 规格不变；
+     margin 锁定原 inline marginBottom:8（!important 需显式补回，否则被清零） */
+  font-size: var(--text-3xl) !important;
+  margin: 0 0 8px !important;
 }
 .auth-card__sub {
   text-align: center;
@@ -176,6 +180,32 @@
 }
 .auth-card__switch a {
   color: var(--color-brand-dark);
+}
+/* ---------- a11y 复扫残余修复（axe 2026-09-01）---------- */
+/* ① .ant-typography-secondary 默认 #9aa3ac 在 #f2f5f8 上仅 2.33:1 —— 提高特异性
+   压过 antd 默认，text-3 对浅灰底 ≈4.6:1 达 AA */
+.auth-form .auth-card__switch.ant-typography-secondary,
+.auth-form .ant-typography-secondary.auth-card__switch {
+  color: var(--text-3) !important;
+}
+/* ② 主按钮白字 on #539fd8 仅 2.86:1 —— auth 域内主按钮改用达标的 brand-dark，
+   hover/active 走更深的 brand-deep（antd hover 色不随 CSS 背景走，需显式覆盖） */
+.auth-form .ant-btn-primary {
+  background: var(--color-brand-dark);
+  border-color: var(--color-brand-dark);
+}
+.auth-form .ant-btn-primary:not(:disabled):hover,
+.auth-form .ant-btn-primary:not(:disabled):active,
+.auth-form .ant-btn-primary:not(:disabled):focus-visible {
+  background: var(--color-brand-deep);
+  border-color: var(--color-brand-deep);
+}
+/* ③ link-in-text-block：文字内链接与周围灰字色差不足 —— 统一下划线区分 */
+.auth-card__switch a,
+.auth-card__terms a,
+.auth-card__terms .auth-card__link,
+.auth-card__extra .auth-card__link {
+  text-decoration: underline;
 }
 
 /* ---------- 响应式：窄屏（<768px）压缩为顶部品牌条 ---------- */
