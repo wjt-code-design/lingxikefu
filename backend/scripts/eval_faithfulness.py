@@ -28,7 +28,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.llm_clients.chat import get_chat_client
 from app.models.knowledge import KnowledgeBase
-from app.services.rag_service import build_qa_messages, run_pipeline
+from app.services.rag_service import build_qa_messages, fix_citations, run_pipeline
 from scripts.smoke_import import _KB_NAME  # 建库名唯一真源（P0：KB 口径统一）
 from sqlalchemy import select
 
@@ -236,6 +236,8 @@ async def eval_one(db, kb_id: uuid.UUID, q: dict, gt: dict | None) -> dict:
     if q["intent"] == "qa" and not r.refuse:
         msgs = build_qa_messages(q["question"], r.chunks)
         answer = await get_chat_client().complete(msgs)
+        # 评测口径=生产持久化口径：引用编号修复后再判定（与 chat.py 落库/缓存同规则）
+        answer = fix_citations(answer, r.chunks)
     else:
         # 管线拒答 / 闲聊 / 转人工：不走 LLM，直接用引导语
         from app.services.rag_service import _no_llm_reply

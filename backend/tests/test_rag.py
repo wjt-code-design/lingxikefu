@@ -13,6 +13,7 @@ from app.services.rag_service import (
     RagResult,
     _no_llm_reply,
     classify_intent,
+    fix_citations,
     run_pipeline,
     stream_answer,
 )
@@ -217,6 +218,78 @@ def test_build_qa_messages_history():
     assert "用户: 保修多久" in msgs[-1]["content"]
     assert "客服: 12个月" in msgs[-1]["content"]
     assert "<<历史对话>>" in msgs[-1]["content"]
+
+
+# --- 引用编号修复 fix_citations（2026-09-02 全量 eval citation 失败点归因） ---
+def test_fix_citations_renumbers_to_supporting_chunk():
+    """Q074 型：同文档续条内容被锚定标 [来源1]（内容实为 [来源2]）→ 校正到支撑 chunk。
+    用真实 Q074 chunk/句子原文（配色小节在 idx=1），overlap 须跨过 0.30 阈值。"""
+    chunks = [
+        RetrievedChunk(chunk_id="c1", doc_id="d1", kb_id="kb1", idx=0, text="常见问题FAQ：商品配置与参数 屏幕 尺寸 重量 库存", score=0.9, dense_score=0.9),
+        RetrievedChunk(chunk_id="c2", doc_id="d1", kb_id="kb1", idx=1, text="配色与款式：同一型号通常提供多种配色（如星河蓝/月光银/曜石黑），详情页选择规格可查看在售颜色，部分地区缺色会标注暂缺", score=0.8, dense_score=0.8),
+    ]
+    ans = "同一型号通常提供多种配色可选，具体在售颜色可在商品详情页的选择规格处查看 [来源1]。若部分地区缺色，会标注暂缺 [来源1]。"
+    fixed = fix_citations(ans, chunks)
+    assert "[来源2]" in fixed
+    assert "[来源1]" not in fixed
+    assert "配色可选" in fixed  # 句子文本不动
+
+
+def test_fix_citations_strips_unsupported_marker():
+    """无任何 chunk 支撑的引用（编造引用）→ 摘除标记。"""
+    chunks = [make_chunk(0.9, "保修期12个月，自签收之日起")]
+    ans = "发票可以抵扣进项税额 [来源1]。"
+    fixed = fix_citations(ans, chunks)
+    assert "发票可以抵扣进项税额" in fixed
+    assert "[来源" not in fixed
+
+
+def test_fix_citations_consecutive_markers_share_sentence():
+    """[来源1][来源4] 连续引用共享同一引用点句子（Q089 型）→ 逐点校正到支撑 chunk。"""
+    chunks = [
+        RetrievedChunk(chunk_id="c1", doc_id="d1", kb_id="kb1", idx=0, text="以旧换新抵扣款原路退回", score=0.9, dense_score=0.9),
+        RetrievedChunk(chunk_id="c2", doc_id="d2", kb_id="kb1", idx=0, text="退款去向：微信零钱/支付宝余额/原卡", score=0.8, dense_score=0.8),
+    ]
+    ans = "退款去向：微信支付的退回到微信零钱，支付宝退回到支付宝余额 [来源1][来源2]。"
+    fixed = fix_citations(ans, chunks)
+    assert "[来源2]" in fixed
+    assert "[来源1]" not in fixed
+
+
+def test_fix_citations_keeps_valid_and_noop():
+    """正确引用不变；无标记 / 无 chunks 原样返回。"""
+    chunks = [make_chunk(0.9, "保修期12个月，自签收之日起")]
+    ans = "保修期 12 个月 [来源1]。"
+    assert fix_citations(ans, chunks) == ans
+    assert fix_citations("无标记的回答", chunks) == "无标记的回答"
+    assert fix_citations(ans, []) == ans
+
+
+def test_fix_citations_strips_runon_long_sentence():
+    """Q052 型回归：引用点句子是长句段（LLM 用：合并引言+小节标题+首条，无句号终止），
+    中文口径 overlap 不足 0.30 → 摘除（不得保留 eval 判定无效的引用）。"""
+    chunks = [make_chunk(0.9, "会员折扣：银卡全场98折 金卡全场95折 钻石全场9折")]
+    ans = "银卡和金卡的主要差异如下：\n\n## 1. 折扣力度\n- 银卡：全场 98 折 [来源1]\n- 金卡：全场 95 折 [来源1]。"
+    fixed = fix_citations(ans, chunks)
+    # 首条长句段被摘除（overlap<0.30），第二条短句保留（金卡95折可溯源）
+    assert "- 银卡：全场 98 折" in fixed
+    assert "- 金卡：全场 95 折 [来源1]" in fixed
+    assert fixed.count("[来源") == 1
+
+
+def test_sentence_overlap_matches_eval_metric():
+    """口径一致性守护：rag_service._sentence_overlap 必须与 eval_faithfulness 判定同口径
+    （CJK-only 2字窗口）。否则 fix_citations 保留 eval 判定无效的引用（2026-09-02 Q052 回归）。"""
+    from app.services.rag_service import _sentence_overlap as prod_overlap
+    from scripts.eval_faithfulness import _sentence_overlap as eval_overlap
+
+    cases = [
+        ("银卡：全场 98 折", "会员折扣：银卡全场98折 金卡全场95折"),
+        ("同一型号通常提供多种配色可选，具体在售颜色可在详情页查看", "配色：星河蓝/月光银/曜石黑 详情页查看在售颜色"),
+        ("直接通过 App 站内信核实即可", "官方通知仅通过App站内信与认证短信发送"),
+    ]
+    for s, c in cases:
+        assert abs(prod_overlap(s, c) - eval_overlap(s, c)) < 1e-6, (s, prod_overlap(s, c), eval_overlap(s, c))
 
 
 # --- 流式事件 ---

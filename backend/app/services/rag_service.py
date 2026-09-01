@@ -281,15 +281,19 @@ async def stream_answer(
         # 不传 model：让 OpenAILikeChatClient 用自己的 _default_model()（唯一 provider longcat，模型名单一真源）
         # 思维链透传（感知 TTFT）：reasoning 先于 content 到达（~2s），Chat 层转发前端展示
         # "思考中"；reasoning 不进缓存/不落库，仅作为流式过程反馈。
+        parts: list[str] = []
         async for kind, delta in client.stream_events(messages):
             if kind == "reasoning":
                 yield ("reasoning", {"delta": delta})
             else:
+                parts.append(delta)
                 yield ("token", {"delta": delta})
         yield ("sources", {"sources": _to_sources(result.chunks)})
+        # 引用编号修复（确定性）：流式已发原始 [来源N]，落库/缓存用校正后全文（fixed_content）。
         # Chat 层回填答案缓存时复用该 key；避免在 done 分支再次执行 rewrite。
         # 这是内部流事件字段，Chat 只向前端转发自己的 done 数据，因而不扩展 SSE 契约。
-        yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query})
+        fixed_content = fix_citations("".join(parts), result.chunks) if parts else ""
+        yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query, "fixed_content": fixed_content})
     except Exception:  # noqa: BLE001
         logger.exception("RAG 生成失败")
         yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
@@ -328,3 +332,73 @@ def _to_sources(chunks: list[RetrievedChunk]) -> list[dict]:
 def _split_tokens(text: str, size: int = 8) -> list[str]:
     """非流式回复切成小片模拟流式（前端 SSE 展示流畅）。"""
     return [text[i : i + size] for i in range(0, len(text), size)]
+
+
+#: 引用可溯源阈值（与 eval_faithfulness 判定同口径：2字窗口交集≥30%）
+_CIT_OVERLAP_THRESHOLD = 0.30
+#: 连续中文 ≥2 字（与 eval_faithfulness._bigrams 同口径：只切中文，数字/标点/换行不参与）
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
+
+
+def _sentence_overlap(sentence: str, chunk_text: str) -> float:
+    """引用点句子与 chunk 的 2 字窗口交集比例（0-1）。
+
+    与 eval_faithfulness 判定完全同口径（2026-09-02 修口径分歧）：仅对连续中文切 2 字
+    窗口，忽略数字/标点/换行——否则 fix_citations 与 judge_citations 在阈值边界分歧
+    （Q052 长句段落实测：全字符 0.543 vs 中文口径 0.27），导致保留 eval 判定无效的引用。
+    """
+    s_bg: set[str] = set()
+    for w in _CJK_RE.findall(sentence):
+        for i in range(len(w) - 1):
+            s_bg.add(w[i : i + 2])
+    c_bg: set[str] = set()
+    for w in _CJK_RE.findall(chunk_text):
+        for i in range(len(w) - 1):
+            c_bg.add(w[i : i + 2])
+    if not s_bg:
+        return 0.0
+    return len(s_bg & c_bg) / len(s_bg)
+
+
+def fix_citations(answer: str, chunks: list[RetrievedChunk]) -> str:
+    """引用编号修复（确定性后处理，非 LLM）：把 [来源N] 校正到实际支撑该句的 chunk。
+
+    背景（2026-09-02 全量 eval citation 7 个失败点归因）：LongCat 两类错标——
+    ①[来源1] 默认引用（内容在其他 chunk 仍标 [来源1]，prompt 规则已修）；②同文档续条
+    锚定带标题首条（Q074 型，prompt 手段无效）。代码级兜底：逐点计算引用点句子与各
+    chunk 的 2 字窗口交集，错标改到支撑最强的 chunk；无任何 chunk 支撑（编造引用）则
+    摘除标记。只改编号/摘除，不动句子文本 → 不影响 answer 语义（faithfulness 判定）。
+    连续引用 [来源N][来源M] 共享同一引用点句子，逐个校正（eval 判定对空句跳过不计）。
+    """
+    if not chunks or "[来源" not in answer:
+        return answer
+    parts = re.split(r"(\[来源\d+\])", answer)
+    out: list[str] = []
+    cur = ""
+    sentence = ""  # 当前标记的引用点句子（跨连续标记共享）
+    for part in parts:
+        m = re.fullmatch(r"\[来源(\d+)\]", part)
+        if m is None:
+            cur += part
+            segs = [s for s in re.split(r"(?<=[。！？；])", cur.strip()) if s.strip()]
+            if segs:
+                sentence = segs[-1]
+            continue
+        if cur:
+            out.append(cur)
+            cur = ""
+        if sentence:
+            best_i, best_ov = 0, 0.0
+            for i, c in enumerate(chunks):
+                ov = _sentence_overlap(sentence, c.text)
+                if ov > best_ov:
+                    best_i, best_ov = i, ov
+            if best_ov >= _CIT_OVERLAP_THRESHOLD:
+                out.append(f"[来源{best_i + 1}]")
+            else:
+                out.append("")  # 无任何 chunk 支撑 → 摘除（防编造引用残留）
+        else:
+            out.append(part)  # 引用点为空（句首标记）→ 原样保留（eval 判定不计）
+    if cur:
+        out.append(cur)
+    return "".join(out)

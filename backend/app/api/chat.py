@@ -525,7 +525,10 @@ async def chat_stream(
                             logger.exception("clarify 状态写回失败（不影响响应）")
                             db.rollback()
                     # 落库 assistant 消息 + 来源真源 + 真实 intent + 首字时延埋点
-                    content = "".join(assistant_parts)
+                    # 引用编号修复（2026-09-02）：LLM 路径 stream_answer 在 done 携带校正后
+                    # 全文 fixed_content（流式已发原始标记，落库/缓存用校正版）；其他路径无此
+                    # 字段则回退原累积全文。缓存回填复用同一 content → 命中用户读到校正版。
+                    content = data.get("fixed_content") or "".join(assistant_parts)
                     meta = {"first_token_ms": first_token_ms} if first_token_ms is not None else {}
                     if data.get("tool"):
                         meta["tool"] = data["tool"]  # 批次D：工具回答可观测
