@@ -212,6 +212,50 @@ class TestLongCatChat:
 
         assert asyncio.run(collect()) == ["正式回答"]
 
+    def test_stream_events_retries_on_429_then_succeeds(self, monkeypatch):
+        """429 → sleep 2s 重试 1 次 → 成功产出（Batch3 覆盖率盲区：重试分支钉住）。
+
+        raise_for_status 在响应头阶段抛出，两 attempt 均未 yield 任何 delta → 重试不产生
+        重复内容（pitfall-sweep 结论的回归测试）。
+        """
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
+        calls = {"n": 0}
+        sse = ['data: {"choices":[{"delta":{"content":"重试后回答"}}]}', "data: [DONE]"]
+
+        class _Resp:
+            def raise_for_status(self):
+                pass
+
+            async def aiter_lines(self):
+                for line in sse:
+                    yield line
+
+        class _Ctx:
+            async def __aenter__(self):
+                calls["n"] += 1
+                if calls["n"] == 1:
+                    req = httpx.Request("POST", "https://longcat.test/v1/chat/completions")
+                    resp = httpx.Response(429, request=req)
+                    raise httpx.HTTPStatusError("rate limited", request=req, response=resp)
+                return _Resp()
+
+            async def __aexit__(self, *exc):
+                return False
+
+        def fake_stream(self, method, url, content=None, headers=None, timeout=None):
+            return _Ctx()
+
+        monkeypatch.setattr(httpx.AsyncClient, "stream", fake_stream)
+
+        import asyncio
+
+        async def collect():
+            return [x async for x in OpenAILikeChatClient().stream_events([{"role": "user", "content": "q"}])]
+
+        out = asyncio.run(collect())
+        assert calls["n"] == 2
+        assert out == [("content", "重试后回答")]
+
 
 class TestSharedClientLifecycle:
     """共享 AsyncClient 生命周期（2026-09-02 pitfall-sweep）：关闭幂等 + 关后可重建。"""
