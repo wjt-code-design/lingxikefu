@@ -154,6 +154,13 @@ def test_prompt_forbids_making_up_and_metadata():
     assert "宁可" in SYSTEM_PROMPT and "不得编造" in SYSTEM_PROMPT
 
 
+def test_prompt_citation_number_guards():
+    """引用编号守护（2026-09-02 全量 eval 7 个 citation 失败点归因：全部为 [来源1] 默认
+    引用/跨来源拼接单标号）——两条规则必须存在（删了必红）。"""
+    assert "禁止把 [来源1] 当默认引用" in SYSTEM_PROMPT
+    assert "拆句分别引用" in SYSTEM_PROMPT
+
+
 def test_build_qa_messages_separates_user_data_from_instruction():
     """TC-055 系统指令泄露疏导：用户内容放入 <<>> 分隔块，与 system 指令隔离。"""
     msgs = build_qa_messages(
