@@ -1147,7 +1147,7 @@
           "admin"
         ],
         "summary": "List Users",
-        "description": "分页列出租户内用户（account 取 email/phone 兜底）。",
+        "description": "分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。",
         "operationId": "list_users_api_v1_admin_users_get",
         "security": [
           {
@@ -1177,6 +1177,25 @@
               "default": 20,
               "title": "Size"
             }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "邮箱/手机号模糊搜索",
+              "title": "Keyword"
+            },
+            "description": "邮箱/手机号模糊搜索"
           }
         ],
         "responses": {
@@ -2261,7 +2280,7 @@
           "tickets"
         ],
         "summary": "List Tickets",
-        "description": "工单列表（agent/admin）。",
+        "description": "工单列表（agent/admin）。keyword 搜工单号/会话号（UI 审查中6）。\n\n归一化（code-review 修正 PG 方言）：SQL 端 replace('-','') 把 CAST 文本归一成\n无横线形态——SQLite（sa.Uuid 存 hex32）不变、PG（原生 uuid 列 CAST 出带横线\n文本）去横线——keyword 侧去横线小写后 ilike，两方言下 dashed 完整号、8 位短号、\n会话号前缀均可命中（此前仅 SQLite 测试库验证，PG 下完整号静默零结果）。",
         "operationId": "list_tickets_api_v1_tickets_get",
         "security": [
           {
@@ -2307,6 +2326,25 @@
               "default": 20,
               "title": "Size"
             }
+          },
+          {
+            "name": "keyword",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "工单号/会话号搜索（去横线归一化，支持 8 位短号）",
+              "title": "Keyword"
+            },
+            "description": "工单号/会话号搜索（去横线归一化，支持 8 位短号）"
           }
         ],
         "responses": {
@@ -5187,6 +5225,17 @@
               }
             ],
             "title": "Resolved At"
+          },
+          "session_title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Title"
           }
         },
         "type": "object",
