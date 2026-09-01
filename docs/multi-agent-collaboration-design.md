@@ -191,7 +191,7 @@ class ImageAgent:
 
 | 原契约 | 保持/变更 |
 |--------|----------|
-| SSE 事件类型（intent, stage, token, sources, done, error） | **保持不变** |
+| SSE 事件类型（intent, stage, token, sources, done, error） | **保持不变**；2026-09-02 起新增 `reasoning`（思维链增量，感知 TTFT）与 done 可选字段 `answer`（引用校正后全文，所见=落库），见 `contracts/api.ts`（契约唯一真源） |
 | `client_msg_id` 幂等 | **保持不变** |
 | 配额扣减与回滚 | **保持不变** |
 | 会话管理 | **保持不变** |

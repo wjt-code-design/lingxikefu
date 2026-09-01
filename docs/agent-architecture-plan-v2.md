@@ -232,6 +232,12 @@ _SSE_EVENTS = frozenset({
 })
 ```
 
+> **实现注记（2026-09-02 同步审查）**：实际落地无 `understanding` 事件——现行
+> `_SSE_EVENTS = {stage, intent, reasoning, token, sources, done, error}`。
+> 图片理解过程复用 `stage` 事件展示；`reasoning` 为 2026-09-02 新增的思维链透传
+> 事件，done 事件新增可选 `answer` 字段（引用校正后全文）。契约唯一真源 =
+> `contracts/api.ts`。
+
 ### 2.5 前端适配
 
 ```typescript
