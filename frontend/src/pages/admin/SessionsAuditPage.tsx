@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { Button, Drawer, Input, Select, Spin, Tag, Typography } from 'antd';
+import { Button, Drawer, Input, Select, Spin, Tag, Tooltip, Typography } from 'antd';
 import { ReloadOutlined, SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { AppTable } from '@/components/common/AppTable';
@@ -123,7 +123,13 @@ export function SessionsAuditPage() {
       ),
     },
     {
-      title: '满意度',
+      // UI 审查低21b（轻方案）：列名明确为"会话评分"（会话级字段），Tooltip 说明口径——
+      // 未评分显示 — 是真实状态；消息级赞踩聚合列待产品确认口径后另行实施
+      title: (
+        <Tooltip title="用户主动评分（对话 ≥2 轮后可评）；未评分为 —。消息级赞/踩不在本列口径内。">
+          <span>会话评分</span>
+        </Tooltip>
+      ),
       dataIndex: 'satisfaction',
       width: 110,
       render: (v: string | undefined) => {
