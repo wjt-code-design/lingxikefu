@@ -7,12 +7,28 @@
 """
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Windows 开发机系统代理（WinINET，如 Clash 127.0.0.1:7890）会被 urllib/httpx 经
+# getproxies() 拾取（httpx 默认 trust_env=True），即使 shell 无 *_proxy 环境变量。
+# 后端到本机基础设施（Postgres/Redis/Qdrant）的回环流量被代理拦截 → qdrant-client
+# 超时 → RetrievalError → 检索降级拒答（"知识库检索服务暂时不可用"）。
+# 修复：进程内显式设置 NO_PROXY 豁免回环地址。仅设 NO_PROXY（无 HTTP_PROXY env）时
+# getproxies_environment() 非空即整体覆盖注册表代理，外网（LongCat）直连可用（已实测）；
+# 若部署环境显式给了 HTTP(S)_PROXY，此处仅追加回环豁免，不改变既有代理语义。
+# CI/Linux 无注册表代理机制，本设置无副作用。
+_LOOPBACK_NO_PROXY = "localhost,127.0.0.1,::1"
+for _np_key in ("NO_PROXY", "no_proxy"):
+    _np_cur = os.environ.get(_np_key, "")
+    if _LOOPBACK_NO_PROXY not in _np_cur:
+        os.environ[_np_key] = f"{_np_cur},{_LOOPBACK_NO_PROXY}" if _np_cur else _LOOPBACK_NO_PROXY
+del _np_key, _np_cur
 
 #: 上传图片目录（P4：默认绝对路径——相对路径随进程 CWD 漂移，容器/服务化下会写到
 #: 不可预期目录；以本文件（backend/app/core/）为锚点定位到 backend/uploads/images）
@@ -110,6 +126,10 @@ class Settings(BaseSettings):
     LONGCAT_API_KEY: str | None = None
     LONGCAT_BASE_URL: str = "https://api.longcat.chat/openai"
     LONGCAT_CHAT_MODEL: str = "LongCat-2.0"
+    # LongCat-2.0 为推理模型：默认开思考（思维链经 SSE reasoning 事件透传，前端展示
+    # "思考中"——用户感知首反馈 ~2s；实测思维链对拒答/防编造判定有实质贡献：
+    # 关思考时拒答锚点统计通过率仅 83%，开思考 100%）。置 false 可关（省 token 换速度）。
+    LLM_ENABLE_THINKING: bool = True
     # 火山引擎（视觉模型）：Image Agent 图片理解
     VOLCENGINE_API_KEY: str | None = None
     VOLCENGINE_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"

@@ -26,6 +26,22 @@ _COMPLETE_TIMEOUT = httpx.Timeout(120.0, connect=10.0)
 #: 429/5xx 重试 1 次（间隔 2s）：限流是分钟级窗口，偶发 429 重试可自愈
 _RETRY_STATUS = {429, 500, 502, 503}
 
+# ---- 共享 AsyncClient（TTFT 优化） ----
+# 每请求 async with httpx.AsyncClient() 会重建连接池 → 每问必付 TCP+TLS 握手（0.3~1s）。
+# 模块级单例复用 keep-alive 连接；timeout 按请求覆盖（stream 60s / complete 120s 不同）。
+# 测试通过 monkeypatch httpx.AsyncClient.post 类方法 mock，对单例实例同样生效。
+_shared_client: httpx.AsyncClient | None = None
+_client_lock = asyncio.Lock()
+
+
+async def _get_shared_client() -> httpx.AsyncClient:
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        async with _client_lock:
+            if _shared_client is None or _shared_client.is_closed:
+                _shared_client = httpx.AsyncClient(trust_env=True)
+    return _shared_client
+
 
 class OpenAILikeChatClient(ChatClient):
     """OpenAI 兼容端点客户端（流式/非流式），固定 LongCat provider。"""
@@ -57,81 +73,106 @@ class OpenAILikeChatClient(ChatClient):
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         return headers, body
 
-    async def stream(
-        self, messages: list[dict], model: str | None = None, **kwargs
-    ) -> AsyncGenerator[str, None]:
+    def _payload(self, messages: list[dict], model: str | None, stream: bool, kwargs: dict) -> dict:
+        """统一 payload 组装：模型/流式开关 + 思维链开关（TTFT 优化）。
+
+        LongCat-2.0 是推理模型：默认输出思维链（reasoning_content），content 首字要等
+        思维链完成（实测 TTFT 4~19s）。LLM_ENABLE_THINKING=False（默认）时注入
+        enable_thinking=False 关闭思维链；调用方显式传 chat_template_kwargs 时不覆盖。
+        """
         payload = {
             "model": model or self._default_model(),
             "messages": messages,
-            "stream": True,
+            "stream": stream,
             **{k: v for k, v in kwargs.items() if k not in ("stream",)},
         }
+        if not settings.LLM_ENABLE_THINKING and "chat_template_kwargs" not in payload:
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        return payload
+
+    async def stream_events(
+        self, messages: list[dict], model: str | None = None, **kwargs
+    ) -> AsyncGenerator[tuple[str, str], None]:
+        """流式产出 (kind, delta)：kind ∈ {"reasoning", "content"}。
+
+        思维链透传（TTFT 感知优化）：LongCat 开思考时 reasoning_content 先于 content
+        流式到达（实测首块 ~2s），上层可把"思考中"即时反馈给用户；content 为正式回答。
+        stream() 保持旧 str 契约（仅 content），供 generate.py 等无思考展示需求的调用方。
+        """
+        payload = self._payload(messages, model, stream=True, kwargs=kwargs)
         headers, body = self._request(payload)
-        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-            last_err: httpx.HTTPStatusError | None = None
-            for _attempt in range(2):  # 429/5xx 重试 1 次（TPM 分钟窗口偶发，2s 后自愈）
-                try:
-                    async with client.stream("POST", self._api_url(), content=body, headers=headers) as resp:
-                        resp.raise_for_status()
-                        async for line in resp.aiter_lines():
-                            if not line.startswith("data: "):
-                                continue
-                            data = line[6:].strip()
-                            if data == "[DONE]":
-                                break
-                            try:
-                                chunk = json.loads(data)
-                            except json.JSONDecodeError:
-                                continue
-                            choices = chunk.get("choices") or []
-                            if choices:
-                                delta = (choices[0].get("delta") or {}).get("content")
-                                if delta:
-                                    yield delta
-                        return
-                except httpx.HTTPStatusError as e:
-                    last_err = e
-                    if e.response.status_code in _RETRY_STATUS:
-                        await asyncio.sleep(2)
-                        continue
-                    raise
-            assert last_err is not None
-            raise last_err
+        client = await _get_shared_client()
+        last_err: httpx.HTTPStatusError | None = None
+        for _attempt in range(2):  # 429/5xx 重试 1 次（TPM 分钟窗口偶发，2s 后自愈）
+            try:
+                async with client.stream("POST", self._api_url(), content=body, headers=headers, timeout=_TIMEOUT) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line.startswith("data: "):
+                            continue
+                        data = line[6:].strip()
+                        if data == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        choices = chunk.get("choices") or []
+                        if choices:
+                            delta = choices[0].get("delta") or {}
+                            reasoning = delta.get("reasoning_content")
+                            if reasoning:
+                                yield ("reasoning", reasoning)
+                            content = delta.get("content")
+                            if content:
+                                yield ("content", content)
+                    return
+            except httpx.HTTPStatusError as e:
+                last_err = e
+                if e.response.status_code in _RETRY_STATUS:
+                    await asyncio.sleep(2)
+                    continue
+                raise
+        assert last_err is not None
+        raise last_err
+
+    async def stream(
+        self, messages: list[dict], model: str | None = None, **kwargs
+    ) -> AsyncGenerator[str, None]:
+        """旧契约：仅 yield content delta（str）。思维链场景用 stream_events()。"""
+        async for kind, delta in self.stream_events(messages, model, **kwargs):
+            if kind == "content":
+                yield delta
 
     async def complete(self, messages: list[dict], model: str | None = None, **kwargs) -> str:
         # P2-⑤：允许调用方显式覆写超时（如坐席辅助用短超时 25s，低于前端阈值 35s）
         req_timeout = kwargs.pop("timeout", None)
-        payload = {
-            "model": model or self._default_model(),
-            "messages": messages,
-            "stream": False,
-            **{k: v for k, v in kwargs.items() if k not in ("stream",)},
-        }
+        payload = self._payload(messages, model, stream=False, kwargs=kwargs)
         headers, body = self._request(payload)
         client_timeout = (
             _COMPLETE_TIMEOUT
             if req_timeout is None
             else httpx.Timeout(float(req_timeout), connect=10.0)
         )
-        async with httpx.AsyncClient(timeout=client_timeout) as client:
-            last_err: httpx.HTTPStatusError | None = None
-            for _attempt in range(2):  # 429/5xx 重试 1 次（非流式长回答 + 偶发限流双兜底）
-                try:
-                    resp = await client.post(self._api_url(), content=body, headers=headers)
-                    resp.raise_for_status()
-                    data = resp.json()
-                    choices = data.get("choices") or []
-                    if not choices:
-                        return ""
-                    return (choices[0].get("message") or {}).get("content") or ""
-                except httpx.HTTPStatusError as e:
-                    last_err = e
-                    if e.response.status_code in _RETRY_STATUS:
-                        await asyncio.sleep(2)
-                        continue
-                    raise
-            assert last_err is not None
-            raise last_err
+        client = await _get_shared_client()
+        last_err: httpx.HTTPStatusError | None = None
+        for _attempt in range(2):  # 429/5xx 重试 1 次（非流式长回答 + 偶发限流双兜底）
+            try:
+                resp = await client.post(self._api_url(), content=body, headers=headers, timeout=client_timeout)
+                resp.raise_for_status()
+                data = resp.json()
+                choices = data.get("choices") or []
+                if not choices:
+                    return ""
+                return (choices[0].get("message") or {}).get("content") or ""
+            except httpx.HTTPStatusError as e:
+                last_err = e
+                if e.response.status_code in _RETRY_STATUS:
+                    await asyncio.sleep(2)
+                    continue
+                raise
+        assert last_err is not None
+        raise last_err
 
 
 @lru_cache(maxsize=1)
