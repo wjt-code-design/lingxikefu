@@ -125,7 +125,7 @@ export function LogsPage() {
     <div className="page logs-page page-atmo">
       <div className="logs-page__header">
         <div className="logs-page__head">
-          <Typography.Title level={3} className="logs-page__title">
+          <Typography.Title level={1} className="logs-page__title">
             操作审计日志
           </Typography.Title>
           <Typography.Text className="logs-page__subtitle">

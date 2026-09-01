@@ -131,7 +131,7 @@ export function DashboardPage() {
   return (
     <div className="dash-page">
       <div className="dash-page__header">
-        <Typography.Title level={3} className="dash-page__title">
+        <Typography.Title level={1} className="dash-page__title">
           客服工作台
         </Typography.Title>
         <Typography.Text className="dash-page__subtitle">
@@ -160,7 +160,7 @@ export function DashboardPage() {
             </section>
             <section className="dash-card">
               <header className="dash-card__head">
-                <Typography.Title level={5} className="dash-card__title">
+                <Typography.Title level={2} className="dash-card__title">
                   最近会话
                 </Typography.Title>
                 <span className="dash-card__count">—</span>
@@ -211,7 +211,7 @@ export function DashboardPage() {
 
             <section className="dash-card">
               <header className="dash-card__head">
-                <Typography.Title level={5} className="dash-card__title">
+                <Typography.Title level={2} className="dash-card__title">
                   最近会话
                 </Typography.Title>
                 <span className="dash-card__count">{sessions.length}</span>
@@ -238,7 +238,7 @@ export function DashboardPage() {
 
           <section className="dash-card dash-quick">
             <header className="dash-card__head">
-              <Typography.Title level={5} className="dash-card__title">
+              <Typography.Title level={2} className="dash-card__title">
                 快捷操作
               </Typography.Title>
             </header>

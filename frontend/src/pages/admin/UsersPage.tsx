@@ -80,6 +80,7 @@ export function UsersPage() {
             value={u.role}
             onChange={(r) => changeRole(u.user_id, r)}
             options={ROLE_OPTIONS}
+            aria-label={`设置 ${u.account} 的角色`}
           />
         </Space>
       ),
@@ -89,7 +90,7 @@ export function UsersPage() {
   return (
     <div className="page users-page page-atmo">
       <div className="users-page__header">
-        <Typography.Title level={3}>用户管理</Typography.Title>
+        <Typography.Title level={1}>用户管理</Typography.Title>
         <Input
           allowClear
           prefix={<SearchOutlined />}

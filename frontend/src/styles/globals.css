@@ -312,13 +312,15 @@ body {
 .kpi-card__suffix {
   font-size: 14px;
   font-weight: 400;
-  color: var(--text-3);
+  /* a11y：text-3 在卡底 4.39:1 未达 AA → text-2（axe 实测同 caption） */
+  color: var(--text-2);
   margin-left: 4px;
-  -webkit-text-fill-color: var(--text-3);
+  -webkit-text-fill-color: var(--text-2);
 }
 .kpi-card__caption {
   font-size: 12px;
-  color: var(--text-4);
+  /* a11y：text-3(#5e7185) 在 #ecf0f4 卡底仅 4.39:1 → text-2 达标（axe 实测） */
+  color: var(--text-2);
   /* UI 审查中3：允许换行，窄卡下不再省略号截断（"近 14 天 140 …"） */
   white-space: normal;
   overflow: visible;
@@ -347,6 +349,25 @@ body {
   .kpi-card__value {
     font-size: 22px;
   }
+}
+
+/* a11y 批次2：页面主标题 h1 语义化（level=1 渲染 h1），视觉统一锁定原 level 3 规格不变 */
+main h1.ant-typography {
+  font-size: var(--text-3xl) !important;
+  font-weight: 600 !important;
+  line-height: 1.35 !important;
+}
+/* 视觉隐藏（仅读屏可见）——为无标题 UI（如 /chat 对话页）补 h1 语义 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* 表格表头：极浅蓝灰背景（token 化，暗色模式由 [data-theme='dark'] 覆盖） */
@@ -2054,10 +2075,21 @@ body > textarea[style*="visibility:hidden"] {
   font-size: 11px !important;
   text-transform: uppercase !important;
   letter-spacing: 1px !important;
-  color: rgba(255, 255, 255, 0.45) !important;
+  /* a11y：0.45 白在 #2e5d85 仅 2.74:1 → 0.75 约 4.7:1 达 AA（axe 实测） */
+  color: rgba(255, 255, 255, 0.75) !important;
   padding: 14px 20px 6px !important;
   margin: 0 !important;
   font-weight: 500 !important;
+}
+/* a11y：antd gold Tag 前景 #d48806 on #fffbe6 仅 2.75:1 → 加深至 6:1（背景不动，保持金色系视觉）。
+   注意：antd cssinjs 运行时注入同名 .ant-tag-gold 且晚于本表 → 需双类特异性压过（复扫实测单类被压） */
+.ant-tag.ant-tag-gold {
+  color: #874d00;
+}
+/* a11y：面包屑首项 text-3 在 #ecf0f4 仅 4.39:1 → text-2 达标（复扫新记录） */
+.route-chrome .ant-breadcrumb a,
+.route-chrome .ant-breadcrumb-link {
+  color: var(--text-2);
 }
 /* UI 审查低17：侧栏折叠（64px）时分组标题塞不下被截成"我…/客…/运…"——整行隐藏 */
 .admin-layout__sider.ant-layout-sider-collapsed .side-nav .ant-menu-item-group-title {

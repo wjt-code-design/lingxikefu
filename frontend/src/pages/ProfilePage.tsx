@@ -45,7 +45,7 @@ export function ProfilePage() {
             <span className="profile__avatar-initial">{initial}</span>
           </div>
           <div className="profile__hero-info">
-            <Typography.Title level={3} className="profile__name">
+            <Typography.Title level={1} className="profile__name">
               {account}
             </Typography.Title>
             <div className="profile__hero-meta">

@@ -202,7 +202,7 @@ export function DashboardPage() {
     <div className="page dash-page">
       <div className="dash-page__header">
         <div className="dash-page__head">
-          <Typography.Title level={3} className="dash-page__title">运营总览</Typography.Title>
+          <Typography.Title level={1} className="dash-page__title">运营总览</Typography.Title>
           <Typography.Text className="dash-page__subtitle">
             今日 KPI · 待办工单 · 告警 · 快捷入口
           </Typography.Text>

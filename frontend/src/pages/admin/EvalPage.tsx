@@ -122,7 +122,7 @@ export function EvalPage() {
   return (
     <div className="eval-page page-atmo">
       <Typography>
-        <Title level={3}>
+        <Title level={1}>
           <BarChartOutlined style={{ marginRight: 8 }} />
           评测中心
         </Title>

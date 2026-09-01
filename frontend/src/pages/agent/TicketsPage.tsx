@@ -120,6 +120,7 @@ export function TicketsPage() {
             value={undefined}
             onChange={(n) => changeStatus(t, n)}
             options={NEXT_STATUS[t.status].map((s) => ({ label: `→ ${STATUS_TEXT[s]}`, value: s }))}
+            aria-label={`流转工单 ${t.ticket_id.slice(0, 8)}`}
           />
         ) : (
           <Typography.Text type="secondary">已关闭</Typography.Text>
@@ -131,7 +132,7 @@ export function TicketsPage() {
     <div className="agent-tickets page-atmo">
       <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }} wrap>
         <Space align="center" wrap>
-          <Typography.Title level={3} style={{ margin: 0 }}>
+          <Typography.Title level={1} style={{ margin: 0 }}>
             工单列表
           </Typography.Title>
           {/* UI 审查中6：列表按 updated_at 倒序，展示列却是创建时间——口径提示消除"排序不一致"观感 */}
@@ -154,6 +155,7 @@ export function TicketsPage() {
               setPage(1);
             }}
             options={STATUS_OPTIONS}
+            aria-label="按状态筛选工单"
           />
         </Space>
       </Space>

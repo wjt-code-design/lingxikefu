@@ -159,7 +159,7 @@ export function SessionsAuditPage() {
   return (
     <div className="page audit-page page-atmo">
       <div className="audit-page__head">
-        <Typography.Title level={3} className="audit-page__title">会话审计</Typography.Title>
+        <Typography.Title level={1} className="audit-page__title">会话审计</Typography.Title>
         <Typography.Text className="audit-page__subtitle">
           全租户会话检索 · 点击行查看完整对话
         </Typography.Text>
@@ -182,6 +182,7 @@ export function SessionsAuditPage() {
             setPage(1);
           }}
           options={SATISFACTION_OPTIONS}
+          aria-label="按满意度筛选会话"
         />
         <Button icon={<ReloadOutlined />} loading={isFetching} onClick={() => refetch()}>
           刷新

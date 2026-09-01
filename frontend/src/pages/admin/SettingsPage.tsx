@@ -135,7 +135,7 @@ export function SettingsPage() {
     <div className="page settings-page page-atmo">
       <div className="settings-page__header">
         <div className="settings-page__head">
-          <Typography.Title level={3} className="settings-page__title">
+          <Typography.Title level={1} className="settings-page__title">
             系统设置
           </Typography.Title>
           <Typography.Text className="settings-page__subtitle">

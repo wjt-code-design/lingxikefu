@@ -85,7 +85,7 @@ export function KbSearchPage() {
   return (
     <div className="kbs-page page-atmo">
       <div className="kbs-page__header">
-        <Typography.Title level={3} className="kbs-page__title">
+        <Typography.Title level={1} className="kbs-page__title">
           知识库快搜
         </Typography.Title>
         <Typography.Text className="kbs-page__subtitle">

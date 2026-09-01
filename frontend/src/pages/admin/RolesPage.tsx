@@ -38,7 +38,7 @@ export function RolesPage() {
   return (
     <div className="roles-page page-atmo">
       <Typography>
-        <Title level={3}>权限管理</Title>
+        <Title level={1}>权限管理</Title>
         <Paragraph type="secondary">
           菜单级可见性 + Agent 数据范围（按钮级 RBAC 为 P2 后置项）。角色由系统预置，此处展示权限矩阵；
           用户角色分配请在「用户管理」中操作。

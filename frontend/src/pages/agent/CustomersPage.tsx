@@ -39,7 +39,7 @@ export function CustomersPage() {
 
   return (
     <div className="agent-customers page-atmo">
-      <Typography.Title level={3} style={{ marginBottom: 16 }}>
+      <Typography.Title level={1} style={{ marginBottom: 16 }}>
         客户管理
       </Typography.Title>
       <AppTable<CustomerItem>

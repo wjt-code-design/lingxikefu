@@ -32,7 +32,7 @@ export function FeedbackPage() {
   return (
     <div className="page feedback-page page-atmo">
       <div className="feedback-page__header">
-        <Typography.Title level={3}>反馈运营</Typography.Title>
+        <Typography.Title level={1}>反馈运营</Typography.Title>
         <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
           踩反馈定位答错还是不满；意见反馈跟进用户产品建议。
         </Typography.Paragraph>

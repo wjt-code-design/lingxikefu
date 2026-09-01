@@ -96,7 +96,7 @@ export function StatsPage() {
     <div className="page stats-page page-atmo">
       <div className="stats-page__header">
         <div className="stats-page__head">
-          <Typography.Title level={3} className="stats-page__title">运营统计</Typography.Title>
+          <Typography.Title level={1} className="stats-page__title">运营统计</Typography.Title>
           <Typography.Text className="stats-page__subtitle">
             全站会话 / 消息 / 知识库 / 反馈概览
           </Typography.Text>
