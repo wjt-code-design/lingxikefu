@@ -111,6 +111,17 @@ export function MessageBubble({
     handleSelect();
   };
   const [copied, setCopied] = useState(false);
+  // 批次 1：引用角标点击联动——正文 <sup>N</sup> 点击 → 展开来源面板并高亮对应条目
+  const [sourceOpen, setSourceOpen] = useState(false);
+  const [highlightN, setHighlightN] = useState<number | null>(null);
+  // 交互角标仅 staff 且有 sources 时启用（顾客端保持纯展示 chip，天然降级）
+  const hasSources = isAi && isStaff && !!msg.sources && msg.sources.length > 0;
+  const onCitationClick = (n: number) => {
+    // 守卫：N 超界（LLM 幻觉来源）或流式期间 sources 未达 → 静默 no-op
+    if (!isStaff || !msg.sources || n < 1 || n > msg.sources.length) return;
+    setSourceOpen(true);
+    setHighlightN(n);
+  };
   // P0-1：sending 态半透明 + failed 态红色提示（可重试）
   const statusCls = msg.status === 'sending' ? ' chat-msg__bubble--sending' : msg.status === 'failed' ? ' chat-msg__bubble--failed' : '';
 
@@ -251,13 +262,30 @@ export function MessageBubble({
                   </div>
                 );
               }
-              return <MarkdownContent content={msg.content} className="chat-msg__text" />;
+              return <MarkdownContent
+                content={msg.content}
+                className="chat-msg__text"
+                interactiveCitations={hasSources}
+                onCitationClick={onCitationClick}
+              />;
             })()}
           </>
         ) : (
           <Typography.Paragraph className="chat-msg__text">{msg.content}</Typography.Paragraph>
         )}
-        {isStaff && !isUser && !isAgent && msg.sources && msg.sources.length > 0 && <SourceAccordion sources={msg.sources} />}
+        {isStaff && !isUser && !isAgent && msg.sources && msg.sources.length > 0 && (
+          <SourceAccordion
+            sources={msg.sources}
+            open={sourceOpen}
+            onToggle={() => {
+              setSourceOpen((v) => {
+                if (v) setHighlightN(null); // 收起时清高亮
+                return !v;
+              });
+            }}
+            highlightN={sourceOpen ? highlightN : null}
+          />
+        )}
         {!isUser && !isAgent && msg.ticketId && (
           <div className="chat-msg__ticket">
             <div className="chat-msg__ticket-body">

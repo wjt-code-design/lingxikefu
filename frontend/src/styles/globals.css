@@ -1152,6 +1152,10 @@ main h1.ant-typography {
   margin: 0;
   line-height: 1.45;
 }
+/* 列表 marker 品牌色（brand-dark #3874a6 白底 4.95:1 安全强调色） */
+.chat-msg__text li::marker {
+  color: var(--color-brand-dark);
+}
 .chat-msg__text code {
   background: var(--color-brand-soft);
   padding: 0 3px;
@@ -1301,10 +1305,6 @@ main h1.ant-typography {
   color: var(--color-brand-dark);
   margin-left: 3px;
 }
-.chat-source__snippet {
-  font-size: 11px;
-  max-height: 80px;
-}
 .chat-source__chunk {
   padding: 2px 6px;
   border-radius: 6px;
@@ -1312,6 +1312,10 @@ main h1.ant-typography {
 }
 .chat-source__chunk:hover {
   background: rgba(150, 200, 232, 0.08);
+}
+/* 角标点击联动高亮（hover 色系加深；文字保持原色守 AA） */
+.chat-source__chunk--active {
+  background: rgba(150, 200, 232, 0.18);
 }
 .chat-source__ref {
   color: var(--color-brand-dark);
@@ -2024,7 +2028,8 @@ body > textarea[style*="visibility:hidden"] {
 .wb-reply:focus-visible,
 .wb-new:focus-visible,
 .chat-container__hot-btn:focus-visible,
-.chat-source__toggle:focus-visible {
+.chat-source__toggle:focus-visible,
+.chat-msg__text sup:focus-visible {
   outline: 2px solid var(--color-brand-dark);
   outline-offset: 2px;
 }

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeSanitize from 'rehype-sanitize';
@@ -58,15 +59,60 @@ function remarkCitations() {
  * - remarkGfm：GitHub 风格表格/任务列表等；
  * - remarkCitations：[来源N] → sup 角标 chip；
  * - rehypeSanitize：XSS 兜底；
+ * - 交互角标（interactiveCitations）：staff + 有 sources 时 sup 升级为可点击按钮
+ *   （role=button + aria-label + 键盘 Enter/Space），点击回调 onCitationClick(N)。
+ *   N 从 children 文本解析（textContent 路线）——remark/sanitize 零改动；
+ *   components 自定义渲染发生在 sanitize 之后，不触碰白名单。
  * - 流式场景：ReactMarkdown 每次 content 变化都会重新解析渲染 → 边输出边按约定格式排版，
  *   不再等全部流式结束后才统一转换。
  */
-export function MarkdownContent({ content, className }: { content: string; className?: string }) {
+export function MarkdownContent({
+  content,
+  className,
+  interactiveCitations = false,
+  onCitationClick,
+}: {
+  content: string;
+  className?: string;
+  /** staff + 有 sources 时开启：sup 角标可点击（顾客端/流式尾部不开启，纯展示） */
+  interactiveCitations?: boolean;
+  onCitationClick?: (n: number) => void;
+}) {
+  const components = interactiveCitations
+    ? {
+        sup: ({ children }: { children?: ReactNode }) => {
+          const n = Number(children);
+          const fire = () => {
+            if (Number.isFinite(n)) onCitationClick?.(n);
+          };
+          return (
+            <sup
+              role="button"
+              tabIndex={0}
+              aria-label={`来源 ${children}`}
+              onClick={(e) => {
+                e.stopPropagation(); // 防冒泡到根气泡误切溯源面板（双保险，role=button 本就被拦截器捕获）
+                fire();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  fire();
+                }
+              }}
+            >
+              {children}
+            </sup>
+          );
+        },
+      }
+    : undefined;
   return (
     <div className={className}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkCitations]}
         rehypePlugins={[rehypeSanitize]}
+        components={components}
       >
         {content}
       </ReactMarkdown>
