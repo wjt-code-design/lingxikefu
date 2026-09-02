@@ -86,6 +86,43 @@ def test_intent_refund_not_handoff():
     assert classify_intent("退款是原路退回吗") == "qa"
 
 
+# --- D3（2026-09-03 并发审计）：chitchat 裸子串误判修复——残句复扫 ---
+@pytest.mark.parametrize("q", [
+    "退款多久到账，谢谢",      # 业务问句 + 礼貌尾缀（审计实证样本：影子分歧同型）
+    "你好，退货怎么办理",      # 开场寒暄 + 业务问句
+    "天气太热商品坏了能退货吗",  # 词表词作业务语境成分
+    "心情不好，想退货",        # 情绪背景 + 业务诉求
+    "下班后还能退货吗",        # 时间背景 + 业务问句
+    "在吗？我的订单怎么查",    # 询问在场 + 业务问句
+])
+def test_intent_chitchat_boundary_business_qa(q):
+    """chitchat 词不得单独短路：含业务实义内容的问句必须走 qa（检索+LLM）。
+
+    修复前：裸子串匹配（k in query）——「谢谢」「你好」命中即判 chitchat，
+    业务问题被静默吞掉（不检索不调 LLM，直接闲聊模板回复）。
+    """
+    assert classify_intent(q) == "qa"
+
+
+@pytest.mark.parametrize("q", [
+    "你好",
+    "你好呀",
+    "谢谢",
+    "再见",
+    "在吗",
+    "你是谁",
+    "你是机器人吗",
+    "天气怎么样",
+    "讲个笑话",
+    "讲个笑话吧",
+    "你们几点下班",
+    "聊聊心情",
+])
+def test_intent_chitchat_boundary_pure_smalltalk(q):
+    """纯寒暄（剔除词表词 + 封闭助词表后无实义剩余）仍判 chitchat——行为保持。"""
+    assert classify_intent(q) == "chitchat"
+
+
 # --- S2 情绪词窄语境排除（外部审查 S2）：商品/故障语境问句不判情绪转人工 ---
 @pytest.mark.parametrize("q", [
     "手机运行太慢怎么办",

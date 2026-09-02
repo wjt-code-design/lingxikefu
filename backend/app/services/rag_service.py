@@ -70,6 +70,25 @@ CHITCHAT_KEYWORDS = (
     "你好", "在吗", "谢谢", "再见", "你是谁", "你是机器人",
     "天气", "笑话", "几点下班", "下班", "心情",
 )
+#: D3（2026-09-03 审计）：chitchat 判定收边界——裸子串匹配会把「退款多久到账，谢谢」
+#: 这类「业务问句 + 礼貌词」误判成 chitchat（不检索不调 LLM，业务被静默吞掉）。
+#: 落法=残句复扫（同 _EMOTION_EXCLUDE 思路）：剔除 chitchat 词 + 封闭助词表后，
+#: 剩余实义文本为空才判 chitchat；非空 → 含真实业务内容 → 走 qa。
+#: 「天气怎么样」「讲个笑话」等纯闲聊经助词表归空仍 chitchat（行为保持）。
+_CHITCHAT_FILLER = (
+    "你们", "怎么样", "怎样", "怎么", "讲个", "说个", "聊聊", "说说",
+    "来一个", "一句", "一下", "一个", "吗", "呢", "吧", "啊", "哦", "呀", "哈", "嘛",
+)
+#: 长→短排序防 alternation 前缀吞尾（如「几点下班」须先于「下班」整体剔除）
+_CHITCHAT_STRIP = re.compile("|".join(sorted([*CHITCHAT_KEYWORDS, *_CHITCHAT_FILLER], key=len, reverse=True)))
+#: 剩余文本清零判定：纯标点/空白 = 无实义内容
+_PUNCT_WS = re.compile(r"[\s，。！？；：、,.!?;:'\"（）()【】\[\]~～…\u3000]+")
+
+
+def _is_chitchat(query: str) -> bool:
+    """chitchat 边界判定：剔除词表词 + 助词后无实义剩余 → 纯寒暄。"""
+    residual = _CHITCHAT_STRIP.sub("", query)
+    return not _PUNCT_WS.sub("", residual)
 
 #: M6：裸「人工」词边界匹配，但排除「人工智能」（避免误判 handoff）。
 _RE_ARTIFICIAL = re.compile(r"人工(?!智能)")
@@ -106,7 +125,8 @@ def classify_intent(query: str) -> str:
         return "handoff"
     if any(k in _EMOTION_EXCLUDE.sub("", query) for k in EMOTIONAL_KEYWORDS):
         return "handoff"
-    if any(k in query for k in CHITCHAT_KEYWORDS):
+    # D3：残句复扫边界（见 _is_chitchat）——裸子串改边界判定，防业务问句误吞
+    if _is_chitchat(query):
         return "chitchat"
     return "qa"
 
