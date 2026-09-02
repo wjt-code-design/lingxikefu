@@ -10,6 +10,27 @@ import logging
 
 import pytest
 from app.services import quick_answers
+from app.services.quick_answers import _QA
+
+NUM_POLICY_RE = __import__("scripts.eval_faithfulness", fromlist=["_NUM_POLICY_RE"])._NUM_POLICY_RE
+
+
+def test_quick_answers_end_with_guidance():
+    """批次 3：22 条快捷话术尾部行动引导统一化——与 LLM 回答格式对齐（首句直答
+    已达标，尾部引导此前缺失）。每条最后一个非空行必须含「如需」。"""
+    assert len(_QA) == 22  # 防误删/误增条目（增删条目需同步 KB 覆盖检查）
+    for q, a in _QA:
+        last_line = a.strip().splitlines()[-1].strip()
+        assert "如需" in last_line, f"快捷话术缺尾部引导：{q}"
+
+
+def test_quick_answers_guidance_no_policy_numbers():
+    """引导句不得含政策数字（拒答/回答含 _NUM_POLICY_RE 命中数字即 FAIL——
+    eval_faithfulness 判据单一真源，正则直接导入不复制）。正文数字不受限，
+    仅约束最后一个非空行（引导句）。"""
+    for q, a in _QA:
+        last_line = a.strip().splitlines()[-1].strip()
+        assert NUM_POLICY_RE.findall(last_line) == [], f"引导句含政策数字：{q} → {last_line}"
 
 
 class _FakeRedis:
