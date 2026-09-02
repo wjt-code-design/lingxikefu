@@ -17,5 +17,9 @@ build/
 # 测试/工具运行时产物（2026-08-25）
 backend-test-results.xml
 coverage.xml
+.coverage
 .superpowers/
 .zcode/
+
+# eval 运行日志不入库（2026-09-02 清理 8 个历史日志后的防回填；json 入库存档策略不变）
+eval-and-samples/results/*.log
