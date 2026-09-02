@@ -23,22 +23,28 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # ② 仅设 NO_PROXY（无 *_PROXY env）时 getproxies_environment() 返回空 → urllib
 #    回退注册表代理——代理客户端已关但 ProxyEnable 仍开时，外网（LongCat）请求
 #    拾取"死代理" → ConnectError 10061（2026-09-02 eval 全量 ERR 根因）。
-# 修复：进程内显式设置 NO_PROXY 豁免「回环地址 + LongCat 域名直连」。NO_PROXY
+# 修复：进程内显式设置 NO_PROXY 豁免「回环地址 + 外网 AI 服务域名直连」。NO_PROXY
 # 存在且无代理变量 → env 判定生效、注册表代理整体不再拾取（httpx 按 no_proxy
-# 匹配决定 bypass）；LongCat 为国内可直连服务（trust_env=False 直连 200 实测）。
-# 若部署环境显式给了 HTTP(S)_PROXY，LongCat 直连语义同样成立（NO_PROXY 优先于
-# 代理变量）；CI/Linux 无注册表代理机制，本设置无副作用。
+# 匹配决定 bypass）；LongCat/火山 ARK 均为国内可直连服务（trust_env=False 直连
+# 200 实测）。若部署环境显式给了 HTTP(S)_PROXY，直连语义同样成立（NO_PROXY 优先
+# 于代理变量）；CI/Linux 无注册表代理机制，本设置无副作用。
 _LOOPBACK_NO_PROXY = "localhost,127.0.0.1,::1"
-# LongCat 域名从 env 或默认值提取（此时 Settings 尚未实例化，BASE_URL 可被 env 覆盖）
-_LONGCAT_HOST = urlparse(
-    os.environ.get("LONGCAT_BASE_URL", "https://api.longcat.chat/openai")
-).hostname or "api.longcat.chat"
+# 外网 AI 服务域名从 env 或默认值提取（此时 Settings 尚未实例化，BASE_URL 可被 env 覆盖）：
+# - LongCat：对话/评测主链路
+# - 火山 ARK：图片理解（ImageAgent 视觉模型）
+_EXTERNAL_HOSTS = [
+    urlparse(os.environ.get(u, d)).hostname or urlparse(d).hostname or ""
+    for u, d in (
+        ("LONGCAT_BASE_URL", "https://api.longcat.chat/openai"),
+        ("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+    )
+]
 for _np_key in ("NO_PROXY", "no_proxy"):
     _np_cur = os.environ.get(_np_key, "")
-    _missing = [d for d in (_LOOPBACK_NO_PROXY, _LONGCAT_HOST) if d not in _np_cur]
+    _missing = [d for d in (_LOOPBACK_NO_PROXY, *_EXTERNAL_HOSTS) if d and d not in _np_cur]
     if _missing:
         os.environ[_np_key] = ",".join([_np_cur, *_missing]) if _np_cur else ",".join(_missing)
-del _np_key, _np_cur, _LOOPBACK_NO_PROXY, _LONGCAT_HOST, _missing
+del _np_key, _np_cur, _LOOPBACK_NO_PROXY, _EXTERNAL_HOSTS, _missing
 
 #: 上传图片目录（P4：默认绝对路径——相对路径随进程 CWD 漂移，容器/服务化下会写到
 #: 不可预期目录；以本文件（backend/app/core/）为锚点定位到 backend/uploads/images）
