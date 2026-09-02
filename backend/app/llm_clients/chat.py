@@ -159,6 +159,12 @@ class OpenAILikeChatClient(ChatClient):
     async def complete(self, messages: list[dict], model: str | None = None, **kwargs) -> str:
         # P2-⑤：允许调用方显式覆写超时（如坐席辅助用短超时 25s，低于前端阈值 35s）
         req_timeout = kwargs.pop("timeout", None)
+        # 2026-09-03：worker 线程 asyncio.run 每任务新 loop，复用共享池会 checkout 绑定
+        # 死 loop 的 keep-alive 连接（概率性 Event loop is closed / 挂死——离线回填
+        # 362 条 6 轮才收敛的根因，在线影子采样存活率低 + ticket 预起草静默 NULL 同源）。
+        # own_client=True 走短命自建 client：多付一次 TCP+TLS 握手（占后台预算 <10%），
+        # 主 loop 流量不受影响（默认仍走共享池，TTFT 红利保持）。
+        own_client = kwargs.pop("own_client", False)
         payload = self._payload(messages, model, stream=False, kwargs=kwargs)
         headers, body = self._request(payload)
         client_timeout = (
@@ -166,11 +172,15 @@ class OpenAILikeChatClient(ChatClient):
             if req_timeout is None
             else httpx.Timeout(float(req_timeout), connect=10.0)
         )
-        client = await _get_shared_client()
         last_err: httpx.HTTPStatusError | None = None
         for _attempt in range(2):  # 429/5xx 重试 1 次（非流式长回答 + 偶发限流双兜底）
             try:
-                resp = await client.post(self._api_url(), content=body, headers=headers, timeout=client_timeout)
+                if own_client:
+                    async with httpx.AsyncClient(trust_env=True, timeout=client_timeout) as client:
+                        resp = await client.post(self._api_url(), content=body, headers=headers)
+                else:
+                    client = await _get_shared_client()
+                    resp = await client.post(self._api_url(), content=body, headers=headers, timeout=client_timeout)
                 resp.raise_for_status()
                 data = resp.json()
                 choices = data.get("choices") or []

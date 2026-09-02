@@ -114,6 +114,10 @@ async def classify_once(query: str, client: Any = None) -> tuple[str | None, int
         build_messages(query),
         timeout=_COMPLETE_TIMEOUT_S,
         chat_template_kwargs={"enable_thinking": False},
+        # worker 线程 asyncio.run 每任务新 loop：共享池 keep-alive 连接绑定旧 loop，
+        # 跨 loop checkout 概率性 Event loop is closed/挂死（回填 6 轮才收敛的根因）。
+        # 自建短命 client（多付一次握手，后台任务预算 <10%）。
+        own_client=True,
     )
     latency_ms = int(round((time.monotonic() - t0) * 1000))
     return parse_intent(text), latency_ms

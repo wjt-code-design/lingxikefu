@@ -125,7 +125,12 @@ def draft_ticket_suggestion(
             # SQLite（测试）下 Uuid 列可能读回 str，统一转 uuid 再入参（同 kb_lookup 惯例）
             sid = t.session_id if isinstance(t.session_id, uuid.UUID) else uuid.UUID(str(t.session_id))
             draft = asyncio.run(
-                agent_assist.draft_reply(db, sid, question[:500], state_hint=hint)
+                # own_client=True：worker 线程 asyncio.run 每任务新 loop，共享池
+                # keep-alive 连接绑定旧 loop 跨 loop checkout 概率性失败（静默 NULL
+                # 根因，2026-09-03 审计）——自建短命 client 修复。
+                agent_assist.draft_reply(
+                    db, sid, question[:500], state_hint=hint, own_client=True
+                )
             )
             if not draft.text:
                 return  # fail-open：LLM 空/无知识库 → 草稿留空，不影响建单

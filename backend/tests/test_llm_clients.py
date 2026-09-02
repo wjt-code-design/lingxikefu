@@ -314,3 +314,149 @@ class TestRerankGate:
         assert settings.RAG_ENABLE_RERANK is False
         with pytest.raises(ModelNotConfiguredError):
             get_rerank_client()
+
+
+class TestOwnClientCrossLoop:
+    """worker 线程 asyncio.run 跨 event loop 复用共享 AsyncClient 的修复（2026-09-03 审计）。
+
+    背景：httpx AsyncClient 连接池绑定创建时的 loop；intent_shadow / ticket 预起草在
+    worker 线程用 asyncio.run 每任务新 loop，复用共享 client → 概率性
+    RuntimeError: Event loop is closed（离线回填 362 条 6 轮才收敛的根因；在线影子
+    采样存活率低 + ticket 预起草静默 NULL 同源）。
+    修复：complete(own_client=True) 走短命自建 client（多付一次握手，占后台预算 <10%）。
+
+    用真实本地 HTTP/1.1 keep-alive 服务复现（mock post 绕过连接池无法复现此 bug）。
+    """
+
+    @staticmethod
+    def _local_llm_server():
+        """起一个返回固定 chat completion 的本地 HTTP/1.1 keep-alive 服务。
+
+        线程化 + handler 读超时的原因（挂起教训）：HTTPServer.shutdown() 会等
+        serve_forever 退出，而 keep-alive handler 阻塞在「等死连接的下一个请求」
+        的 recv 上 → shutdown 无限挂起（首个测试版本的实际挂点）。ThreadingHTTPServer
+        每连接独立线程 + timeout=5 让 handler 自行超时退出，finally 只关监听
+        socket（server_close 非阻塞）。
+        """
+        import threading
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+        class Handler(BaseHTTPRequestHandler):
+            # HTTP/1.1 + Content-Length → keep-alive 连接复用（复现连接池行为的前提）
+            protocol_version = "HTTP/1.1"
+            # keep-alive 等下一请求 5s 超时退出（防 handler 永久阻塞）
+            timeout = 5
+
+            def do_POST(self):  # noqa: N802
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                body = json.dumps(
+                    {"choices": [{"message": {"content": "ok"}}]}
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        return server
+
+    def _setup(self, monkeypatch):
+        import app.llm_clients.chat as chat_mod
+
+        server = self._local_llm_server()
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-key")
+        monkeypatch.setattr(
+            settings, "LONGCAT_BASE_URL", f"http://127.0.0.1:{server.server_address[1]}/v1"
+        )
+        # 隔离共享池状态：置空模块级单例（跨 loop 的旧连接不泄漏到其他测试）
+        chat_mod._shared_client = None
+        return server, chat_mod
+
+    @staticmethod
+    def _run(coro, seconds: float = 8.0):
+        """asyncio.run + 硬超时：跨 loop 死连接的失败形态是**挂死**（RuntimeError 在
+        httpcore 内部回调被吞，探针实证 req2 无限等待）而非干净异常——不加 wait_for
+        测试会永远挂起（与回填 6 轮收敛中「挂到 10s 超时」的表现一致）。"""
+        import asyncio
+
+        return asyncio.run(asyncio.wait_for(coro, seconds))
+
+    def test_shared_client_cross_loop_fails_documented(self, monkeypatch):
+        """文档化测试（bug 复现证据，2026-09-03 审计）：共享 client 的 keep-alive
+        连接绑定创建时的 loop；第二个 loop 复用时 is_closed 守卫失明（仍 False）→
+        checkout 死 loop 连接。实际失败形态**非确定**（探针实证：RuntimeError 或
+        挂死二选一，即回填 6 轮收敛 ~50% 失败率的来源）——线程 + join 超时两种
+        形态都判「bug 复现成功」；若未来 httpx 自愈（请求成功返回），本测试失败
+        = 可连同 own_client 分支一并简化。"""
+        import asyncio
+        import threading
+
+        server, chat_mod = self._setup(monkeypatch)
+        try:
+            cli = chat_mod.OpenAILikeChatClient()
+            # loop 1：一次请求即让 keep-alive 连接驻留共享池
+            self._run(cli.complete([{"role": "user", "content": "q1"}], timeout=5))
+            c1 = chat_mod._shared_client
+            # 根因结构断言：连接所属 loop 已死，但 is_closed 守卫不感知
+            assert c1 is not None and not c1.is_closed
+            # loop 2：死连接上的真实请求——err（RuntimeError/超时）或挂死均为复现
+            result: dict = {}
+
+            def _doomed() -> None:
+                try:
+                    result["out"] = asyncio.run(
+                        cli.complete([{"role": "user", "content": "q2"}], timeout=3)
+                    )
+                except BaseException as e:  # noqa: BLE001 - 记录形态供断言
+                    result["err"] = f"{type(e).__name__}: {e}"
+
+            t = threading.Thread(target=_doomed, daemon=True)
+            t.start()
+            t.join(15)
+            if not t.is_alive():
+                assert "err" in result, f"共享路径意外自愈（可移除 own_client 分支）：{result}"
+                assert "Event loop is closed" in result["err"] or "Timeout" in result["err"], result
+            # t.is_alive() → 挂死形态：daemon 线程随进程退出，同为 bug 复现
+        finally:
+            chat_mod._shared_client = None
+            server.server_close()
+
+    def test_complete_own_client_survives_cross_loop(self, monkeypatch):
+        """修复验证：own_client=True 不触碰共享池（自建短命 client）。
+        红测形态：修复前 own_client kwarg 被吞进 payload → 走共享池 → 命中
+        _no_shared 断言（快且确定）；修复后自建 client 成功返回。
+        跨 loop 死连接的实际危害由 test_shared_client_cross_loop_fails_documented
+        单独锁定，本测试不需要真实跨 loop 预热。"""
+        server, chat_mod = self._setup(monkeypatch)
+        try:
+            cli = chat_mod.OpenAILikeChatClient()
+
+            async def _no_shared():
+                raise AssertionError("own_client 路径不得触碰共享池")
+
+            monkeypatch.setattr(chat_mod, "_get_shared_client", _no_shared)
+            # 仍在独立 loop 上调用（复现 worker asyncio.run 场景）
+            out = self._run(
+                cli.complete([{"role": "user", "content": "q2"}], timeout=5, own_client=True)
+            )
+            assert out == "ok"
+        finally:
+            chat_mod._shared_client = None
+            server.server_close()
+
+    def test_complete_own_client_default_unchanged(self, monkeypatch):
+        """默认路径（主 loop 请求）行为零变化：仍走共享池（TTFT 红利保持）。"""
+        server, chat_mod = self._setup(monkeypatch)
+        try:
+            cli = chat_mod.OpenAILikeChatClient()
+            out = self._run(cli.complete([{"role": "user", "content": "q"}], timeout=5))
+            assert out == "ok"
+            assert chat_mod._shared_client is not None  # 共享池被使用且保留
+        finally:
+            chat_mod._shared_client = None
+            server.server_close()

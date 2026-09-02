@@ -64,13 +64,18 @@ async def draft_reply(
     latest_kb_id=None,
     search_kb=None,
     chat_client=None,
+    own_client: bool = False,
 ) -> AssistDraft:
     """草拟一条坐席回复（单一核心，检索 + assist prompt + LLM 非流式）。
 
     - 同步阻塞段（KB 定位/检索/历史查询）经 run_in_threadpool 执行（H2 纪律，
       不阻塞事件循环——后台 worker 经 asyncio.run 调用同样成立）；
     - 注入参数缺省用模块默认实现；任何一步异常向调用方传播（端点 fail-open 返回
-      空建议；worker fail-open 草稿留空）。
+      空建议；worker fail-open 草稿留空）；
+    - own_client：worker 线程 asyncio.run（每任务新 event loop）场景必须传 True
+      ——共享 AsyncClient 的 keep-alive 连接绑定旧 loop，跨 loop checkout 概率性
+      Event loop is closed/挂死（2026-09-03 审计，ticket 预起草静默 NULL 根因）。
+      主 loop（suggest 端点）保持 False 走共享池（TTFT 红利）。
     """
     kb_lookup = latest_kb_id or _default_kb_lookup
     search_fn = search_kb or _default_search_kb
@@ -84,5 +89,7 @@ async def draft_reply(
     messages = build_assist_messages(
         question=question, history=history, chunks=chunks, state_hint=state_hint
     )
-    text = (await client_factory().complete(messages, timeout=ASSIST_TIMEOUT)).strip()
+    text = (
+        await client_factory().complete(messages, timeout=ASSIST_TIMEOUT, own_client=own_client)
+    ).strip()
     return AssistDraft(text=text, chunks=chunks)
