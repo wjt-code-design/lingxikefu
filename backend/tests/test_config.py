@@ -96,6 +96,19 @@ def test_defaults_are_consistent() -> None:
     assert "http://localhost:5173" in settings.CORS_ORIGINS
 
 
+def test_no_proxy_covers_loopback_and_longcat() -> None:
+    """config import 时 NO_PROXY 必须含回环豁免 + LongCat 域名直连（2026-09-02 实测：
+    仅回环豁免时 urllib 回退注册表死代理 → LongCat ConnectError 10061 → eval 全 ERR）。
+    守护模块级 NO_PROXY 逻辑被误删（删了必红）。"""
+    import os
+
+    from app.core.config import settings as _settings  # noqa: F401  # 确保 import 已发生
+
+    np_val = os.environ.get("NO_PROXY", "") + "," + os.environ.get("no_proxy", "")
+    assert "127.0.0.1" in np_val and "localhost" in np_val
+    assert "api.longcat.chat" in np_val
+
+
 def test_jwt_secret_default_is_placeholder() -> None:
     """未显式配置时 JWT_SECRET 默认即占位符（保证「不配置=起不来」语义）。"""
     assert make_settings(JWT_SECRET=PLACEHOLDER_SECRET).JWT_SECRET == PLACEHOLDER_SECRET
