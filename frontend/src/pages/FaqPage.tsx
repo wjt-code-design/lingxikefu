@@ -235,7 +235,8 @@ export function FaqPage() {
     queryKey: ['public-faq'],
     queryFn: getPublicFaq,
   });
-  const faqItems: FaqKBItem[] = faqData?.items ?? [];
+  // useMemo 稳定引用：下游 categories/flatItems 的 useMemo 依赖不随渲染变化
+  const faqItems: FaqKBItem[] = useMemo(() => faqData?.items ?? [], [faqData]);
   const useReal = faqItems.some((kb) => (kb.docs?.length ?? 0) > 0);
 
   /** 当前分类集（真实数据优先，空则静态兜底） */

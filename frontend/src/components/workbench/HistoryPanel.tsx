@@ -60,6 +60,49 @@ function SessionRow({
   );
 }
 
+/** 日期分组标签（今天/昨天/本周/本月/更早）；纯函数，模块作用域避免组件内重建。 */
+const dateLabel = (iso: string): string => {
+  const d = new Date(iso);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const yesterday = today - 86_400_000;
+  const monday = today - ((now.getDay() + 6) % 7) * 86_400_000;
+  const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+  const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  if (t === today) return '今天';
+  if (t === yesterday) return '昨天';
+  if (t >= monday) return '本周';
+  if (t >= firstDayOfMonth) return '本月';
+  return '更早';
+};
+
+/** 按 updated_at 分组并按固定顺序输出（纯函数，模块作用域：useMemo 依赖稳定）。 */
+const groupByDate = (items: SessionItem[]): DateGroup[] => {
+  const groups = new Map<string, SessionItem[]>();
+  items.forEach((s) => {
+    const label = dateLabel(s.updated_at);
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label)!.push(s);
+  });
+  const order = ['今天', '昨天', '本周', '本月', '更早'];
+  return order
+    .map((label) => ({ label, items: groups.get(label) || [] }))
+    .filter((g) => g.items.length > 0);
+};
+
+/** 限额截断分组（纯函数，模块作用域）。 */
+const capGroups = (groups: DateGroup[], limit: number): DateGroup[] => {
+  const out: DateGroup[] = [];
+  let count = 0;
+  for (const g of groups) {
+    const take = Math.min(g.items.length, Math.max(0, limit - count));
+    if (take <= 0) break;
+    out.push({ label: g.label, items: g.items.slice(0, take) });
+    count += take;
+  }
+  return out;
+};
+
 export function HistoryPanel() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -88,46 +131,6 @@ export function HistoryPanel() {
     if (diff < 60_000) return '刚刚';
     if (diff < 3_600_000) return `${Math.floor(diff / 60_000)} 分钟前`;
     return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
-  };
-
-  const dateLabel = (iso: string) => {
-    const d = new Date(iso);
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterday = today - 86_400_000;
-    const monday = today - ((now.getDay() + 6) % 7) * 86_400_000;
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-    const t = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    if (t === today) return '今天';
-    if (t === yesterday) return '昨天';
-    if (t >= monday) return '本周';
-    if (t >= firstDayOfMonth) return '本月';
-    return '更早';
-  };
-
-  const groupByDate = (items: SessionItem[]): DateGroup[] => {
-    const groups = new Map<string, SessionItem[]>();
-    items.forEach((s) => {
-      const label = dateLabel(s.updated_at);
-      if (!groups.has(label)) groups.set(label, []);
-      groups.get(label)!.push(s);
-    });
-    const order = ['今天', '昨天', '本周', '本月', '更早'];
-    return order
-      .map((label) => ({ label, items: groups.get(label) || [] }))
-      .filter((g) => g.items.length > 0);
-  };
-
-  const capGroups = (groups: DateGroup[], limit: number): DateGroup[] => {
-    const out: DateGroup[] = [];
-    let count = 0;
-    for (const g of groups) {
-      const take = Math.min(g.items.length, Math.max(0, limit - count));
-      if (take <= 0) break;
-      out.push({ label: g.label, items: g.items.slice(0, take) });
-      count += take;
-    }
-    return out;
   };
 
   const filteredSessions = useMemo(() => {

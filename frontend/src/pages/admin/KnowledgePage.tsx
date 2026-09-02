@@ -53,7 +53,8 @@ export function KnowledgePage() {
     queryKey: ['kbs'],
     queryFn: listKnowledgeBases,
   });
-  const kbs: KBItem[] = kbsData?.items ?? [];
+  // useMemo 稳定引用：下游 F4 通知 useEffect 与多个 useMemo 依赖不随渲染变化
+  const kbs: KBItem[] = useMemo(() => kbsData?.items ?? [], [kbsData]);
 
   const { data: docsData, isFetching: docsFetching } = useQuery({
     queryKey: ['docs', kbId],

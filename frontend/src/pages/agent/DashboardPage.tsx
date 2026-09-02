@@ -38,7 +38,8 @@ export function DashboardPage() {
     queryFn: () => listSessions({ page: 1, size: 50 }),
   });
 
-  const tickets: TicketItem[] = ticketsData?.items ?? [];
+  // useMemo 稳定引用：下游 stats/todoTickets 的 useMemo 依赖不随渲染变化
+  const tickets: TicketItem[] = useMemo(() => ticketsData?.items ?? [], [ticketsData]);
 
   // 分状态统计
   const stats = useMemo(() => {

@@ -191,7 +191,7 @@ export function NotificationBell() {
       trigger={['click']}
       open={open}
       onOpenChange={handleOpenChange}
-      dropdownRender={() => panel}
+      popupRender={() => panel}
       placement="bottomRight"
     >
       <button type="button" className="notification-bell" aria-label="通知中心">

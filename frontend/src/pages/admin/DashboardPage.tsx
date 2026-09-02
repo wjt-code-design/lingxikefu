@@ -146,7 +146,8 @@ export function DashboardPage() {
   const up = stats?.feedback_up ?? 0;
   const down = stats?.feedback_down ?? 0;
   const avgMs = stats?.avg_first_token_ms ?? 0;
-  const gaps = stats?.hot_gaps ?? [];
+  // useMemo 稳定引用：下游 useMemo 依赖不随渲染变化
+  const gaps = useMemo(() => stats?.hot_gaps ?? [], [stats]);
 
   // 待办工单：open + processing 合并去重、按创建时间倒序取前 8
   const mergedTickets = useMemo(() => {
