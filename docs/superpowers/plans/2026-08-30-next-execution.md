@@ -115,7 +115,12 @@ G3 观测：G2 的 GET /admin/kb/batches 已覆盖（批次+评测摘要+gate �
 - **数据源**：GET /admin/intent-shadow/stats（20% 采样落 Message.meta，P2-T3）；门槛进度字段 min_total/remaining 已内建（H4）。
 - **切换决策门槛（建议值，达标后与业务确认）**：样本 ≥500 且 agree_rate ≥95% 且连续两周无回归，三项同时满足才评审切换。
 - **依赖链**：影子达标 → LLM 分类驱动路由（含 risk_flag）→ 低风险知识型问句判 handoff+预起草 → 预起草改道数据产生 → 改道效果评估。当前预起草零触发是设计预期（词表下知识型问句判 qa）。
-- **周检查清单（每周一次，~5 分钟）**：① GET /admin/eval/gate——当前 KB 版本是否评测通过；② GET /admin/stats?days=7——hot_gaps/feedback_gaps top 问题；③ GET /admin/intent-shadow/stats——total/remaining/agree_rate 趋势。三项异常任一 → 归因。
+- **周检查清单（每周一次，~5 分钟）**：① GET /admin/eval/gate——当前 KB 版本是否评测通过；② GET /admin/stats?days=7——hot_gaps/feedback_gaps top 问题；③ GET /admin/intent-shadow/stats——total/remaining/agree_rate 趋势 + **daily 按日分桶（2026-09-02 新增）逐日核对**。三项异常任一 → 归因。
+- **数据依赖加速（2026-09-02 落地）**：
+  1. **影子样本离线回填**：`python -m scripts.backfill_intent_shadow`（--limit/--dry-run/--sleep；幂等只补 rule=qa 无标记的历史消息，复用 shadow_classify fail-open 原子操作）——历史 362 条 qa 用户消息一次性补齐，不再苦等在线 20% 采样（实测 18 天仅攒 7 条）。
+  2. **影子分类关思维链**：classify_once 显式 `chat_template_kwargs={"enable_thinking": False}`——三选一枚举无需求推理，开思考 6-19s 挤爆 10s 超时大量 fail-open（18 天仅 7 条的根因之一），关后 ~1-2s；在线影子存活率同步受益，不影响对话主链路。
+  3. **双周观测留档**：stats 端点新增 `daily` 按日分桶（日期升序 agree/total/agree_rate），「连续两周无回归」从口头口径变为可逐日核对的度量。
+- **门槛口径澄清**：min_total=500 为建议值（本地/演示环境全历史仅 369 条 qa 用户消息，回填后 total≈369 恒 <500）——本地环境按 369 全量评估，生产流量环境维持 500；达成与否看 agree_rate 与 daily 趋势的稳定性，切不切由业务评审拍板。
 
 ### I2 四期立项说明（外部依赖，未拆任务）
 

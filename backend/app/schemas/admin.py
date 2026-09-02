@@ -83,11 +83,21 @@ class IntentShadowBucket(BaseModel):
     agree_rate: float  # agree / total（4 位小数；total=0 时为 0.0）
 
 
+class IntentShadowDailyBucket(BaseModel):
+    """单日影子一致率桶（批次 I：双周观测留档——「连续两周无回归」度量基础）。"""
+
+    date: str  # YYYY-MM-DD（created_at 本地日）
+    total: int
+    agree: int
+    agree_rate: float
+
+
 class IntentShadowStats(BaseModel):
     """ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。
 
     H4 观测（架构数据积累期）：min_total/remaining 供"距切换决策门槛还差多少样本"
     一屏可读——门槛值 INTENT_SHADOW_MIN_TOTAL（config），remaining<=0 即样本量达标。
+    daily 为按日分桶（日期升序），供双周观测期逐日核对 agree_rate 趋势。
     """
 
     total: int
@@ -96,3 +106,4 @@ class IntentShadowStats(BaseModel):
     by_intent: dict[str, IntentShadowBucket] = {}
     min_total: int = 0
     remaining: int = 0
+    daily: list[IntentShadowDailyBucket] = []

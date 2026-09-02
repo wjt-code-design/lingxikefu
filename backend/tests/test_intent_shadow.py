@@ -493,6 +493,19 @@ def test_parse_intent_accepts_enum_and_fences():
     assert json.loads('{"intent": "qa"}')["intent"] in ("qa", "handoff", "chitchat")
 
 
+def test_classify_once_disables_thinking():
+    """影子分类显式关思维链（三选一枚举任务）：10s 超时下开思考大量超时
+    fail-open——18 天仅 7 条样本的根因之一；回填速度同因受制（~9s/条）。"""
+    import asyncio
+
+    from app.services.intent_shadow import classify_once
+
+    cli = _FakeChatClient()
+    intent, latency = asyncio.run(classify_once("退货政策", client=cli))
+    assert intent == "qa"
+    assert cli.last_kwargs.get("chat_template_kwargs") == {"enable_thinking": False}
+
+
 # ── 5. 统计端点：GET /admin/intent-shadow/stats ───────────────────────
 
 
@@ -560,7 +573,43 @@ def test_stats_empty_returns_zeroes(stats_client):
     assert data == {
         "total": 0, "agree": 0, "agree_rate": 0.0, "by_intent": {},
         "min_total": 500, "remaining": 500,
+        "daily": [],
     }
+
+
+def test_stats_daily_buckets(stats_client):
+    """按日分桶（批次 I：双周观测留档——「连续两周无回归」的度量基础）：
+    日期升序、桶内 agree/total/agree_rate 与全量口径一致。"""
+    import datetime as dt
+
+    tc, Local = stats_client
+    day1 = dt.datetime(2026, 9, 1, 10, 0, 0)
+    day2 = dt.datetime(2026, 9, 2, 23, 0, 0)
+    with Local() as db:
+        # day1: agree 1/1；day2: agree 0/1（llm 与 rule 分歧）
+        db.add(
+            Message(
+                session_id=SID, role=MessageRole.user, content="d1", intent="qa",
+                meta={"intent_shadow": {"intent": "qa", "latency_ms": 1}},
+                created_at=day1,
+            )
+        )
+        db.add(
+            Message(
+                session_id=SID, role=MessageRole.user, content="d2", intent="qa",
+                meta={"intent_shadow": {"intent": "chitchat", "latency_ms": 2}},
+                created_at=day2,
+            )
+        )
+        db.commit()
+    r = tc.get(f"{API}/admin/intent-shadow/stats", headers=_h(ADMIN_ID, "admin"))
+    assert r.status_code == 200
+    daily = r.json()["daily"]
+    # fixture 的 4 条消息 created_at=server_default now（2026-09-02），与新加 day2 同桶：
+    # day2 桶 = 4（agree 3）+ 新加 1（agree 0）= total 5 / agree 3
+    assert [d["date"] for d in daily] == ["2026-09-01", "2026-09-02"]
+    assert daily[0] == {"date": "2026-09-01", "total": 1, "agree": 1, "agree_rate": 1.0}
+    assert daily[1] == {"date": "2026-09-02", "total": 5, "agree": 3, "agree_rate": 0.6}
 
 
 def test_stats_groups_by_rule_intent_verbatim(stats_client):

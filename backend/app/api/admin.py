@@ -27,6 +27,7 @@ from app.schemas.admin import (
     FeedbackGap,
     HotGap,
     IntentShadowBucket,
+    IntentShadowDailyBucket,
     IntentShadowStats,
     RoleUpdateReq,
     StatsTrendResp,
@@ -339,6 +340,32 @@ def get_intent_shadow_stats(
         )
 
     min_total = settings.INTENT_SHADOW_MIN_TOTAL
+    # 按日分桶（批次 I：双周观测留档——「连续两周无回归」的度量基础）。
+    # func.date 跨方言（PG: date(timestamptz) / SQLite: date(text)）；日期升序输出。
+    day_col = sa.func.cast(sa.func.date(Message.created_at), sa.String)
+    day_rows = db.execute(
+        select(day_col, rule_col, llm_col, func.count(Message.id))
+        .where(
+            Message.tenant_id == tenant,
+            Message.role == MessageRole.user,
+            llm_col.isnot(None),
+        )
+        .group_by(day_col, rule_col, llm_col)
+    ).all()
+    daily_acc: dict[str, list[int]] = {}
+    for day, rule_intent, llm_intent, cnt in day_rows:
+        if day is None:
+            continue
+        acc = daily_acc.setdefault(str(day), [0, 0])
+        acc[0] += int(cnt)
+        if llm_intent is not None and str(rule_intent) == llm_intent:
+            acc[1] += int(cnt)
+    daily = [
+        IntentShadowDailyBucket(
+            date=d, total=t, agree=a, agree_rate=round(a / t, 4) if t else 0.0
+        )
+        for d, (t, a) in sorted(daily_acc.items())
+    ]
     return IntentShadowStats(
         total=total,
         agree=agree,
@@ -346,6 +373,7 @@ def get_intent_shadow_stats(
         by_intent={k: _bucket(v) for k, v in buckets.items()},
         min_total=min_total,
         remaining=max(0, min_total - total),
+        daily=daily,
     )
 
 

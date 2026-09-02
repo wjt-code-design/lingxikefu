@@ -480,3 +480,27 @@ export interface NotificationListResp {
 export interface UnreadCountResp {
   count: number;
 }
+
+// ---------- IntentShadow（意图影子一致率 · ADR-1 只记不驱动 / 批次 I 双周观测） ----------
+export interface IntentShadowBucket {
+  total: number;
+  agree: number;
+  agree_rate: number;
+}
+export interface IntentShadowDailyBucket {
+  /** YYYY-MM-DD（created_at 本地日） */
+  date: string;
+  total: number;
+  agree: number;
+  agree_rate: number;
+}
+export interface IntentShadowStats {
+  total: number;
+  agree: number;
+  agree_rate: number;
+  by_intent: Record<string, IntentShadowBucket>;
+  min_total: number;
+  remaining: number;
+  /** 按日分桶（日期升序）：双周观测期逐日核对 agree_rate 趋势 */
+  daily: IntentShadowDailyBucket[];
+}

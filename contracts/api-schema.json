@@ -3973,6 +3973,35 @@
         "title": "IntentShadowBucket",
         "description": "单规则意图桶（架构二期 3：意图影子一致率观测）。"
       },
+      "IntentShadowDailyBucket": {
+        "properties": {
+          "date": {
+            "type": "string",
+            "title": "Date"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "agree": {
+            "type": "integer",
+            "title": "Agree"
+          },
+          "agree_rate": {
+            "type": "number",
+            "title": "Agree Rate"
+          }
+        },
+        "type": "object",
+        "required": [
+          "date",
+          "total",
+          "agree",
+          "agree_rate"
+        ],
+        "title": "IntentShadowDailyBucket",
+        "description": "单日影子一致率桶（批次 I：双周观测留档——「连续两周无回归」度量基础）。"
+      },
       "IntentShadowStats": {
         "properties": {
           "total": {
@@ -4004,6 +4033,14 @@
             "type": "integer",
             "title": "Remaining",
             "default": 0
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/IntentShadowDailyBucket"
+            },
+            "type": "array",
+            "title": "Daily",
+            "default": []
           }
         },
         "type": "object",
@@ -4013,7 +4050,7 @@
           "agree_rate"
         ],
         "title": "IntentShadowStats",
-        "description": "ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。\n\nH4 观测（架构数据积累期）：min_total/remaining 供\"距切换决策门槛还差多少样本\"\n一屏可读——门槛值 INTENT_SHADOW_MIN_TOTAL（config），remaining<=0 即样本量达标。"
+        "description": "ADR-1 第一步观测口径：LLM 影子意图 vs 规则式意图一致率（只记不驱动的验证数据）。\n\nH4 观测（架构数据积累期）：min_total/remaining 供\"距切换决策门槛还差多少样本\"\n一屏可读——门槛值 INTENT_SHADOW_MIN_TOTAL（config），remaining<=0 即样本量达标。\ndaily 为按日分桶（日期升序），供双周观测期逐日核对 agree_rate 趋势。"
       },
       "KBItem": {
         "properties": {

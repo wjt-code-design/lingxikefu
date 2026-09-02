@@ -102,10 +102,19 @@ def should_sample(rate: float, rng: Callable[[], float] = random.random) -> bool
 
 
 async def classify_once(query: str, client: Any = None) -> tuple[str | None, int]:
-    """单条影子分类：调 chat client（async）+ 解析；返回 (意图或 None, 时延 ms)。"""
+    """单条影子分类：调 chat client（async）+ 解析；返回 (意图或 None, 时延 ms)。
+
+    显式关思维链（enable_thinking=False，chat.py 对显式 chat_template_kwargs 不
+    覆盖）：三选一枚举任务无需求推理——开思考时延 6-19s 挤爆 10s 超时大量
+    fail-open（18 天仅 7 条样本的根因之一），关后 ~1-2s；不影响对话主链路。
+    """
     cli = client if client is not None else get_chat_client()
     t0 = time.monotonic()
-    text = await cli.complete(build_messages(query), timeout=_COMPLETE_TIMEOUT_S)
+    text = await cli.complete(
+        build_messages(query),
+        timeout=_COMPLETE_TIMEOUT_S,
+        chat_template_kwargs={"enable_thinking": False},
+    )
     latency_ms = int(round((time.monotonic() - t0) * 1000))
     return parse_intent(text), latency_ms
 
