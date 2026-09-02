@@ -369,13 +369,21 @@ jobs:
         # push 默认 20 题抽样（~20min）；workflow_dispatch 传 full_eval=true 时跑全量 100 题（~1h）。
         # ${{ github.event.inputs.full_eval }} 在 push 事件中为空（空 → 0 → 走 sample 20）。
         # 若 inputs.full_eval 的字面值为 true → runner 无法解析布尔比较，用字符串比较绕过。
+        # --out 导出逐题明细（error/skip 也在内），供下一步分母缩水门禁判定。
         run: |
           SAMPLE_FLAG="--sample 20"
           if [ "${{ github.event.inputs.full_eval }}" = "true" ]; then
             SAMPLE_FLAG=""
             echo "::notice::全量评测模式（100 题，约 1-2h）"
           fi
-          python -m scripts.eval_faithfulness $SAMPLE_FLAG --kb-name "$EVAL_KB_NAME"
+          python -m scripts.eval_faithfulness $SAMPLE_FLAG --kb-name "$EVAL_KB_NAME" --out eval-results.json
+      # 防分母缩水假绿（BASELINE.md §四 2026-08-30 登记，2026-09-02 加固落地）：
+      # LongCat 欠费期部分题 402 error 后不进 faithfulness 分母——20 题若 15 题 402，
+      # 余 5 题全过即 100% 假绿。error 占比 >20% 直接 FAIL（判定脚本本体零改动，
+      # 门禁逻辑在独立脚本 scripts/eval_gate_error_rate.py，不在 BASELINE.sha256 冻结清单）。
+      - name: Error-rate gate (errors >20% of results => FAIL)
+        if: env.LONGCAT_API_KEY != ''
+        run: python -m scripts.eval_gate_error_rate eval-results.json
       # 未配置 LLM Key = 门禁无法执行 = 显式失败（fail-closed，杜绝"没跑算过"假绿）
       - name: Faithfulness skipped (missing LONGCAT_API_KEY) => FAIL
         if: env.LONGCAT_API_KEY == ''
