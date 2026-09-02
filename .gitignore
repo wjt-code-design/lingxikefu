@@ -20,6 +20,7 @@ coverage.xml
 .coverage
 .superpowers/
 .zcode/
+.trae/
 
 # eval 运行日志不入库（2026-09-02 清理 8 个历史日志后的防回填；json 入库存档策略不变）
 eval-and-samples/results/*.log
