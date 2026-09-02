@@ -20,6 +20,7 @@ import time
 import uuid
 from datetime import UTC, datetime
 
+import anyio
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
@@ -388,9 +389,21 @@ async def chat_stream(
             # 前置段正常结束（prepared=True）不在此退，由内层段 finally 统一收口。
             # 断连/无 KB 路径已显式退款并置 consumed=False，此处跳过（防双退）。
             if consumed and not prepared:
-                await run_in_threadpool(
-                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-                )
+                # S2（2026-09-03 并发审计）：断连取消是 anyio 粘性取消——finally 内
+                # 裸 await 立即再抛 CancelledError，退款到不了 quota.refund。
+                # CancelScope(shield=True) 隔离取消风暴：断连照退不白扣；
+                # 退款自身异常吞掉（不阻断排水收口，quota.refund 幂等标记兜底重试）。
+                try:
+                    with anyio.CancelScope(shield=True):
+                        await run_in_threadpool(
+                            quota.refund,
+                            str(user_id),
+                            1,
+                            idem_key=req.client_msg_id,
+                            token=quota_token,
+                        )
+                except Exception:  # noqa: BLE001 - shield 已挡取消，这里只剩业务异常
+                    logger.exception("前置段退款失败（quota.refund 自身异常）")
                 consumed = False
             # 前置段异常时 ctx 可能已构建（Router 记录的降级需排水）；正常路径由
             # 内层段 finally 排水（drain 不幂等，双调用会双计数，此处条件化防重复）
@@ -561,11 +574,20 @@ async def chat_stream(
                         logger.exception("用户画像采集异常（不影响响应）")
                     # T10：未命中 → 回填缓存（qa 非拒答且有内容；复用 RAG 已生成的改写 key）。
                     # 避免在 done 路径重复调用 rewrite，保证检索与回填的 key 同源。
+                    # D4（2026-09-03 审计）：门禁收窄——原「state_hint 非 None 即禁回填」过保守，
+                    # 多轮会话用户（核心流量）永远无法享受缓存。个人化硬边界保留：
+                    # - 订单号槽位：回答绑定个人数据（缓存全局共享，命中即跨用户泄漏）；
+                    # - 澄清轮（clarify）：回答是上下文相关的追问请求，非业务答案；
+                    # - 用户画像：个性化影响不可静态判定（正确性优先）。
+                    # 纯主题状态放行依据：主题提示只影响检索改写，改写语义已固化进
+                    # rewritten_query（缓存 key），答案本身通用；命中侧（cache_check）
+                    # 本就无状态门禁，回填侧对称收窄即自洽。
                     rewritten_query = data.get("rewritten_query")
                     if (
                         not cache_hit
                         and intent == "qa"
-                        and state_hint is None  # P2-③：会话状态影响回答 → 不进全局缓存
+                        and not data.get("clarify")  # D4：澄清轮回答禁回填（上下文相关）
+                        and conversation_state.SLOT_ORDER_NO not in (conv_state or {}).get("slots", {})
                         and not user_profile  # P2-③：个性化用户不进精确层缓存（正确性优先）
                         and content
                         and isinstance(rewritten_query, str)
@@ -614,10 +636,22 @@ async def chat_stream(
         finally:
             # S1：未交付出口统一退款（error 事件/断连/异常），单一收口防泄漏也防双退；
             # done 已置 consumed=False（交付成立不退）。quota.refund 内部幂等标记再兜底一层。
+            # S2（2026-09-03 并发审计）：断连路径的取消是 anyio 粘性取消——finally 内
+            # 裸 await 立即再抛 CancelledError，退款永远到不了 quota.refund（用户额度
+            # 被静默侵蚀）。CancelScope(shield=True) 把退款隔离出取消风暴；退款自身
+            # 异常吞掉（不阻断排水收口）；排水是同步函数不受取消影响，无条件到达。
             if consumed:
-                await run_in_threadpool(
-                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-                )
+                try:
+                    with anyio.CancelScope(shield=True):
+                        await run_in_threadpool(
+                            quota.refund,
+                            str(user_id),
+                            1,
+                            idem_key=req.client_msg_id,
+                            token=quota_token,
+                        )
+                except Exception:  # noqa: BLE001 - shield 已挡取消，这里只剩业务异常
+                    logger.exception("未交付退款失败（quota.refund 自身异常）")
                 consumed = False
             # P2-2：Agent 降级排水——正常结束/断连/异常全路径统一计数 + 结构化日志
             # （防静默改路径：降级率从此可统计、可告警）

@@ -210,8 +210,17 @@ def test_chat_cache_write_reuses_stream_rewritten_query(client, monkeypatch):
     assert writes and writes[0][0] == "规范化后的问题"
 
 
-def test_chat_cache_fill_skipped_when_state_hint(client, monkeypatch):
-    """P2-③：会话状态影响回答（state_hint 非空）→ 不进全局缓存（正确性优先）。"""
+def test_chat_cache_fill_allows_topic_only_state(client, monkeypatch):
+    """D4（2026-09-03 审计）：纯主题状态（无订单号槽位）→ 可回填全局缓存。
+
+    原 P2-③ 门禁过保守：会话只要有过主题（state_hint 非 None）就永不回填——
+    多轮会话用户（核心流量）永远无法享受缓存。收窄依据：
+    - state_hint 的主题提示只影响检索改写，改写语义已固化进 rewritten_query
+      （缓存 key）；答案本身通用（主题≠个人化内容）；
+    - 命中侧（cache_check）本就无状态门禁——带状态用户命中无状态回填的缓存
+      一直被允许，回填侧对称收窄不自洽性即消除。
+    个人化硬边界（订单号槽位/用户画像）仍禁回填，见下方两个测试。
+    """
     tc, _, _ = client
     writes = []
 
@@ -223,7 +232,7 @@ def test_chat_cache_fill_skipped_when_state_hint(client, monkeypatch):
 
     monkeypatch.setattr("app.api.chat.stream_answer", _fake)
     monkeypatch.setattr("app.api.chat.cache_put", lambda *args: writes.append(args))
-    # 会话有主题（无订单号）→ to_prompt_hint 非 None → 回填被拦截
+    # 会话有主题（无订单号）→ to_prompt_hint 非 None（原门禁拦截形态）
     monkeypatch.setattr(
         "app.api.chat._update_conv_state_locked",
         lambda db, sid, msg: {"topic": "退款", "slots": {}, "clarify_count": 0, "stage": "collecting"},
@@ -236,7 +245,68 @@ def test_chat_cache_fill_skipped_when_state_hint(client, monkeypatch):
     )
 
     assert r.status_code == 200
-    assert writes == [], f"state_hint 非空不应回填全局缓存: {writes}"
+    assert writes and writes[0][0] == "q1", (
+        f"纯主题状态（无订单号）应回填全局缓存: {writes}"
+    )
+
+
+def test_chat_cache_fill_skipped_when_order_slot(client, monkeypatch):
+    """D4 硬边界：订单号槽位在会话状态中 → 回答绑定个人数据，禁回填。"""
+    tc, _, _ = client
+    writes = []
+
+    async def _fake(*_a, **_k):
+        yield ("intent", {"intent": "qa"})
+        yield ("token", {"delta": "订单 SO1 已发货"})
+        yield ("sources", {"sources": []})
+        yield ("done", {"message_id": "", "rewritten_query": "q1"})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
+    monkeypatch.setattr("app.api.chat.cache_put", lambda *args: writes.append(args))
+    monkeypatch.setattr(
+        "app.api.chat._update_conv_state_locked",
+        lambda db, sid, msg: {
+            "topic": "订单", "slots": {"order_no": "SO2026080118"},
+            "clarify_count": 0, "stage": "collecting",
+        },
+    )
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "到哪了", "stream": True},
+        headers=_headers(),
+    )
+
+    assert r.status_code == 200
+    assert writes == [], f"订单号槽位状态不应回填全局缓存（个人数据）: {writes}"
+
+
+def test_chat_cache_fill_skipped_when_clarify_round(client, monkeypatch):
+    """D4 硬边界：澄清轮回答（「请补充订单号」类上下文相关请求）禁回填。
+
+    当前 clarify 分支的 done 不带 rewritten_query（天然不回填）；本测试显式锁定
+    该语义——防未来 clarify 分支带上 rewritten_query 时静默把澄清话术灌进缓存。
+    """
+    tc, _, _ = client
+    writes = []
+
+    async def _fake(*_a, **_k):
+        yield ("intent", {"intent": "qa", "refuse": False})
+        yield ("token", {"delta": "请问您想了解退款到账还是维修周期"})
+        yield ("sources", {"sources": []})
+        yield ("done", {"message_id": "", "clarify": True, "rewritten_query": "q-clarify"})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
+    monkeypatch.setattr("app.api.chat.cache_put", lambda *args: writes.append(args))
+
+    r = tc.post(
+        f"{API}/chat/stream",
+        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "要多久", "stream": True},
+        headers=_headers(),
+    )
+
+    assert r.status_code == 200, r.text
+    assert writes == [], f"澄清轮回答不应回填全局缓存（上下文相关请求）: {writes}"
 
 
 def test_chat_cache_fill_skipped_when_user_profile(client, monkeypatch):
@@ -1090,3 +1160,70 @@ def test_chat_no_image_uses_raw_content(client, monkeypatch):
     )
     assert r.status_code == 200
     assert seen["query"] == "退货运费谁出"
+
+
+def test_chat_stream_disconnect_refund_survives_cancellation(client, monkeypatch):
+    """S2（2026-09-03 并发审计）：断连取消下 finally 退款必须执行。
+
+    真实断连路径：starlette StreamingResponse 的 listen_for_disconnect 收到
+    http.disconnect → task group CancelScope 取消 → 取消注入生成器内部 await 点。
+    anyio 取消是**粘性**的（scope 内所有后续 checkpoint 再抛 CancelledError）→
+    finally 内裸 ``await run_in_threadpool(quota.refund)`` 立即再抛 → 退款永远
+    到不了 quota.refund，用户额度被静默侵蚀（排水同理到不了）。
+
+    复现方式：直接驱动端点返回的 body_iterator（与 starlette stream_response
+    消费同一 async generator），挂起型 stream_answer 把生成器停在内部 await，
+    消费方 anyio.move_on_after 取消 = 真实断连的取消形态。
+    """
+    import anyio
+    from app.api.chat import ChatStreamReq, chat_stream
+
+    _, Local, calls = client
+
+    class _HangStream:
+        """intent 后挂起：消费方取消注入生成器内部 await 点（真实断连形态）。"""
+
+        @staticmethod
+        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
+            yield ("intent", {"intent": "qa"})
+            await anyio.sleep(30)
+            yield ("done", {"message_id": ""})
+
+    monkeypatch.setattr("app.api.chat.stream_answer", _HangStream())
+
+    class _FakeRequest:
+        async def is_disconnected(self):
+            return False
+
+        class _State:
+            request_id = "disc-refund-trace"
+
+        state = _State()
+
+    async def _main():
+        req = ChatStreamReq(
+            session_id="11111111-1111-1111-1111-111111111111",
+            content="退货运费谁出",
+            stream=True,
+            client_msg_id="disc-refund-1",
+        )
+        with Local() as db:
+            resp = await chat_stream(
+                req,
+                _FakeRequest(),
+                {"sub": "22222222-2222-2222-2222-222222222222", "role": "user"},
+                db,
+            )
+
+            async def _drive():
+                async for _chunk in resp.body_iterator:
+                    pass  # 消费生成器（与 starlette stream_response 同构）
+
+            with anyio.move_on_after(0.3):
+                await _drive()
+
+    anyio.run(_main)
+    assert calls["consumed"] == 0, (
+        f"断连取消下退款未执行（consumed={calls['consumed']}）——finally 内裸 await "
+        "被粘性 CancelledError 杀死，配额被静默侵蚀"
+    )
