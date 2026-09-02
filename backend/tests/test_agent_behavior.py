@@ -163,11 +163,16 @@ def test_prompt_citation_number_guards():
 
 def test_prompt_bluf_first_sentence_rule():
     """批次 2 BLUF：第一句必须是结论句（先答后述），拒答/限制告知本身即结论句
-    （防 LLM 为凑直答在拒答场景硬编）。删了必红。"""
+    （防 LLM 为凑直答在拒答场景硬编）。删了必红。
+    「直答不减免要点完整性」条款：首轮全量 eval 实测 BLUF 引发回答压缩回归
+    （qa 98→94，Q089/Q092 数字未全中、Q090/Q093 丢并列列表）——该条款为回归修复。"""
     assert "第一句必须是结论句" in SYSTEM_PROMPT
     assert "不得以「关于您咨询的问题」" in SYSTEM_PROMPT
     # 拒答场景豁免声明：守住规则 1/9/11/13 的优先级
     assert "拒答与限制告知本身就是结论句" in SYSTEM_PROMPT
+    # 直答不减免完整性（BLUF 压缩回归修复守护）
+    assert "第一句直答不减免要点完整性" in SYSTEM_PROMPT
+    assert "禁止因为已给结论而省略细节" in SYSTEM_PROMPT
 
 
 def test_prompt_closing_guidance_templates():
