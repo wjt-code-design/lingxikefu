@@ -235,29 +235,13 @@ export function MessageBubble({
         )}
         {isAi ? (
           <>
-            {/* 顶部 header：身份 / 工具 pill / 复制按钮 同行横排
-                - 复制按钮贴近 id 右侧，hover 才浮现（vs 旧右上 absolute），与触屏降级共处一行
-                - 复制按钮 className 不变（chat-msg__copy），保留向后兼容与测试类名锁定 */}
-            <div className="chat-msg__header">
-              {renderIdentity()}
-              <div className="chat-msg__header-tools">
-                {msg.tool && (
-                  <Tag className="chat-msg__tool-badge" color="blue" bordered>
-                    {TOOL_LABEL_MAP[msg.tool] ?? msg.tool}
-                  </Tag>
-                )}
-                <Button
-                  type="text"
-                  size="small"
-                  className="chat-msg__copy"
-                  icon={<CopyOutlined />}
-                  onClick={onCopy}
-                  aria-label="复制回答"
-                >
-                  {copied ? '已复制' : '复制'}
-                </Button>
-              </div>
-            </div>
+            {/* 工具来源 pill：紧跟气泡顶部通用 renderIdentity 之后，正文之前
+                复制按钮不在此处——移到底部 .chat-msg__actions 与点赞条同行（2026-09-03 修正） */}
+            {msg.tool && (
+              <Tag className="chat-msg__tool-badge" color="blue" bordered>
+                {TOOL_LABEL_MAP[msg.tool] ?? msg.tool}
+              </Tag>
+            )}
             {(() => {
               // 订单轨迹识别：流式渐进输出时也能即时切换为卡片视图，绕过 Markdown 纯文本。
               // detectOrderTrack 契约：detected ⇒ items ≥ 1（preamble/footer 已剔除来源标记）；
@@ -307,7 +291,27 @@ export function MessageBubble({
             </div>
           </div>
         )}
-        {isAi && msg.messageId && <ThumbsBar value={msg.feedback} onRate={onRate} />}
+        {/* AI 底部操作行：左点赞条 + 右复制按钮（hover 浮现，触屏常显）
+            复制不依赖 messageId（流式进行中即可复制），点赞条仍需 messageId */}
+        {isAi && (
+          <div className="chat-msg__actions">
+            {msg.messageId ? (
+              <ThumbsBar value={msg.feedback} onRate={onRate} />
+            ) : (
+              <span aria-hidden="true" />
+            )}
+            <Button
+              type="text"
+              size="small"
+              className="chat-msg__copy"
+              icon={<CopyOutlined />}
+              onClick={onCopy}
+              aria-label="复制回答"
+            >
+              {copied ? '已复制' : '复制'}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

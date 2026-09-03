@@ -154,57 +154,56 @@ describe('MessageBubble 引用角标点击联动（批次 1）', () => {
   });
 });
 
-/** 2026-09-03 AI 气泡雅致轻盈重构（守卫）：
- * - 身份/工具徽章/复制按钮合并为 .chat-msg__header 横排容器
- * - 复制按钮不再是 absolute 右上漂浮，改为贴近 id 右侧（header-tools 内 flex 项）
- * - 工具徽章升级 pill 样式
- *
- * 这些断言锁住新 DOM 结构与定位语义，防止后续把 header 拆散或退回 absolute。
- * 视觉/hover 行为不在 jsdom 覆盖范围，由浏览器目验 + globals.css 守卫。
+/** 2026-09-03 AI 气泡布局修正（守卫）：
+ * 上一轮把身份/工具/复制塞进 .chat-msg__header 顶部横排，导致两个 bug：
+ *   ① AI 身份标签渲染两遍（第 228 行通用 renderIdentity + header 内又调一次）→ 两个「🤖 AI 小智」
+ *   ② 复制按钮挤在顶部和身份同行，位置差
+ * 修正：删 header 容器；身份只由第 228 行通用 renderIdentity 渲染一次；
+ *      工具 pill 紧跟身份行；复制按钮移到气泡底部 .chat-msg__actions 与点赞条同行。
+ * 这些断言锁死修正后的结构，尤其「身份标签唯一」防止回归。
  */
-describe('MessageBubble AI 气泡 header 横排（2026-09-03 雅致轻盈）', () => {
-  it('AI 气泡存在 .chat-msg__header 横排容器', () => {
+describe('MessageBubble AI 气泡布局修正（2026-09-03）', () => {
+  it('AI 身份标签只渲染一次（防重复「🤖 AI 小智」回归）', () => {
+    // self 视角下 AI 即渲染身份标签（!selfSide 为真）；带 tool 走完整分支
     renderBubble({ tool: 'order_query' });
-    const header = document.querySelector('.chat-msg--ai .chat-msg__header');
-    expect(header).not.toBeNull();
-    expect(header!.tagName).toBe('DIV');
-    // 视觉 display 由 globals.css 决定（jsdom 不应用 CSS，无法断 computed style），
-    // 但 DOM 结构存在 = 守卫住 header 不被拆散；具体横排由 globals.css 锁住。
+    const identities = document.querySelectorAll('.chat-msg--ai .chat-msg__identity');
+    expect(identities.length).toBe(1);
+    // 「AI 小智」文案在整条气泡内只出现一次
+    expect(screen.getAllByText(/AI 小智/).length).toBe(1);
   });
 
-  it('header 内身份区、工具徽章、复制按钮三者并存且顺序：身份 → 工具 → 复制', () => {
+  it('不再存在 .chat-msg__header 容器（上一轮误加，已删）', () => {
     renderBubble({ tool: 'order_query' });
-    const header = document.querySelector('.chat-msg--ai .chat-msg__header');
-    expect(header).not.toBeNull();
-    const kids = Array.from(header!.children);
-    // 渲染顺序：identity（左侧） → header-tools（右侧，包含工具 pill + 复制按钮）
-    expect(kids[0].classList.contains('chat-msg__identity')).toBe(true);
-    expect(kids[1].classList.contains('chat-msg__header-tools')).toBe(true);
-    // header-tools 子项：工具徽章 + 复制按钮
-    const tools = Array.from(kids[1].children);
-    expect(tools.some((n) => n.classList.contains('chat-msg__tool-badge'))).toBe(true);
-    expect(tools.some((n) => n.classList.contains('chat-msg__copy'))).toBe(true);
+    expect(document.querySelector('.chat-msg__header')).toBeNull();
+    expect(document.querySelector('.chat-msg__header-tools')).toBeNull();
   });
 
-  it('复制按钮不再是 absolute 定位（贴近 id 同行 inline）', () => {
+  it('复制按钮在气泡底部 .chat-msg__actions 行内（非顶部非 absolute）', () => {
     renderBubble({ tool: 'order_query' });
     const copy = document.querySelector('.chat-msg--ai .chat-msg__copy') as HTMLElement;
     expect(copy).not.toBeNull();
     expect(getComputedStyle(copy).position).not.toBe('absolute');
-    // 复制按钮的最近结构祖先应是 .chat-msg__header-tools（inline flex 项），DOM 层级验证
-    const inHeaderTools = copy.closest('.chat-msg__header-tools');
-    expect(inHeaderTools).not.toBeNull();
+    // 结构祖先 = 底部 actions 行
+    expect(copy.closest('.chat-msg__actions')).not.toBeNull();
   });
 
-  it('无 tool 时 header 仍渲染（身份 + 复制按钮同在）', () => {
-    renderBubble({}); // 无 tool
-    const header = document.querySelector('.chat-msg--ai .chat-msg__header');
-    expect(header).not.toBeNull();
-    expect(header!.querySelector('.chat-msg__tool-badge')).toBeNull();
-    expect(header!.querySelector('.chat-msg__copy')).not.toBeNull();
+  it('actions 行同时含点赞条（有 messageId）与复制按钮', () => {
+    renderBubble({ messageId: 'm1', feedback: null });
+    const actions = document.querySelector('.chat-msg--ai .chat-msg__actions');
+    expect(actions).not.toBeNull();
+    expect(actions!.querySelector('.chat-thumbs')).not.toBeNull();
+    expect(actions!.querySelector('.chat-msg__copy')).not.toBeNull();
   });
 
-  it('user / agent 角色不渲染 .chat-msg__header（设计意图：仅 AI 享受 header 横排）', () => {
+  it('无 messageId 时仍渲染复制按钮（流式中即可复制），但不渲染点赞条', () => {
+    renderBubble({ messageId: undefined });
+    const actions = document.querySelector('.chat-msg--ai .chat-msg__actions');
+    expect(actions).not.toBeNull();
+    expect(actions!.querySelector('.chat-msg__copy')).not.toBeNull();
+    expect(actions!.querySelector('.chat-thumbs')).toBeNull();
+  });
+
+  it('user / agent 角色不渲染 .chat-msg__actions（设计意图：仅 AI 有底部操作行）', () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'user',
       user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
@@ -212,10 +211,10 @@ describe('MessageBubble AI 气泡 header 横排（2026-09-03 雅致轻盈）', (
     const { rerender } = render(
       <MessageBubble msg={{ id: 'u1', role: 'user', content: 'hi' }} onRate={vi.fn()} />,
     );
-    expect(document.querySelector('.chat-msg__header')).toBeNull();
+    expect(document.querySelector('.chat-msg__actions')).toBeNull();
     rerender(
       <MessageBubble msg={{ id: 'a1', role: 'agent', content: 'hello' }} onRate={vi.fn()} />,
     );
-    expect(document.querySelector('.chat-msg__header')).toBeNull();
+    expect(document.querySelector('.chat-msg__actions')).toBeNull();
   });
 });
