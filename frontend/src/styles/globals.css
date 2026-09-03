@@ -3010,11 +3010,16 @@ body > textarea[style*="visibility:hidden"] {
   border-top-left-radius: 4px;
 }
 /* AI 气泡：白卡 + 浅蓝边（与 self 模式一致，仅统一居左）
- * 折角在左上 */
+ * 折角在左上
+ * 阴影必须与 .chat-msg--ai .chat-msg__bubble 同步（2026-09-03 雅致轻盈）：
+ * 同一 AI 气泡在顾客端(self)与工作台(observe)必须同款，漏改会导致两视角质感不一致 */
 .chat-msg--observe-ai .chat-msg__bubble {
   background: linear-gradient(180deg, #ffffff 0%, #fbfdfe 100%);
   border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(30, 45, 61, 0.04), 0 2px 8px rgba(30, 45, 61, 0.04);
+  box-shadow:
+    0 1px 2px rgba(30, 45, 61, 0.03),
+    0 2px 10px rgba(30, 45, 61, 0.04),
+    inset 0 0 0 1px var(--color-brand-whisper);
   border-top-left-radius: 4px;
 }
 /* 顾客头像：暖橙圆形（与 AI 品牌头像区分） */
