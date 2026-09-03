@@ -506,6 +506,29 @@ def test_classify_once_disables_thinking():
     assert cli.last_kwargs.get("chat_template_kwargs") == {"enable_thinking": False}
 
 
+def test_classify_once_uses_own_client():
+    """影子 worker 必须自建短命 client（own_client=True）——防跨 loop 污染回归。
+
+    根因（2026-09-03 审计）：worker 线程 asyncio.run 每任务新 loop，复用共享
+    AsyncClient 的 keep-alive 连接（绑定创建时 loop）→ 概率性 Event loop is
+    closed / 挂死（离线回填 362 条 6 轮才收敛 ~50% 失败率；在线采样存活率低
+    + ticket 预起草静默 NULL 同源）。修复=complete(own_client=True) 不触碰
+    共享池（多付一次握手 <10% 预算）。
+
+    本测试是防回归守卫：误删 own_client 参数（或恢复共享 client 调用）即红。
+    """
+    import asyncio
+
+    from app.services.intent_shadow import classify_once
+
+    cli = _FakeChatClient()
+    intent, latency = asyncio.run(classify_once("退货政策", client=cli))
+    assert intent == "qa"
+    assert cli.last_kwargs.get("own_client") is True, (
+        "classify_once 必须传 own_client=True（跨 loop 复用共享池会概率性挂死/报错）"
+    )
+
+
 # ── 5. 统计端点：GET /admin/intent-shadow/stats ───────────────────────
 
 
@@ -579,14 +602,19 @@ def test_stats_empty_returns_zeroes(stats_client):
 
 def test_stats_daily_buckets(stats_client):
     """按日分桶（批次 I：双周观测留档——「连续两周无回归」的度量基础）：
-    日期升序、桶内 agree/total/agree_rate 与全量口径一致。"""
+    日期升序、桶内 agree/total/agree_rate 与全量口径一致。
+
+    时间用相对偏移而非写死日期（2026-09-03 修复日期漂移）：fixture 的 4 条
+    影子消息 created_at=server_default now()，写死 ["09-01","09-02"] 的旧断言
+    会随真实日期推进多出「今天」桶而腐烂。改相对 = 任意日期跑都成立。
+    """
     import datetime as dt
 
     tc, Local = stats_client
-    day1 = dt.datetime(2026, 9, 1, 10, 0, 0)
-    day2 = dt.datetime(2026, 9, 2, 23, 0, 0)
+    now = dt.datetime.now()
+    day2 = now - dt.timedelta(days=1)  # 昨天：新加 1 条分歧（llm 与 rule 不同）
+    day1 = now - dt.timedelta(days=2)  # 前天：新加 1 条同意
     with Local() as db:
-        # day1: agree 1/1；day2: agree 0/1（llm 与 rule 分歧）
         db.add(
             Message(
                 session_id=SID, role=MessageRole.user, content="d1", intent="qa",
@@ -605,11 +633,14 @@ def test_stats_daily_buckets(stats_client):
     r = tc.get(f"{API}/admin/intent-shadow/stats", headers=_h(ADMIN_ID, "admin"))
     assert r.status_code == 200
     daily = r.json()["daily"]
-    # fixture 的 4 条消息 created_at=server_default now（2026-09-02），与新加 day2 同桶：
-    # day2 桶 = 4（agree 3）+ 新加 1（agree 0）= total 5 / agree 3
-    assert [d["date"] for d in daily] == ["2026-09-01", "2026-09-02"]
-    assert daily[0] == {"date": "2026-09-01", "total": 1, "agree": 1, "agree_rate": 1.0}
-    assert daily[1] == {"date": "2026-09-02", "total": 5, "agree": 3, "agree_rate": 0.6}
+    # 日期升序：[day1, day2, now]；各日独立成桶（fixture 4 条落在 now 桶）
+    fmt = "%Y-%m-%d"
+    assert [d["date"] for d in daily] == [
+        day1.strftime(fmt), day2.strftime(fmt), now.strftime(fmt),
+    ]
+    assert daily[0] == {"date": day1.strftime(fmt), "total": 1, "agree": 1, "agree_rate": 1.0}
+    assert daily[1] == {"date": day2.strftime(fmt), "total": 1, "agree": 0, "agree_rate": 0.0}
+    assert daily[2] == {"date": now.strftime(fmt), "total": 4, "agree": 3, "agree_rate": 0.75}
 
 
 def test_stats_groups_by_rule_intent_verbatim(stats_client):
