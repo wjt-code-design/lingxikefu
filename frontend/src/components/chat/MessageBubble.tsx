@@ -235,21 +235,29 @@ export function MessageBubble({
         )}
         {isAi ? (
           <>
-            <Button
-              type="text"
-              size="small"
-              className="chat-msg__copy"
-              icon={<CopyOutlined />}
-              onClick={onCopy}
-              aria-label="复制回答"
-            >
-              {copied ? '已复制' : '复制'}
-            </Button>
-            {msg.tool && (
-              <Tag className="chat-msg__tool-badge" color="blue" bordered>
-                {TOOL_LABEL_MAP[msg.tool] ?? msg.tool}
-              </Tag>
-            )}
+            {/* 顶部 header：身份 / 工具 pill / 复制按钮 同行横排
+                - 复制按钮贴近 id 右侧，hover 才浮现（vs 旧右上 absolute），与触屏降级共处一行
+                - 复制按钮 className 不变（chat-msg__copy），保留向后兼容与测试类名锁定 */}
+            <div className="chat-msg__header">
+              {renderIdentity()}
+              <div className="chat-msg__header-tools">
+                {msg.tool && (
+                  <Tag className="chat-msg__tool-badge" color="blue" bordered>
+                    {TOOL_LABEL_MAP[msg.tool] ?? msg.tool}
+                  </Tag>
+                )}
+                <Button
+                  type="text"
+                  size="small"
+                  className="chat-msg__copy"
+                  icon={<CopyOutlined />}
+                  onClick={onCopy}
+                  aria-label="复制回答"
+                >
+                  {copied ? '已复制' : '复制'}
+                </Button>
+              </div>
+            </div>
             {(() => {
               // 订单轨迹识别：流式渐进输出时也能即时切换为卡片视图，绕过 Markdown 纯文本。
               // detectOrderTrack 契约：detected ⇒ items ≥ 1（preamble/footer 已剔除来源标记）；

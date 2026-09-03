@@ -990,11 +990,15 @@ main h1.ant-typography {
 }
 /* AI 消息：白卡 + 极淡阴影（层次分明但不喧宾夺主）
  * 默认 row：avatar 在左，bubble 在右
- * 折角在左上角（靠近头像方向） */
+ * 折角在左上角（靠近头像方向）
+ * 2026-09-03 雅致轻盈：阴影改单层柔阴影 + 极淡 brand-whisper 内边缘，比旧双层更克制 */
 .chat-msg--ai .chat-msg__bubble {
   background: linear-gradient(180deg, #ffffff 0%, #fbfdfe 100%);
   border: 1px solid var(--border);
-  box-shadow: 0 1px 2px rgba(30, 45, 61, 0.04), 0 2px 8px rgba(30, 45, 61, 0.04);
+  box-shadow:
+    0 1px 2px rgba(30, 45, 61, 0.03),
+    0 2px 10px rgba(30, 45, 61, 0.04),
+    inset 0 0 0 1px var(--color-brand-whisper);
   border-top-left-radius: 4px;
 }
 
@@ -1082,26 +1086,70 @@ main h1.ant-typography {
 .chat-msg__avatar--agent .anticon {
   line-height: 34px;
 }
-/* AI 复制按钮：桌面 hover 显示（不遮挡正文）；触屏（hover:none）常显——I1 修复 */
-.chat-msg--ai .chat-msg__copy {
-  position: absolute;
-  top: 4px;
-  right: 6px;
-  opacity: 0;
-  transition: opacity 0.2s;
-  font-size: 12px;
+/* AI 气泡顶部 header 行（2026-09-03 雅致轻盈重构）：
+   - 左侧 = 身份区（chat-msg__identity），右侧 = 工具+复制按钮组
+   - 单一布局：横向 flex，间距克制，不挤压正文 */
+.chat-msg--ai .chat-msg__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 22px;
+  margin-bottom: 4px;
 }
-.chat-msg--ai .chat-msg__bubble:hover .chat-msg__copy {
+.chat-msg--ai .chat-msg__header .chat-msg__identity {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* 工具 pill + 复制按钮组（右对齐） */
+.chat-msg--ai .chat-msg__header-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  /* 头部容器 hover（整气泡 hover 已包含这里）才浮现复制按钮——保持"贴近 id"语义 */
+  opacity: 0.92;
+  transition: opacity 0.18s ease;
+}
+.chat-msg--ai .chat-msg__bubble:not(:hover) .chat-msg__header-tools {
+  opacity: 0.55;
+}
+/* 工具徽章：原本右上角 absolute 改成 inline，更精致的 pill 感 */
+.chat-msg--ai .chat-msg__tool-badge {
+  margin: 0;
+  font-size: 11px;
+  line-height: 18px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--color-brand-whisper) !important;
+  border-color: var(--color-brand-pale) !important;
+  color: var(--color-brand-dark) !important;
+}
+/* AI 复制按钮：贴近 id 右侧（header-tools 内 flex 项），不再是 absolute 右上
+   桌面 hover 才高亮；触屏（hover:none）常显——I1 修复保留 */
+.chat-msg--ai .chat-msg__copy {
+  position: static;
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 6px;
+  height: 22px;
+  border-radius: 6px;
+  color: var(--text-3) !important;
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.18s ease, background 0.18s ease;
+}
+.chat-msg--ai .chat-msg__bubble:hover .chat-msg__copy,
+.chat-msg--ai .chat-msg__copy:focus-visible {
   opacity: 1;
 }
+.chat-msg--ai .chat-msg__copy:hover {
+  color: var(--color-brand-dark) !important;
+  background: var(--color-brand-whisper) !important;
+}
 @media (hover: none) {
-  /* 触屏无 hover：复制按钮常显，且不遮挡正文（改为气泡底部行内） */
+  /* 触屏无 hover：复制按钮常显（保留原有 I1 触屏降级，不变样） */
   .chat-msg--ai .chat-msg__copy {
-    position: static;
     opacity: 1;
-    float: right;
-    margin: 2px 0 0 8px;
-    padding: 0 4px;
   }
 }
 /* 流式输出光标（已迁移为 .chat-msg__text--stream::after，此旧规则删除） */
