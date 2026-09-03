@@ -708,34 +708,9 @@ main h1.ant-typography {
   flex: 1;
   min-width: 0;
 }
-/* 聊天消息骨架：与真实消息同布局，降低视觉重量 */
-.chat-msg--skeleton {
-  opacity: 0.7;
-}
-.chat-msg--skeleton .skeleton-avatar {
-  background: var(--border);
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
-  background-size: 200% 100%;
-}
-.chat-msg--skeleton .skeleton-bubble {
-  border-color: var(--border);
-  box-shadow: none;
-  min-width: 240px;
-}
-.chat-msg--skeleton .skeleton-bubble .skeleton-line {
-  background: linear-gradient(
-    90deg,
-    var(--border) 0%,
-    color-mix(in srgb, var(--border) 50%, #fff) 50%,
-    var(--border) 100%
-  );
-  background-size: 200% 100%;
-}
 /* 尊重系统减弱动效：骨架屏改为静态浅灰 */
 @media (prefers-reduced-motion: reduce) {
-  .skeleton-line,
-  .chat-msg--skeleton .skeleton-avatar,
-  .chat-msg--skeleton .skeleton-bubble .skeleton-line {
+  .skeleton-line {
     animation: none;
     background: var(--border);
   }

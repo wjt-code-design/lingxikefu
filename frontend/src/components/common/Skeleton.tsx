@@ -64,23 +64,8 @@ export function TableSkeleton({
   );
 }
 
-/** 聊天消息骨架（AI 消息形态，左头像 + 右气泡） */
-export function ChatMessageSkeleton() {
-  return (
-    <div className="chat-msg chat-msg--ai chat-msg--skeleton">
-      <div className="chat-msg__avatar skeleton-avatar" aria-hidden="true" />
-      <div className="chat-msg__bubble skeleton-bubble">
-        <SkeletonLine width="90%" height={14} />
-        <SkeletonLine width="75%" height={14} style={{ marginTop: 6 }} />
-        <SkeletonLine width="50%" height={14} style={{ marginTop: 6 }} />
-      </div>
-    </div>
-  );
-}
-
 export default {
   Line: SkeletonLine,
   KpiCard: KpiCardSkeleton,
   Table: TableSkeleton,
-  ChatMessage: ChatMessageSkeleton,
 };
