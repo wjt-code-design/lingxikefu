@@ -55,4 +55,20 @@ describe('路由可达与 RequireAuth 守卫', () => {
     renderApp('/chat');
     expect(await screen.findByText('您好，我是灵犀智能客服')).toBeInTheDocument();
   });
+
+  // D2 回归守卫：/tickets 曾在 SideNav/ROUTE_META 注册但无路由 → 点菜单 404
+  it('未登录访问 /tickets → 重定向 /login', () => {
+    logout();
+    renderApp('/tickets');
+    expect(screen.getByRole('heading', { name: '登录灵犀客服' })).toBeInTheDocument();
+  });
+
+  it('已登录访问 /tickets → 渲染「我的工单」页（不再 404）', async () => {
+    loginAs('user');
+    renderApp('/tickets');
+    // 页面标题在数据请求分支外渲染（jsdom 下请求失败走 QueryErrorState 也不影响）；
+    // 404 页文案「页面不存在」不得出现。
+    expect(await screen.findByRole('heading', { name: '我的工单' }, { timeout: 3_000 })).toBeInTheDocument();
+    expect(screen.queryByText(/页面不存在/)).not.toBeInTheDocument();
+  });
 });

@@ -43,6 +43,8 @@ const EvalPage = lazy(() => import('@/pages/admin/EvalPage'));
 const AgentDashboardPage = lazy(() => import('@/pages/agent/DashboardPage'));
 const KbSearchPage = lazy(() => import('@/pages/agent/KbSearchPage'));
 const FaqPage = lazy(() => import('@/pages/FaqPage'));
+// D2：用户侧「我的工单」（SideNav/ROUTE_META 早已注册 /tickets，缺页面致 404）
+const MyTicketsPage = lazy(() => import('@/pages/MyTicketsPage'));
 // T4'：新路由（403/个人中心/服务首页）
 const ErrorPage = lazy(() => import('@/pages/ErrorPage'));
 const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
@@ -110,6 +112,18 @@ export function AppRoutes() {
           }
         >
           <Route index element={<ProfilePage />} />
+        </Route>
+
+        {/* D2：用户侧我的工单（登录可见；数据按 Session.user_id 后端隔离） */}
+        <Route
+          path="/tickets"
+          element={
+            <RequireAuth>
+              <AdminLayout />
+            </RequireAuth>
+          }
+        >
+          <Route index element={<MyTicketsPage />} />
         </Route>
 
         {/* 用户反馈页面 */}

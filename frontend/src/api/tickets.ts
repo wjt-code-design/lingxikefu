@@ -15,6 +15,19 @@ export function listTickets(
     .then((r) => r.data);
 }
 
+/** 用户侧「我的工单」列表（D2）：仅返回本人会话归属的工单；status 可选过滤 */
+export function listMyTickets(
+  status?: TicketStatus,
+  page = 1,
+  size = 20
+): Promise<TicketListResp> {
+  return http
+    .get<TicketListResp>('/tickets/mine', {
+      params: { status: status ?? undefined, page, size },
+    })
+    .then((r) => r.data);
+}
+
 /** 单工单查询（聊天页角标轮询用；user 仅可查自己的工单） */
 export function getTicket(ticketId: string): Promise<TicketItem> {
   return http.get<TicketItem>(`/tickets/${ticketId}`).then((r) => r.data);

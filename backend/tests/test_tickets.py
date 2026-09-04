@@ -20,6 +20,9 @@ API = "/api/v1"
 USER_ID = uuid.UUID("22222222-2222-2222-2222-222222222222")
 AGENT_ID = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 SID = uuid.UUID("11111111-1111-1111-1111-111111111111")
+# D2 越权隔离测试：另一用户的会话（仅建 Session 行，不建工单 → 不影响其他用例的列表计数断言）
+OTHER_USER_ID = uuid.UUID("33333333-3333-3333-3333-333333333333")
+OTHER_SID = uuid.UUID("44444444-4444-4444-4444-444444444444")
 
 
 @pytest.fixture
@@ -42,6 +45,7 @@ def client():
     app.dependency_overrides[get_db] = _override
     with Local() as db:
         db.add(Session(id=SID, user_id=USER_ID))
+        db.add(Session(id=OTHER_SID, user_id=OTHER_USER_ID))
         db.commit()
     with TestClient(app) as c:
         yield c
@@ -102,6 +106,47 @@ def test_list_tickets_returns_session_title(client):
     items = r.json()["items"]
     assert len(items) == 1
     assert items[0]["session_title"] is None  # fixture 会话无标题 → null（前端展示 —）
+
+
+def test_my_tickets_lists_only_own_and_isolates_others(client):
+    """D2 用户侧「我的工单」：只返回本人会话的工单，他人会话不可见。"""
+    # 本人会话建单（agent 代建，归属看 session.user_id）
+    client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h())
+    # 另一用户会话也建一张单 → 绝不该出现在本人列表里
+    client.post(f"{API}/tickets", json={"session_id": str(OTHER_SID)}, headers=_agent_h())
+
+    r = client.get(f"{API}/tickets/mine", headers=_user_h())
+    assert r.status_code == 200
+    body = r.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["session_id"] == str(SID)
+
+    # 另一用户查自己的列表：只看到自己那张（对称隔离）
+    r2 = client.get(f"{API}/tickets/mine", headers={
+        "Authorization": f"Bearer {create_access_token(str(OTHER_USER_ID), 'user')}"
+    })
+    assert r2.json()["total"] == 1
+    assert r2.json()["items"][0]["session_id"] == str(OTHER_SID)
+
+
+def test_my_tickets_status_filter(client):
+    """D2：/tickets/mine 支持 status 过滤（closed 后不再出现在 open 视图）。"""
+    t0 = client.post(f"{API}/tickets", json={"session_id": str(SID)}, headers=_agent_h()).json()
+    assert client.get(f"{API}/tickets/mine?status=open", headers=_user_h()).json()["total"] == 1
+    client.patch(
+        f"{API}/tickets/{t0['ticket_id']}",
+        json={"status": "closed", "version": t0["version"]},
+        headers=_agent_h(),
+    )
+    assert client.get(f"{API}/tickets/mine?status=open", headers=_user_h()).json()["total"] == 0
+    assert client.get(f"{API}/tickets/mine?status=closed", headers=_user_h()).json()["total"] == 1
+
+
+def test_my_tickets_requires_auth(client):
+    """D2：未登录访问 /tickets/mine → 401（fail-closed，不吐匿名空集）。"""
+    r = client.get(f"{API}/tickets/mine")
+    assert r.status_code == 401
 
 
 def test_status_transition_valid_and_invalid(client):

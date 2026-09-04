@@ -199,6 +199,41 @@ def list_tickets(
     return TicketListResp(items=items, total=total)
 
 
+@router.get("/mine", response_model=TicketListResp)
+def list_my_tickets(
+    status: TicketStatus | None = Query(default=None),
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
+    payload: dict = Depends(get_current_user),
+    db: OrmSession = Depends(get_db),
+) -> TicketListResp:
+    """用户侧「我的工单」列表（D2）：仅返回本人会话归属的工单。
+
+    越权面与 get_ticket 同款口径：join Session 过滤 user_id==当前用户；
+    staff 走 /tickets 管理列表，本端点不为其特设（查自己也是空集，无害）。
+    必须注册在 /{ticket_id} 之前——否则 "mine" 被当 uuid 路径参数解析 422。
+    """
+    uid = uuid.UUID(payload["sub"])
+    cond = [Ticket.tenant_id == settings.TENANT_DEFAULT, Session.user_id == uid]
+    if status:
+        cond.append(Ticket.status == status)
+    base = select(Ticket).join(Session, Ticket.session_id == Session.id).where(*cond)
+    total = db.scalar(select(func.count()).select_from(base.subquery())) or 0
+    rows = db.scalars(base.order_by(Ticket.updated_at.desc()).offset((page - 1) * size).limit(size)).all()
+    # 与 staff 列表同款批量取会话主题（防 N+1）
+    session_ids = {t.session_id for t in rows}
+    title_map: dict[uuid.UUID, str | None] = {}
+    if session_ids:
+        for s in db.scalars(select(Session).where(Session.id.in_(session_ids))).all():
+            title_map[s.id] = s.title
+    items = []
+    for t in rows:
+        item = _item(t)
+        item.session_title = title_map.get(t.session_id)
+        items.append(item)
+    return TicketListResp(items=items, total=total)
+
+
 @router.get("/{ticket_id}", response_model=TicketItem)
 def get_ticket(
     ticket_id: uuid.UUID,

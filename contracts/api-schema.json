@@ -2371,6 +2371,84 @@
         }
       }
     },
+    "/api/v1/tickets/mine": {
+      "get": {
+        "tags": [
+          "tickets"
+        ],
+        "summary": "List My Tickets",
+        "description": "用户侧「我的工单」列表（D2）：仅返回本人会话归属的工单。\n\n越权面与 get_ticket 同款口径：join Session 过滤 user_id==当前用户；\nstaff 走 /tickets 管理列表，本端点不为其特设（查自己也是空集，无害）。\n必须注册在 /{ticket_id} 之前——否则 \"mine\" 被当 uuid 路径参数解析 422。",
+        "operationId": "list_my_tickets_api_v1_tickets_mine_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TicketStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketListResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/tickets/{ticket_id}": {
       "get": {
         "tags": [
