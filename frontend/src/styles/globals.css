@@ -922,9 +922,11 @@ main h1.ant-typography {
   transition: all 0.2s ease;
 }
 .chat-collapse-btn:hover {
-  background: var(--color-brand-light);
+  /* brand-light 从未在 tokens.css 定义（悬空变量→背景无效）；用极淡品牌底 */
+  background: var(--color-brand-whisper);
   border-color: var(--color-brand);
-  color: var(--color-brand);
+  /* a11y：brand 白底 2.87:1 不达文字 AA → brand-dark 4.95:1（同色系深半步） */
+  color: var(--color-brand-dark);
 }
 
 /* 消息行：规范间距、对齐、宽度 */
@@ -2272,7 +2274,8 @@ body > textarea[style*="visibility:hidden"] {
   padding: 2px 8px !important;
 }
 .widget-shell__back:hover {
-  color: var(--color-brand) !important;
+  /* a11y：浅毛玻璃底上 brand 文字 2.87:1 不达 AA → brand-dark */
+  color: var(--color-brand-dark) !important;
 }
 
 /* WidgetShell 移动端顶栏适配（≤767px） */
@@ -2317,7 +2320,8 @@ body > textarea[style*="visibility:hidden"] {
 .error-page .ant-result-title {
   font-size: 48px;
   font-weight: 700;
-  color: var(--color-brand);
+  /* a11y：48px 大字阈值 3:1，brand on bg-page ≈2.7 仍不达 → brand-dark */
+  color: var(--color-brand-dark);
 }
 
 .error-page .ant-result-subtitle {
@@ -2499,7 +2503,8 @@ body > textarea[style*="visibility:hidden"] {
 }
 .landing__feature-icon {
   font-size: 32px;
-  color: var(--color-brand);
+  /* a11y：图标承载信息（非装饰）→ 3:1 阈值，brand on 白玻璃 2.87 不达 → brand-dark */
+  color: var(--color-brand-dark);
   margin-bottom: 12px;
 }
 
@@ -2662,13 +2667,14 @@ body > textarea[style*="visibility:hidden"] {
 }
 
 .landing__footer a {
-  color: var(--color-brand);
+  /* a11y：页脚链接正文 13px 需 4.5:1，brand 常态 2.7 不达 → 常态即 brand-dark */
+  color: var(--color-brand-dark);
   text-decoration: none;
   transition: color var(--dur-fast);
 }
 
 .landing__footer a:hover {
-  color: var(--color-brand-dark);
+  color: var(--color-brand-deep);
 }
 
 /* Landing 移动端响应式 - 更新 */
@@ -2837,7 +2843,8 @@ body > textarea[style*="visibility:hidden"] {
 }
 .profile__hero-quota {
   font-weight: 600;
-  color: var(--color-brand);
+  /* a11y：额度数字承载信息，brand on 近白 hero 卡 2.7 不达 AA → brand-dark */
+  color: var(--color-brand-dark);
 }
 .profile__hero-quota-total {
   color: var(--text-4);

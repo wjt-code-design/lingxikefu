@@ -217,7 +217,9 @@ export function MessageBubble({
       style={
         selected
           ? {
-              outline: '2px solid var(--color-brand)',
+              // a11y：选中态唯一视觉边界（WCAG 1.4.11 需 ≥3:1）→ brand-dark 4.95:1
+              // （全站 focus 指示框同款 brand-dark 惯例；brand 2.87:1 是漏网）
+              outline: '2px solid var(--color-brand-dark)',
               outlineOffset: 2,
               borderRadius: 12,
             }

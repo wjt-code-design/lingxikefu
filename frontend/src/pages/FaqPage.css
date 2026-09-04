@@ -16,7 +16,8 @@
 
 .faq__quick-start-icon {
   font-size: 20px;
-  color: var(--color-brand);
+  /* a11y：图标承载信息需 3:1，brand on 浅品牌渐变底 ≈2.8 不达 → brand-dark */
+  color: var(--color-brand-dark);
 }
 
 .faq__quick-start-title {

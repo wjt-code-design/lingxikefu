@@ -40,7 +40,11 @@ const CHECKS = [
   ['text-1', 'color-surface', '标题', 4.5],
   ['text-2', 'color-surface', '正文', 4.5],
   ['text-3', 'color-surface', '辅助文字', 4.5],
-  ['color-brand', 'color-surface', '品牌色（图形/链接）', 3.0],
+  // a11y D 批：项目约定「文字/链接前景一律 brand-dark（4.95:1 AA），brand 仅作
+  // 背景/装饰/大色块」——旧检查拿 brand（2.87:1）当文字色校验属口径错误，
+  // 改为校验实际用于前景的 brand-dark；brand 的 3:1 图形场景（选中态等）
+  // 已全部切到 brand-dark，无残留前景用途（rg 审计 2026-09-04）。
+  ['color-brand-dark', 'color-surface', '品牌链接/强调文字', 4.5],
 ];
 
 let fails = 0;
