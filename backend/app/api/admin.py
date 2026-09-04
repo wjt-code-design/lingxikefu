@@ -297,6 +297,11 @@ def get_stats(
 def get_intent_shadow_stats(
     _: dict = Depends(require_admin),
     db: OrmSession = Depends(get_db),
+    since: str | None = Query(
+        None,
+        max_length=10,
+        description="按日截断（YYYY-MM-DD，含当日）：只统计 created_at 本地日 >= since 的影子样本",
+    ),
 ) -> IntentShadowStats:
     """LLM 意图分类影子一致率（架构二期 3，ADR-1 第一步：只记不驱动的验证数据）。
 
@@ -307,17 +312,36 @@ def get_intent_shadow_stats(
     JSON 路径由 SQLAlchemy 按方言编译（PG: meta->'intent_shadow'->>'intent'，
     SQLite: json_extract），同 R-3 latency 先例；GROUP BY 两列后 Python 侧只归并
     ≤N² 行，不做全量拉取。
+
+    P5（2026-09-04）：``since`` 按日截断——规则分类器修复（chitchat 残句复扫
+    0b53412）之前的影子分歧是旧口径失真样本（回填脚本灌入的 8/15 批 agree 仅
+    68%），永久拉低总体使切换门槛（≥95% + ≥500）永远达不到。决策窗口应只计
+    修复后数据。比较复用 day_col 同款 ``cast(date(created_at), String)``——
+    PG/SQLite 双方言安全（避开 timestamptz 与 naive date 的时区坑），且与
+    daily 分桶口径天然一致（同为本地日）；ISO 日期串字典序=时间序。
     """
+    since_bound: str | None = None
+    if since is not None:
+        try:
+            since_bound = datetime.strptime(since, "%Y-%m-%d").strftime("%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(
+                status_code=400, detail="since 须为 YYYY-MM-DD 日期"
+            ) from None
     tenant = settings.TENANT_DEFAULT
     llm_col = Message.meta["intent_shadow"]["intent"].as_string()
     rule_col = sa.func.coalesce(Message.intent, "unknown")  # 旧数据 intent 可空
+    day_col = sa.func.cast(sa.func.date(Message.created_at), sa.String)
+    conds = [
+        Message.tenant_id == tenant,
+        Message.role == MessageRole.user,
+        llm_col.isnot(None),  # 影子键存在 = 有效样本（分母）
+    ]
+    if since_bound is not None:
+        conds.append(day_col >= since_bound)
     rows = db.execute(
         select(rule_col, llm_col, func.count(Message.id))
-        .where(
-            Message.tenant_id == tenant,
-            Message.role == MessageRole.user,
-            llm_col.isnot(None),  # 影子键存在 = 有效样本（分母）
-        )
+        .where(*conds)
         .group_by(rule_col, llm_col)
     ).all()
 
@@ -342,14 +366,11 @@ def get_intent_shadow_stats(
     min_total = settings.INTENT_SHADOW_MIN_TOTAL
     # 按日分桶（批次 I：双周观测留档——「连续两周无回归」的度量基础）。
     # func.date 跨方言（PG: date(timestamptz) / SQLite: date(text)）；日期升序输出。
-    day_col = sa.func.cast(sa.func.date(Message.created_at), sa.String)
+    # P5：复用同一 conds——daily 与总体聚合同口径（since 截断同步生效，
+    # 否则「总体按窗口算、daily 却混入窗口外旧桶」自相矛盾）。
     day_rows = db.execute(
         select(day_col, rule_col, llm_col, func.count(Message.id))
-        .where(
-            Message.tenant_id == tenant,
-            Message.role == MessageRole.user,
-            llm_col.isnot(None),
-        )
+        .where(*conds)
         .group_by(day_col, rule_col, llm_col)
     ).all()
     daily_acc: dict[str, list[int]] = {}

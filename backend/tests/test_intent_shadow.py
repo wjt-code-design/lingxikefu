@@ -664,6 +664,52 @@ def test_stats_groups_by_rule_intent_verbatim(stats_client):
     assert data["by_intent"]["qa"]["total"] == 4
 
 
+def test_stats_since_excludes_older_samples(stats_client):
+    """P5：since=YYYY-MM-DD 按 created_at 截断——排除修复前失真样本。
+
+    背景：影子分类器在规则分类器修复（chitchat 残句复扫 0b53412）之前有大量
+    误判分歧，回填脚本（8/15）灌入的旧数据 agree_rate 仅 68%，永久拉低总体、
+    使切换门槛（≥95% + ≥500）永远达不到。since 让统计只算修复后窗口。
+    """
+    import datetime as dt
+
+    tc, Local = stats_client
+    old = dt.datetime.now() - dt.timedelta(days=30)  # 30 天前：一条同意 + 一条分歧
+    with Local() as db:
+        db.add(
+            Message(
+                session_id=SID, role=MessageRole.user, content="old1", intent="qa",
+                meta={"intent_shadow": {"intent": "qa", "latency_ms": 1}},
+                created_at=old,
+            )
+        )
+        db.add(
+            Message(
+                session_id=SID, role=MessageRole.user, content="old2", intent="qa",
+                meta={"intent_shadow": {"intent": "chitchat", "latency_ms": 2}},
+                created_at=old,
+            )
+        )
+        db.commit()
+    # 无 since：fixture 4 条 + 旧 2 条 = 6（agree 3+1=4）
+    full = tc.get(f"{API}/admin/intent-shadow/stats", headers=_h(ADMIN_ID, "admin")).json()
+    assert full["total"] == 6 and full["agree"] == 4
+    # 带 since=今天：旧 2 条（30 天前）被排除，回到 4 条 agree 3
+    since = dt.datetime.now().strftime("%Y-%m-%d")
+    cut = tc.get(f"{API}/admin/intent-shadow/stats?since={since}", headers=_h(ADMIN_ID, "admin")).json()
+    assert cut["total"] == 4 and cut["agree"] == 3
+    assert cut["agree_rate"] == 0.75
+    # daily 也同步截断（只剩 since 之后的桶）
+    assert all(d["date"] >= since for d in cut["daily"])
+
+
+def test_stats_since_invalid_date_400(stats_client):
+    """P5：since 非法格式（非 YYYY-MM-DD）→ 400（不静默忽略导致口径错乱）。"""
+    tc, _ = stats_client
+    r = tc.get(f"{API}/admin/intent-shadow/stats?since=not-a-date", headers=_h(ADMIN_ID, "admin"))
+    assert r.status_code == 400
+
+
 def test_stats_requires_admin(stats_client):
     """user 角色访问 → 403（require_admin）。"""
     tc, _ = stats_client

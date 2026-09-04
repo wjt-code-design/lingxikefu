@@ -1338,8 +1338,34 @@
           "admin"
         ],
         "summary": "Get Intent Shadow Stats",
-        "description": "LLM 意图分类影子一致率（架构二期 3，ADR-1 第一步：只记不驱动的验证数据）。\n\n聚合用户消息 ``meta[\"intent_shadow\"][\"intent\"]``（LLM 影子产出）vs\n``Message.intent``（规则式 classify_intent，单一真源）→\n``{total, agree, agree_rate, by_intent}``。影子仅采样 qa 类消息，故常态只有\nqa 桶；出现其他桶 = 写入方异常信号，按原样透出不隐藏。\nJSON 路径由 SQLAlchemy 按方言编译（PG: meta->'intent_shadow'->>'intent'，\nSQLite: json_extract），同 R-3 latency 先例；GROUP BY 两列后 Python 侧只归并\n≤N² 行，不做全量拉取。",
+        "description": "LLM 意图分类影子一致率（架构二期 3，ADR-1 第一步：只记不驱动的验证数据）。\n\n聚合用户消息 ``meta[\"intent_shadow\"][\"intent\"]``（LLM 影子产出）vs\n``Message.intent``（规则式 classify_intent，单一真源）→\n``{total, agree, agree_rate, by_intent}``。影子仅采样 qa 类消息，故常态只有\nqa 桶；出现其他桶 = 写入方异常信号，按原样透出不隐藏。\nJSON 路径由 SQLAlchemy 按方言编译（PG: meta->'intent_shadow'->>'intent'，\nSQLite: json_extract），同 R-3 latency 先例；GROUP BY 两列后 Python 侧只归并\n≤N² 行，不做全量拉取。\n\nP5（2026-09-04）：``since`` 按日截断——规则分类器修复（chitchat 残句复扫\n0b53412）之前的影子分歧是旧口径失真样本（回填脚本灌入的 8/15 批 agree 仅\n68%），永久拉低总体使切换门槛（≥95% + ≥500）永远达不到。决策窗口应只计\n修复后数据。比较复用 day_col 同款 ``cast(date(created_at), String)``——\nPG/SQLite 双方言安全（避开 timestamptz 与 naive date 的时区坑），且与\ndaily 分桶口径天然一致（同为本地日）；ISO 日期串字典序=时间序。",
         "operationId": "get_intent_shadow_stats_api_v1_admin_intent_shadow_stats_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "maxLength": 10
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "按日截断（YYYY-MM-DD，含当日）：只统计 created_at 本地日 >= since 的影子样本",
+              "title": "Since"
+            },
+            "description": "按日截断（YYYY-MM-DD，含当日）：只统计 created_at 本地日 >= since 的影子样本"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1350,13 +1376,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/admin/feedback": {
