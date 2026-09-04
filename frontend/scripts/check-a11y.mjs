@@ -21,12 +21,12 @@ function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
-function extractVars(mode) {
+// 仅浅色：深色/跟随系统主题已于 a7825b3 移除（index.html 恒 data-theme=light），
+// 不再校验 dark 块——旧脚本对已删除的 dark 块强依赖导致直接抛错崩溃（预存腐烂）。
+function extractVars() {
   const css = readFileSync(resolve(root, 'src/styles/tokens.css'), 'utf-8');
-  const re =
-    mode === 'light' ? /:root\s*\{([^}]*)\}/ : /\[data-theme='dark'\]\s*\{([^}]*)\}/;
-  const m = css.match(re);
-  if (!m) throw new Error(`tokens.css 找不到 ${mode} 块`);
+  const m = css.match(/:root\s*\{([^}]*)\}/);
+  if (!m) throw new Error('tokens.css 找不到 :root 块');
   const vars = {};
   for (const line of m[1].split('\n')) {
     const kv = line.match(/--([\w-]+):\s*(#[0-9a-fA-F]{6})/);
@@ -44,15 +44,13 @@ const CHECKS = [
 ];
 
 let fails = 0;
-for (const mode of ['light', 'dark']) {
-  const v = extractVars(mode);
-  console.log(`\n[${mode}]`);
-  for (const [tv, bg, label, min] of CHECKS) {
-    const ratio = contrast(v[tv], v[bg]);
-    const ok = ratio >= min;
-    if (!ok) fails++;
-    console.log(`${ok ? '✓' : '✗'} ${label}: ${v[tv]} on ${v[bg]} = ${ratio.toFixed(2)}:1 (需 ≥${min})`);
-  }
+const v = extractVars();
+console.log('\n[light]');
+for (const [tv, bg, label, min] of CHECKS) {
+  const ratio = contrast(v[tv], v[bg]);
+  const ok = ratio >= min;
+  if (!ok) fails++;
+  console.log(`${ok ? '✓' : '✗'} ${label}: ${v[tv]} on ${v[bg]} = ${ratio.toFixed(2)}:1 (需 ≥${min})`);
 }
 
 if (fails > 0) {
