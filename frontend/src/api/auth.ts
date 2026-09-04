@@ -22,6 +22,12 @@ export async function register(req: RegisterReq): Promise<AuthResp> {
   return data;
 }
 
+/** POST /auth/guest → AuthResp（匿名体验主体签发，2026-09-04 批次B：免登录问答体验） */
+export async function guestLogin(): Promise<AuthResp> {
+  const { data } = await http.post<AuthResp>('/auth/guest');
+  return data;
+}
+
 /** POST /auth/refresh → RefreshResp */
 export async function refresh(req: RefreshReq): Promise<RefreshResp> {
   const { data } = await http.post<RefreshResp>('/auth/refresh', req);
