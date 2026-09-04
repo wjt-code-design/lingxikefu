@@ -4,7 +4,7 @@ import { parseSSEFrame } from '@/api/sse';
 import { useAuthStore } from '@/store/authStore';
 
 /**
- * 通知中心接口（agent/admin，user 无通知 403）。
+ * 通知中心接口（agent/admin 看本角色广播+定向本人；user 仅看定向本人，D4 铃铛立项 2026-09-04）。
  * 契约见《通知中心SSE-产品契约-2026-08-18.md》：列表/未读/已读 + SSE /stream 实时推送。
  */
 

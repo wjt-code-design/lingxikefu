@@ -31,6 +31,36 @@ def _summary_text(summary: dict[str, Any] | str | None) -> str | None:
     return json.dumps(summary, ensure_ascii=False)
 
 
+def notify_ticket_owner(
+    db: OrmSession, ticket: Ticket, to_status: TicketStatus
+) -> None:
+    """工单流转到 processing/resolved 时定向回推会话属主（D4 铃铛立项）。
+
+    - 只推 processing（已受理）/ resolved（已解决）两个用户可感知节点；
+      closed 属超时静默归档，不打扰用户；
+    - 定向投递（recipient_user_id=属主），user 角色通知必须定向；
+    - fail-open：通知失败绝不影响状态流转主流程（create_notification 内部已兜底，
+      此处再包一层防会话/属主查询异常）。
+    """
+    try:
+        sess = db.get(SessionModel, ticket.session_id)
+        if sess is None or sess.user_id is None:
+            return
+        label = "已受理，客服正在处理" if to_status == TicketStatus.processing else "已解决"
+        create_notification(
+            db,
+            recipient_role="user",
+            event_type="ticket.status_changed",
+            title=f"你的工单{label}",
+            content=f"工单 {ticket.id} 状态更新为 {to_status.value}",
+            resource_type="ticket",
+            resource_id=str(ticket.id),
+            recipient_user_id=str(sess.user_id),
+        )
+    except Exception:  # noqa: BLE001 - 通知失败不阻断状态流转
+        logger.exception("工单属主通知失败（已忽略）ticket=%s", ticket.id)
+
+
 def ensure_active_ticket(
     db: OrmSession,
     session_id: uuid.UUID,

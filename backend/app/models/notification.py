@@ -22,6 +22,11 @@ class Notification(Base):
     # 红线⑨ / ADR-2：全表 tenant_id，id 之后显式声明，自动建 ix_notifications_tenant_id 索引
     tenant_id: Mapped[str] = tenant_id_column()
     recipient_role: Mapped[str] = mapped_column(sa.String(16), nullable=False, index=True)
+    # 按人投递（2026-09-04 D4 铃铛立项）：NULL = 角色广播（agent/admin 旧语义）；
+    # 非空 = 定向到该用户（查询/SSE 推送均按此过滤）。user 角色通知必须定向。
+    recipient_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid(), nullable=True, index=True
+    )
     event_type: Mapped[str] = mapped_column(sa.String(32), nullable=False)
     title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     content: Mapped[str] = mapped_column(sa.Text(), nullable=False, default="")

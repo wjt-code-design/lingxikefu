@@ -24,7 +24,7 @@ from app.models.session import Session
 from app.models.ticket import Ticket, TicketStatus
 from app.services.audit_service import audit_log
 from app.services.notification_service import create_notification
-from app.services.ticket_service import ensure_active_ticket
+from app.services.ticket_service import ensure_active_ticket, notify_ticket_owner
 from app.services.ticket_state_machine import timestamp_field_for
 
 logger = logging.getLogger(__name__)
@@ -320,6 +320,9 @@ def update_ticket(
         resource_id=str(ticket_id),
         detail=str(t.status.value),
     )
+    # D4 铃铛立项：状态实际流转 → 定向回推会话属主（processing/resolved 可感知节点）
+    if req.status != cur:
+        notify_ticket_owner(db, t, req.status)
     return _item(t)
 
 

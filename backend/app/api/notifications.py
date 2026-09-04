@@ -1,6 +1,7 @@
 """通知中心（SSE）路由：/api/v1/notifications 列表/已读 + /stream 长连接推送。
 
-- 权限：agent/admin（user 无通知）；列表/已读按 recipient_role 过滤（仅看自己角色的通知，防越权）；
+- 权限：agent/admin 看本角色通知（广播 + 定向本人）；user 仅看定向本人
+  （recipient_user_id=本人，防越权读他人通知）；
 - SSE：进程内队列实时推送（单 worker）+ 心跳保活；断线由前端 EventSource 自动重连 + 重拉列表兜底；
 - 契约见《通知中心SSE-产品契约-2026-08-18.md》。
 """
@@ -14,7 +15,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import get_current_user
@@ -49,11 +50,30 @@ def _item(n: Notification) -> NotificationItem:
     )
 
 
-def _require_notify_role(payload: dict) -> str:
+def _visibility_cond(payload: dict) -> list:
+    """当前主体的通知可见性条件（按人投递，2026-09-04 D4 铃铛立项）。
+
+    - agent/admin：本角色广播（recipient_user_id IS NULL）+ 定向本人；
+    - user：仅定向本人（强过滤，杜绝读到他人/广播通知）。
+    """
     role = payload.get("role")
-    if role not in _NOTIFY_ROLES:
-        raise HTTPException(status_code=403, detail="agent/admin role required")
-    return role
+    # sa.Uuid() 绑定要求 UUID 对象（str 会走 .hex 报错），统一转换
+    uid = uuid.UUID(str(payload.get("sub")))
+    base = [Notification.tenant_id == settings.TENANT_DEFAULT]
+    if role in _NOTIFY_ROLES:
+        return base + [
+            Notification.recipient_role == role,
+            or_(
+                Notification.recipient_user_id.is_(None),
+                Notification.recipient_user_id == uid,
+            ),
+        ]
+    if role == "user":
+        return base + [
+            Notification.recipient_role == "user",
+            Notification.recipient_user_id == uid,
+        ]
+    raise HTTPException(status_code=403, detail="no notification access for role")
 
 
 @router.get("", response_model=NotificationListResp)
@@ -63,9 +83,8 @@ def list_notifications(
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ) -> NotificationListResp:
-    """当前角色通知列表：未读在前，按时间倒序（角标/面板数据源）。"""
-    role = _require_notify_role(payload)
-    cond = [Notification.tenant_id == settings.TENANT_DEFAULT, Notification.recipient_role == role]
+    """当前主体可见的通知列表：未读在前，按时间倒序（角标/面板数据源）。"""
+    cond = _visibility_cond(payload)
     total = db.scalar(select(func.count(Notification.id)).where(*cond)) or 0
     rows = db.scalars(
         select(Notification)
@@ -82,14 +101,10 @@ def unread_count(
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ) -> UnreadCountResp:
-    """当前角色未读数（角标轮询兜底；SSE 实时推送为主）。"""
-    role = _require_notify_role(payload)
+    """当前主体未读数（角标轮询兜底；SSE 实时推送为主）。"""
+    cond = _visibility_cond(payload)
     cnt = db.scalar(
-        select(func.count(Notification.id)).where(
-            Notification.tenant_id == settings.TENANT_DEFAULT,
-            Notification.recipient_role == role,
-            Notification.is_read.is_(False),
-        )
+        select(func.count(Notification.id)).where(*cond, Notification.is_read.is_(False))
     ) or 0
     return UnreadCountResp(count=cnt)
 
@@ -100,14 +115,10 @@ def mark_read(
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ) -> OkResp:
-    """单条标记已读（仅本人角色可操作，防越权读他人通知）。"""
-    role = _require_notify_role(payload)
+    """单条标记已读（仅可见范围内可操作，防越权读他人通知）。"""
+    cond = _visibility_cond(payload)
     n = db.scalar(
-        select(Notification).where(
-            Notification.id == notification_id,
-            Notification.tenant_id == settings.TENANT_DEFAULT,
-            Notification.recipient_role == role,
-        )
+        select(Notification).where(Notification.id == notification_id, *cond)
     )
     if not n:
         raise HTTPException(status_code=404, detail="notification not found")
@@ -122,15 +133,11 @@ def mark_all_read(
     payload: dict = Depends(get_current_user),
     db: OrmSession = Depends(get_db),
 ) -> OkResp:
-    """当前角色全部标记已读。"""
-    role = _require_notify_role(payload)
+    """当前主体可见通知全部标记已读。"""
+    cond = _visibility_cond(payload)
     db.execute(
         update(Notification)
-        .where(
-            Notification.tenant_id == settings.TENANT_DEFAULT,
-            Notification.recipient_role == role,
-            Notification.is_read.is_(False),
-        )
+        .where(*cond, Notification.is_read.is_(False))
         .values(is_read=True)
     )
     db.commit()
@@ -141,13 +148,15 @@ def _sse(data: dict) -> str:
     return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-async def _sse_gen(role: str):
+async def _sse_gen(role: str, user_id: str = ""):
     """SSE 事件生成器（M1 重写 2026-08-22）：connected 握手 → 心跳 ping / 实时通知。
 
     每连接独立 asyncio.Queue（由 notification_service 按角色广播填充，多连接互不
     抢占），断开/中止时注销防泄漏；不再经 to_thread 阻塞取队列——消灭每连接占死
-    一个线程池线程的问题（该线程池同时承担聊天链路 DB/embedding）。"""
-    q, _loop = subscribe(role)
+    一个线程池线程的问题（该线程池同时承担聊天链路 DB/embedding）。
+
+    user_id：订阅者主体，定向通知只推给匹配连接（见 _enqueue）。"""
+    q, _loop, _uid = subscribe(role, user_id)
     try:
         yield _sse({"event": "connected", "data": {"role": role}})
         while True:
@@ -158,16 +167,20 @@ async def _sse_gen(role: str):
                 continue
             yield _sse({"event": "notification", "data": item})
     finally:
-        unsubscribe(role, (q, _loop))
+        unsubscribe(role, (q, _loop, user_id))
 
 
 @router.get("/stream")
 async def stream_notifications(
     payload: dict = Depends(get_current_user),
 ):
-    """SSE 长连接：实时推送当前角色新通知 + 心跳保活。
+    """SSE 长连接：实时推送当前主体可见的新通知 + 心跳保活。
 
     事件协议：connected（握手，data.role）/ notification（新通知，data 含完整通知字段）/ ping（心跳）。
     """
-    role = _require_notify_role(payload)
-    return StreamingResponse(_sse_gen(role), media_type="text/event-stream")
+    cond_role = payload.get("role")
+    if cond_role not in _NOTIFY_ROLES and cond_role != "user":
+        raise HTTPException(status_code=403, detail="no notification access for role")
+    return StreamingResponse(
+        _sse_gen(cond_role, str(payload.get("sub", ""))), media_type="text/event-stream"
+    )

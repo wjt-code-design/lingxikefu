@@ -18,6 +18,7 @@ from app.models.base import Base
 from app.models.notification import Notification
 from app.models.session import Session
 from app.models.ticket import Ticket
+from app.services.notification_service import create_notification
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -72,13 +73,111 @@ def _unread(client, token: dict) -> int:
     return r.json()["count"]
 
 
-def test_user_forbidden(client):
-    """user 无通知中心：列表/未读/stream 均 403。"""
-    for path in ("/notifications", "/notifications/unread-count"):
-        r = client.get(f"{API}{path}", headers=_h(USER, "user"))
-        assert r.status_code == 403
-    r = client.get(f"{API}/notifications/stream", headers=_h(USER, "user"))
-    assert r.status_code == 403
+def test_user_can_access_own_directed_notifications(client):
+    """user 通知中心按人投递：列表/未读只含 recipient_user_id=本人 的定向通知。"""
+    # 直接经服务层写入定向通知（绕开 HTTP，聚焦查询/权限语义）：
+    # fixture 的 Local sessionmaker 未导出——复用 dependency_overrides 生成器取会话
+    gen = app.dependency_overrides[get_db]()
+    db = next(iter(gen))
+    try:
+        create_notification(
+            db,
+            recipient_role="user",
+            event_type="ticket.status_changed",
+            title="工单已受理",
+            content="客服已开始处理你的问题",
+            resource_type="ticket",
+            resource_id=str(uuid.uuid4()),
+            recipient_user_id=str(USER),
+        )
+        # 另一用户的定向通知（本人不应看到）
+        other = uuid.uuid4()
+        create_notification(
+            db,
+            recipient_role="user",
+            event_type="ticket.status_changed",
+            title="别人的通知",
+            recipient_user_id=str(other),
+        )
+        # 角色广播通知（recipient_user_id=NULL，user 也不应看到——user 只见定向）
+        create_notification(
+            db,
+            recipient_role="user",
+            event_type="ticket.status_changed",
+            title="广播通知（无定向）",
+        )
+    finally:
+        db.close()
+
+    token = _h(USER, "user")
+    lst = client.get(f"{API}/notifications", headers=token, params={"size": 50}).json()
+    titles = [it["title"] for it in lst["items"]]
+    assert "工单已受理" in titles
+    assert "别人的通知" not in titles
+    assert "广播通知（无定向）" not in titles
+    assert _unread(client, token) == 1
+    # 单条已读：定向通知可标记
+    nid = lst["items"][0]["notification_id"]
+    r = client.post(f"{API}/notifications/{nid}/read", headers=token)
+    assert r.status_code == 200
+    assert _unread(client, token) == 0
+    # 越权：user 标记他人通知 → 404
+    r2 = client.post(f"{API}/notifications/{uuid.uuid4()}/read", headers=token)
+    assert r2.status_code == 404
+
+
+def test_agent_role_still_sees_broadcast(client):
+    """agent/admin 兼容旧语义：角色广播（recipient_user_id=NULL）仍按角色可见。"""
+    token = _h(AGENT, "agent")
+    sid = _create_session(client, token)
+    client.post(f"{API}/tickets", headers=token, json={"session_id": sid})
+    assert any(
+        it["event_type"] == "ticket.created"
+        for it in client.get(
+            f"{API}/notifications", headers=token, params={"size": 50}
+        ).json()["items"]
+    )
+
+
+def test_agent_sees_directed_notification_to_self(client):
+    """agent 定向通知：recipient_user_id=本人 时列表可见（按人投递对 agent 同样生效）。"""
+    gen = app.dependency_overrides[get_db]()
+    db = next(iter(gen))
+    try:
+        create_notification(
+            db,
+            recipient_role="agent",
+            event_type="ticket.assigned",
+            title="指派给你",
+            recipient_user_id=str(AGENT),
+        )
+    finally:
+        db.close()
+    lst = client.get(
+        f"{API}/notifications", headers=_h(AGENT, "agent"), params={"size": 50}
+    ).json()
+    assert any(it["title"] == "指派给你" for it in lst["items"])
+
+
+def test_ticket_status_change_notifies_session_owner(client):
+    """工单流转 →processing/resolved 时定向回推会话属主（user）。"""
+    usr = _h(USER, "user")
+    agent = _h(AGENT, "agent")
+    sid = _create_session(client, usr, "lifecycle-test")
+    r = client.post(f"{API}/tickets/escalate/{sid}", headers=usr)
+    assert r.status_code == 201
+    tid = r.json()["ticket_id"]
+    t = r.json()["version"]
+    # agent 受理：open → processing
+    r2 = client.patch(
+        f"{API}/tickets/{tid}", headers=agent, json={"status": "processing", "version": t}
+    )
+    assert r2.status_code == 200
+    # user 应收到定向通知
+    lst = client.get(f"{API}/notifications", headers=usr, params={"size": 50}).json()
+    assert any(it["event_type"] == "ticket.status_changed" for it in lst["items"])
+    # 属主未读 ≥1
+    assert _unread(client, usr) >= 1
 
 
 def test_create_ticket_notifies_agent(client):

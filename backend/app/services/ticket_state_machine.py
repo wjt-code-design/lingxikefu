@@ -142,4 +142,10 @@ def transition(
         event,
         ticket_id,
     )
+    # D4 铃铛立项：自动流转（客服首答/满意反馈/超时解决）同样回推会话属主；
+    # 延迟导入规避 ticket_service↔本模块的导入耦合（helper 内部 fail-open）。
+    if to_status in (TicketStatus.processing, TicketStatus.resolved):
+        from app.services.ticket_service import notify_ticket_owner
+
+        notify_ticket_owner(db, t, to_status)
     return t

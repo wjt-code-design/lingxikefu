@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Badge, Button, Dropdown, Empty, Spin, Typography } from 'antd';
 import {
   BellOutlined,
+  CheckCircleOutlined,
   CheckOutlined,
   ClockCircleOutlined,
   FileDoneOutlined,
@@ -24,6 +25,7 @@ const EVENT_META: Record<string, { label: string; icon: ReactNode }> = {
   'ticket.created': { label: '新工单', icon: <FileDoneOutlined /> },
   'ticket.transfer': { label: '转人工', icon: <TeamOutlined /> },
   'satisfaction.submitted': { label: '满意度', icon: <MessageOutlined /> },
+  'ticket.status_changed': { label: '工单动态', icon: <CheckCircleOutlined /> },
 };
 
 /** 未读角标轮询兜底间隔（SSE 断线时保证角标不丢；打开面板时以列表为准重拉） */
@@ -41,7 +43,7 @@ function fmtTime(iso: string): string {
 }
 
 /**
- * 通知中心铃铛（仅 agent/admin，user 不渲染）。
+ * 通知中心铃铛（D4 铃铛立项 2026-09-04：user 角色开放，仅见定向本人的通知）。
  * 实时：SSE 推送（fetch+ReadableStream 带 token，复用 chat 流式方案）；
  * 兜底：30s 轮询未读数 + 打开面板重拉列表（SSE 丢帧不影响准确度）。
  */
@@ -75,7 +77,7 @@ export function NotificationBell() {
   };
 
   useEffect(() => {
-    if (role !== 'agent' && role !== 'admin') return;
+    if (!role) return;
     void loadList();
     void refreshUnread();
     const timer = window.setInterval(() => void refreshUnread(), POLL_MS);
@@ -131,7 +133,7 @@ export function NotificationBell() {
     }
   };
 
-  if (role !== 'agent' && role !== 'admin') return null;
+  if (!role) return null;
 
   const panel = (
     <div className="notification-panel" data-testid="notification-panel">
