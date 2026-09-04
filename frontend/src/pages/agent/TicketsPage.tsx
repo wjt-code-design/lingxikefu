@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Input, Select, Space, Typography, message } from 'antd';
+import { Button, Input, Select, Space, Typography, message } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
@@ -99,7 +99,9 @@ export function TicketsPage() {
       title: '关联会话',
       dataIndex: 'session_id',
       render: (v: string) => (
-        <Typography.Link onClick={() => navigate(`/chat?session=${v}`)}>查看对话</Typography.Link>
+        <Button type="link" size="small" onClick={() => navigate(`/chat?session=${v}`)}>
+          查看对话
+        </Button>
       ),
     },
     {

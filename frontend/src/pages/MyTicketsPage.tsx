@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Select, Space, Typography } from 'antd';
+import { Button, Select, Space, Typography } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import { useNavigate } from 'react-router-dom';
 import { AppTable, StatusTag, TICKET_STATUS_TEXT as STATUS_TEXT } from '@/components/common/AppTable';
@@ -70,7 +70,9 @@ export function MyTicketsPage() {
       dataIndex: 'session_id',
       width: 120,
       render: (v: string) => (
-        <Typography.Link onClick={() => navigate(`/chat?session=${v}`)}>查看对话</Typography.Link>
+        <Button type="link" size="small" onClick={() => navigate(`/chat?session=${v}`)}>
+          查看对话
+        </Button>
       ),
     },
   ];

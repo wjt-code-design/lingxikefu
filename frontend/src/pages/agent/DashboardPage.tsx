@@ -96,7 +96,9 @@ export function DashboardPage() {
       title: '关联会话',
       dataIndex: 'session_id',
       render: (v: string) => (
-        <Typography.Link onClick={() => navigate(`/chat?session=${v}`)}>查看对话</Typography.Link>
+        <Button type="link" size="small" onClick={() => navigate(`/chat?session=${v}`)}>
+          查看对话
+        </Button>
       ),
     },
     {
