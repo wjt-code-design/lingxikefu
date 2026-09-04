@@ -105,6 +105,14 @@ class Settings(BaseSettings):
     # --- 配额（BU-08：每用户每日问答上限，Redis 计数） ---
     DAILY_QUOTA_LIMIT: int = 200
 
+    # --- 匿名会话（D1 完整特性，2026-09-04）：免登录体验，防滥用三闸 ---
+    # 每 IP 每日可发放的 guest 主体数（超发 429）
+    GUEST_ISSUE_PER_IP_PER_DAY: int = 3
+    # guest 每日问答上限（远低于注册用户，控 LLM 成本）
+    GUEST_DAILY_QUOTA_LIMIT: int = 10
+    # guest 数据留存天数：超期由调度器删 user 行（会话/反馈/画像 FK CASCADE 级联）；0=关闭清理
+    GUEST_RETENTION_DAYS: int = 30
+
     # --- 答案缓存（T10：省 token + 提速；可一键降级） ---
     ANSWER_CACHE_ENABLED: bool = True
     # 语义命中余弦阈值：实测 0.95 过高——同义改写句（"如何申请七天无理由退货" vs

@@ -36,6 +36,20 @@ def _acquire_scan_lock() -> bool:
         return False
 
 
+#: guest 留存清理日锁：TTL 24h——扫描循环每 60s 尝试一次，抢到即执行，
+#: 全天其余轮次自然跳过；持锁实例崩溃后锁过期，下轮别的实例补跑（purge 幂等）
+_GUEST_PURGE_LOCK_KEY = "lingxi:guest_purge:lock"
+_GUEST_PURGE_LOCK_TTL_SEC = 24 * 3600
+
+
+def _acquire_guest_purge_lock() -> bool:
+    try:
+        return bool(get_redis().set(_GUEST_PURGE_LOCK_KEY, "1", nx=True, ex=_GUEST_PURGE_LOCK_TTL_SEC))
+    except Exception:
+        logger.exception("guest purge lock unavailable, skip")
+        return False
+
+
 def start_scheduler() -> None:
     """启动后台调度线程（幂等，重复调用不重复启动）。"""
     global _scheduler_thread, _scheduler_started, _stop_event
@@ -70,7 +84,7 @@ def _run_loop() -> None:
 
 
 def _scan_once() -> None:
-    """单次扫描（多实例互斥）：超时自动 resolved + 空闲自动 closed。"""
+    """单次扫描（多实例互斥）：超时自动 resolved + 空闲自动 closed + 每日 guest 清理。"""
     from app.services.ticket_automation import auto_close_stale, auto_resolve_after_timeout
 
     if not _acquire_scan_lock():
@@ -93,6 +107,33 @@ def _scan_once() -> None:
                 )
     except Exception:
         logger.exception("ticket_auto_scheduler: scan failed")
+        db.rollback()
+    finally:
+        db.close()
+
+    _purge_expired_guests_once()
+
+
+def _purge_expired_guests_once() -> None:
+    """匿名会话留存清理（2026-09-04 批次B）：每日一次删超期 guest 行。
+
+    与工单扫描共用线程但独立日锁（60s 轮询抢 24h 锁 = 每天执行一次）；
+    GUEST_RETENTION_DAYS<=0 关闭清理（对齐 AUTO_TICKET_* 阈值语义）。
+    失败仅日志、不抛出——清理缺一天不影响业务正确性。
+    """
+    if settings.GUEST_RETENTION_DAYS <= 0:
+        return
+    if not _acquire_guest_purge_lock():
+        return
+    from app.services.guest_service import purge_expired_guests
+
+    db = SessionLocal()
+    try:
+        removed = purge_expired_guests(db)
+        if removed:
+            logger.info("guest_purge: removed %d expired guests", removed)
+    except Exception:
+        logger.exception("guest_purge: failed")
         db.rollback()
     finally:
         db.close()

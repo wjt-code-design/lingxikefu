@@ -17,6 +17,7 @@ from app.core.token_revocation import consume_token
 from app.models.user import User, UserRole
 from app.repositories.users import UsersRepository
 from app.schemas.auth import RegisterReq
+from app.services.guest_service import GUEST_STATUS
 
 
 class AuthError(Exception):
@@ -53,9 +54,9 @@ class AuthService:
         return user
 
     @staticmethod
-    def issue_tokens(user: User) -> tuple[str, str]:
+    def issue_tokens(user: User, guest: bool = False) -> tuple[str, str]:
         return (
-            create_access_token(str(user.id), user.role.value),
+            create_access_token(str(user.id), user.role.value, guest=guest),
             create_refresh_token(str(user.id)),
         )
 
@@ -77,7 +78,8 @@ class AuthService:
         user = self.repo.get_by_id(UUID(payload["sub"]))
         if not user:
             raise AuthError("用户不存在")
+        # guest 轮换保留 guest claim：否则刷新一次即"升级"成注册配额，低配额闸失效
         return (
-            create_access_token(str(user.id), user.role.value),
+            create_access_token(str(user.id), user.role.value, guest=user.status == GUEST_STATUS),
             create_refresh_token(str(user.id)),
         )

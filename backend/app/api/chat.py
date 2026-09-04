@@ -236,7 +236,8 @@ async def chat_stream(
     quota = get_quota_service()
     quota_token = uuid.uuid4().hex
     allowed, _ = await run_in_threadpool(
-        quota.try_consume, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
+        quota.try_consume, str(user_id), 1,
+        idem_key=req.client_msg_id, token=quota_token, guest=bool(payload.get("guest")),
     )
     if not allowed:
         raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "今日问答额度已用完")

@@ -111,6 +111,28 @@
         }
       }
     },
+    "/api/v1/auth/guest": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Guest Login",
+        "description": "匿名体验主体签发（D1 完整特性，2026-09-04 批次B）。\n\n免登录问答体验：建真实 guest User 行 + 普通 access/refresh JWT（access 带\nguest claim）。防滥用三闸之一在此：每 IP 每日发放上限（按日固定窗口计数）；\n低配额闸在 chat 层（try_consume(guest=True)）、留存清理闸在调度器\n（purge_expired_guests）。",
+        "operationId": "guest_login_api_v1_auth_guest_post",
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthResp"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/auth/refresh": {
       "post": {
         "tags": [
@@ -1147,7 +1169,7 @@
           "admin"
         ],
         "summary": "List Users",
-        "description": "分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。",
+        "description": "分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。\n\n排除 guest（匿名体验账号，2026-09-04 批次B）：管理面不掺无凭证体验主体。",
         "operationId": "list_users_api_v1_admin_users_get",
         "security": [
           {
@@ -2049,7 +2071,7 @@
           "notifications"
         ],
         "summary": "List Notifications",
-        "description": "当前角色通知列表：未读在前，按时间倒序（角标/面板数据源）。",
+        "description": "当前主体可见的通知列表：未读在前，按时间倒序（角标/面板数据源）。",
         "operationId": "list_notifications_api_v1_notifications_get",
         "security": [
           {
@@ -2111,7 +2133,7 @@
           "notifications"
         ],
         "summary": "Unread Count",
-        "description": "当前角色未读数（角标轮询兜底；SSE 实时推送为主）。",
+        "description": "当前主体未读数（角标轮询兜底；SSE 实时推送为主）。",
         "operationId": "unread_count_api_v1_notifications_unread_count_get",
         "responses": {
           "200": {
@@ -2138,7 +2160,7 @@
           "notifications"
         ],
         "summary": "Mark Read",
-        "description": "单条标记已读（仅本人角色可操作，防越权读他人通知）。",
+        "description": "单条标记已读（仅可见范围内可操作，防越权读他人通知）。",
         "operationId": "mark_read_api_v1_notifications__notification_id__read_post",
         "security": [
           {
@@ -2187,7 +2209,7 @@
           "notifications"
         ],
         "summary": "Mark All Read",
-        "description": "当前角色全部标记已读。",
+        "description": "当前主体可见通知全部标记已读。",
         "operationId": "mark_all_read_api_v1_notifications_read_all_post",
         "responses": {
           "200": {
@@ -2214,7 +2236,7 @@
           "notifications"
         ],
         "summary": "Stream Notifications",
-        "description": "SSE 长连接：实时推送当前角色新通知 + 心跳保活。\n\n事件协议：connected（握手，data.role）/ notification（新通知，data 含完整通知字段）/ ping（心跳）。",
+        "description": "SSE 长连接：实时推送当前主体可见的新通知 + 心跳保活。\n\n事件协议：connected（握手，data.role）/ notification（新通知，data 含完整通知字段）/ ping（心跳）。",
         "operationId": "stream_notifications_api_v1_notifications_stream_get",
         "responses": {
           "200": {
@@ -4363,6 +4385,11 @@
           "quota_total": {
             "type": "integer",
             "title": "Quota Total"
+          },
+          "guest": {
+            "type": "boolean",
+            "title": "Guest",
+            "default": false
           }
         },
         "type": "object",

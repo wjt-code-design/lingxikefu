@@ -79,7 +79,7 @@ def client(monkeypatch):
         def left_today(self, _uid):
             return 10
 
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):
+        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None, guest=False):
             # content/token：与生产签名对齐（content 指纹化幂等、token 归属凭证，2026-08-31）
             calls["consumed"] += n
             return (True, 0)
@@ -378,7 +378,7 @@ def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
         def left_today(self, _uid):
             return 0
 
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):  # 与生产签名对齐（content/token，2026-08-31）
+        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None, guest=False):  # 与生产签名对齐（content/token，2026-08-31）
             return (False, 0)  # 超限 → 闸门拒绝
 
     monkeypatch.setattr("app.api.chat.get_quota_service", lambda: EmptyQuota())

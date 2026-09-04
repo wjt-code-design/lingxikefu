@@ -49,9 +49,12 @@ def list_users(
     _: dict = Depends(require_admin),
     db: OrmSession = Depends(get_db),
 ) -> UserListResp:
-    """分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。"""
+    """分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。
+
+    排除 guest（匿名体验账号，2026-09-04 批次B）：管理面不掺无凭证体验主体。
+    """
     tenant = settings.TENANT_DEFAULT
-    cond = [User.tenant_id == tenant]
+    cond = [User.tenant_id == tenant, User.status != "guest"]
     if keyword:
         kw = f"%{keyword.strip()}%"
         cond.append(or_(User.email.ilike(kw), User.phone.ilike(kw)))

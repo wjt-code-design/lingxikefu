@@ -30,8 +30,12 @@ def verify_password(password: str, hashed: str) -> bool:
     return _pwd_context.verify(password, hashed)
 
 
-def create_access_token(subject: str, role: str) -> str:
-    """签发 access token（M1：带 jti + type 以支持吊销）。"""
+def create_access_token(subject: str, role: str, guest: bool = False) -> str:
+    """签发 access token（M1：带 jti + type 以支持吊销）。
+
+    guest=True（匿名体验主体）写入 guest claim，供 chat 层按 guest 低配额扣减
+    ——避免每请求查 users 表判定 status（2026-09-04 匿名会话立项）。
+    """
     now = datetime.now(UTC)
     payload = {
         "sub": subject,
@@ -41,6 +45,8 @@ def create_access_token(subject: str, role: str) -> str:
         "iat": now,
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     }
+    if guest:
+        payload["guest"] = True
     return pyjwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 

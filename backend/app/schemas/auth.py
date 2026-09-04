@@ -55,3 +55,4 @@ class MeResp(BaseModel):
     role: UserRole
     quota_left: int
     quota_total: int  # 每日配额上限（契约曾声明但后端未返回 → 前端恒 undefined，2026-08-20 补齐）
+    guest: bool = False  # 匿名体验主体（2026-09-04 批次B）：前端据此展示免登录引导

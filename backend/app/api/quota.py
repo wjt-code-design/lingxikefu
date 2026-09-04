@@ -16,7 +16,7 @@ router = APIRouter(prefix="/quota", tags=["quota"])
 def get_quota(payload: dict = Depends(get_current_user)) -> QuotaResp:
     qs = get_quota_service()
     used = qs.used_today(payload["sub"])
-    limit = qs.daily_limit()
+    limit = qs.daily_limit(guest=bool(payload.get("guest")))
     return QuotaResp(
         date=date.today().isoformat(),
         used=used,

@@ -84,7 +84,7 @@ class QuotaService:
         factory = SessionLocal if self.session_factory is None else self.session_factory
         return factory()
 
-    def daily_limit(self) -> int:
+    def daily_limit(self, guest: bool = False) -> int:
         """每日配额上限：app_settings KV 覆盖优先（60s 进程内 TTL 缓存），回退 settings。
 
         - **双检**（H2 债清偿）：锁外无锁读快照（GIL 下单字段读原子；三字段撕裂
@@ -93,6 +93,10 @@ class QuotaService:
         - KV 读失败（DB 不可达）回退 settings 常量而非拒绝服务（fail-open 方向），
           失败结果同样按 TTL 负缓存，避免对故障 DB 每请求重试（恢复延迟 ≤ TTL）。
         """
+        # guest（匿名体验主体）：固定低上限，不吃 KV 覆盖——admin 上调注册配额
+        # 不应连带放大匿名滥用面（2026-09-04 匿名会话立项）。
+        if guest:
+            return settings.GUEST_DAILY_QUOTA_LIMIT
         if (
             self._limit_loaded
             and time.monotonic() - self._limit_cached_at < _LIMIT_TTL_SECONDS
@@ -169,7 +173,7 @@ class QuotaService:
     def left_today(self, user_id: str) -> int:
         return max(0, self.daily_limit() - self.used_today(user_id))
 
-    def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None, token: str | None = None) -> tuple[bool, int]:
+    def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None, token: str | None = None, guest: bool = False) -> tuple[bool, int]:
         """原子扣减闸门（P1-①）：幂等抢占 SET NX 原子化 + INCR/expire MULTI pipeline。
 
         R2 幂等指纹：marker 绑定 ``sha256(user_id:content)``（``content=None`` 退化为
@@ -183,6 +187,9 @@ class QuotaService:
         M8 收尾：``token`` 为请求级归属凭证（chat 层生成 uuid4，与 refund 成对传递）。
         抢占成功时写入 marker 值；``refund`` 按值校验归属后才回滚——防止幂等命中的
         并发请求（未扣费）误退持锁者的配额。不传 token 时退化为旧值 ``"1"``（兼容）。
+
+        ``guest=True``（匿名体验主体，JWT guest claim 透传）按
+        ``GUEST_DAILY_QUOTA_LIMIT`` 低上限扣减（2026-09-04 匿名会话立项）。
 
         返回 (allowed, used)：见模块 docstring。
         Redis / pipeline 不可用时 fail-closed 返回 (False, 0)（不产生半步脏状态）。
@@ -224,7 +231,7 @@ class QuotaService:
             pipe.incr(key, n)
             pipe.expire(key, 60 * 60 * 48)
             used = int(pipe.execute()[0])
-            if used > self.daily_limit():
+            if used > self.daily_limit(guest):
                 r.decr(key, n)  # 超额回滚，避免占用配额
                 if acquired and marker:
                     r.delete(marker)  # 抢占未成立（超额拒绝）→ 释放标记，重试可重新正常扣费
