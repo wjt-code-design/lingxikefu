@@ -551,6 +551,12 @@ def stats_client():
         db.add(User(id=USER_ID, email="u@b.com", role=UserRole.user, tenant_id="default", password_hash="x"))
         db.add(SessionModel(id=SID, user_id=USER_ID, tenant_id="default"))
         # qa×4：同意3（llm=qa）、分歧1（llm=chitchat）→ qa 桶 agree_rate=0.75
+        # created_at 显式本地 now()：server_default 在 SQLite 是 UTC CURRENT_TIMESTAMP，
+        # 与 API 的 date() 本地日分桶在 00:00-08:00（UTC+8）窗口错位 → 测试随钟表腐烂
+        # （2026-09-05 凌晨 CI 红即此因；PG 生产 now() 本地时区无此问题）
+        import datetime as _dt
+
+        _now = _dt.datetime.now()
         for i, (intent, llm) in enumerate(
             [("qa", "qa"), ("qa", "qa"), ("qa", "qa"), ("qa", "chitchat")]
         ):
@@ -558,6 +564,7 @@ def stats_client():
                 Message(
                     session_id=SID, role=MessageRole.user, content=f"q{i}", intent=intent,
                     meta={"intent_shadow": {"intent": llm, "latency_ms": 100 + i}},
+                    created_at=_now,
                 )
             )
         # 无影子键的 qa 消息不计入（分母 = 影子样本）
