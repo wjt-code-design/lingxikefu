@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Button } from 'antd';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { Button, Alert } from 'antd';
 import { BulbOutlined, CloseOutlined, SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined, FileAddOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
 import { createSession, getSessionDetail, rateSatisfaction, sendAgentMessage, suggestReply } from '@/api/sessions';
@@ -173,12 +173,16 @@ export function ChatContainer({
   const [createError, setCreateError] = useState<string | null>(null); // I-1：会话创建失败提示
   const [retryText, setRetryText] = useState<{ text: string; clientMsgId: string } | null>(null); // U1：最近失败消息 → 一键重试（含幂等键，重试复用不重复扣费）
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const sessionParam = searchParams.get('session');
-  // P3-⑫：sessionParam 的 ref 镜像（每 render 同步）——异步回调读「最新参数」做 stale 守卫，
+  // P3-⑫：sessionParam 的 ref 镜像（每 render 同步）——历史加载/建议等在途回调用它做 stale 守卫，
   // 闭包里的 sessionParam 与发起时捕获值恒等，直接比对永远为 true（不守卫）。
   const sessionParamRef = useRef<string | null>(null);
   sessionParamRef.current = sessionParam;
   const role = useAuthStore((s) => s.role);
+  // D1：后端从未实现匿名会话（POST /sessions 恒 401 硬跳登录丢上下文）——
+  // 未登录时不再让请求裸奔：onSend 源头拦截 + 界面明示登录入口，不承诺免登录体验。
+  const authed = useAuthStore((s) => Boolean(s.token));
   // 客服视角：agent/admin 打开既有会话（?session=）时进入 observe 模式——
   // 顾客与 AI 的对话统一在左，人工介入区在右（demo 招牌布局）；用户侧（自己聊天）保持原样。
   const observeMode = (role === 'agent' || role === 'admin') && !!sessionParam;
@@ -409,6 +413,11 @@ export function ChatContainer({
 
   const onSend = useCallback(
     async (text: string, clientMsgId?: string): Promise<boolean> => {
+      // D1：未登录不发请求（避免 401 硬跳登录丢嵌入上下文）——提示登录并保留输入
+      if (!authed) {
+        setCreateError('登录后即可开始对话');
+        return false;
+      }
       // C2：流式中拒绝并发新发送（返回 false 保留用户输入，避免误清空）
       if (streaming) return false;
       setCreateError(null); // 新发送清空创建错误
@@ -487,7 +496,7 @@ export function ChatContainer({
       }
       return true;
     },
-    [sessionId, stream, streaming, isStaff, intervened]
+    [sessionId, stream, streaming, isStaff, intervened, authed]
   );
 
   // U1：一键重试——重发失败的那条用户消息（复用幂等键，后端不重复扣费）
@@ -619,7 +628,29 @@ export function ChatContainer({
                 </svg>
               </div>
               <div className="chat-welcome__title">您好，我是灵犀智能客服</div>
-              <div className="chat-welcome__sub">可点击下方问题快速开始，或直接输入您的问题</div>
+              {authed ? (
+                <div className="chat-welcome__sub">可点击下方问题快速开始，或直接输入您的问题</div>
+              ) : (
+                /* D1：匿名不发请求也不假装可用——明示登录入口（登录后可带上下文回跳） */
+                <div className="chat-welcome__sub">
+                  <Alert
+                    type="info"
+                    showIcon
+                    message={
+                      <span>
+                        登录后即可开始对话
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => navigate(`/login?next=${encodeURIComponent(window.location.pathname)}`)}
+                        >
+                          去登录
+                        </Button>
+                      </span>
+                    }
+                  />
+                </div>
+              )}
             </div>
             <div className="chat-container__hot">
               {QUESTION_GROUPS.filter((g) => g.questions.some((q) => q.featured)).map((g) => (

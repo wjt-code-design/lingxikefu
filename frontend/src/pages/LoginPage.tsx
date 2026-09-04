@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button, Form, Input, Typography, message } from 'antd';
 import type { ApiError } from '@/contracts/api';
 import { login, me } from '@/api/auth';
@@ -15,6 +15,7 @@ import { useAuthStore } from '@/store/authStore';
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [form] = Form.useForm<{ account: string; password: string }>();
   const [loading, setLoading] = useState(false);
 
@@ -31,9 +32,14 @@ export function LoginPage() {
       useAuthStore.getState().setUser(meResp);
       message.success('登录成功');
       const from = (location.state as { from?: string } | null)?.from;
+      // D1：/widget 等页的登录引导用 ?next= 传来源（无 RequireAuth 参与，走 query 参数）；
+      // 仅接受站内绝对路径，防 open-redirect（?next=//evil.com 或 ?next=https://… 一律忽略）
+      const next = searchParams.get('next');
+      const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : null;
+      const target = (from && from !== '/login' && from) || safeNext;
       // 有来源页且非登录页 → 回到来源页；否则按角色分流到对应首页
-      if (from && from !== '/login') {
-        navigate(from);
+      if (target) {
+        navigate(target);
       } else {
         const home = meResp.role === 'admin' ? '/admin/dashboard' : meResp.role === 'agent' ? '/agent/dashboard' : '/chat';
         navigate(home);

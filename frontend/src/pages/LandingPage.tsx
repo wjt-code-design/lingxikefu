@@ -67,8 +67,10 @@ export function LandingPage() {
                 登录
               </Button>
             </Link>
-            <Link to="/widget">
-              <Button size="large">免登录体验对话</Button>
+            {/* D1：后端从未实现匿名会话，旧「免登录体验对话」是空头承诺
+                （点进 /widget 发消息即 401）→ 改为诚实的注册入口 */}
+            <Link to="/register">
+              <Button size="large">注册体验</Button>
             </Link>
           </div>
         </section>
