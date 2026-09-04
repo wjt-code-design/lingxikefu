@@ -127,7 +127,10 @@ class Settings(BaseSettings):
     # --- 意图影子（架构二期 3，ADR-1 第一步：LLM 意图分类只记不驱动） ---
     # 采样率 [0,1]：对规则判为 qa 的用户消息按此概率打 LLM 影子分类（结果只落
     # Message.meta["intent_shadow"]，不驱动路由）；0 = 关闭影子（不产生 LLM 成本）。
-    INTENT_SHADOW_SAMPLE: float = 0.2
+    # 2026-09-04 由 0.2 提至 1.0：线上 qa 流量实测仅 ~2-10 条/天，20% 采样下攒够
+    # INTENT_SHADOW_MIN_TOTAL=500 需 ~250 天（切换门槛实际不可达）；影子走关思考
+    # 短调用（~1-2s、约 400 token/次），全量采样月成本量级可忽略。
+    INTENT_SHADOW_SAMPLE: float = 1.0
     #: 意图影子切换决策的最小样本量（H4 观测）：stats.remaining<=0 即样本量达标，
     #: 是否切换仍需结合 agree_rate 与人工评审，本字段只做进度观测。
     INTENT_SHADOW_MIN_TOTAL: int = 500
