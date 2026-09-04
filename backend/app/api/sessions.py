@@ -91,6 +91,16 @@ class SessionMessage(BaseModel):
     sources: list[SessionMessageSource] = Field(default_factory=list)
 
 
+class SessionTicketInfo(BaseModel):
+    """D3（2026-09-04）：会话详情内嵌的最新工单摘要（前端刷新后恢复工单气泡用）。
+
+    只回传展示必需三字段——工单号/状态/来源；状态流转详情走 TicketStatusBadge
+    既有轮询（GET /tickets/{id}），此处不做第二份真源。"""
+    ticket_id: str
+    status: str
+    source: str
+
+
 class SessionDetail(BaseModel):
     """会话详情（含消息历史），供 agent 查看用户历史对话（M8）。"""
     id: str
@@ -103,6 +113,11 @@ class SessionDetail(BaseModel):
     # 批次B：会话状态机（阶段+槽位；agent/admin 观察用，user 视角同返回——内容仅含
     # 用户自己会话的主题/订单号，无越权数据面，与 profile 的仅-staff 可见不同类）。
     conv_state: dict | None = None
+    # D3（2026-09-04）：本会话最新一张工单（updated_at 倒序取第一）；无工单 None。
+    # 手动转人工/建单不产生消息，工单气泡此前是纯前端 state 刷新即丢——此字段是
+    # 恢复读路径（前端历史加载时重建 TicketNotice）。越权面与本端点一致（仅会话
+    # owner/staff 可读，get_session 已有校验），不新增数据面。
+    ticket: SessionTicketInfo | None = None
 
 
 class SessionListResp(BaseModel):
@@ -268,12 +283,34 @@ def get_session(
             )
         except Exception:  # noqa: BLE001 - fail-open
             handoff_summary = None
+    # D3（2026-09-04）：本会话最新工单（转人工/建单气泡刷新恢复的读路径）。
+    # updated_at 倒序取第一：历史关闭后重开的场景下，用户要看到的是当前进展那张。
+    # 越权面复用本端点既有校验（会话 owner/staff 才可达），工单按 session_id 精确匹配。
+    # fail-open（与同函数 profile/handoff_summary 同款纪律）：工单是详情页的增强信息，
+    # 查询异常不得打断会话历史主流程——宁可气泡暂缺，不可整个详情 500。
+    ticket_info: SessionTicketInfo | None = None
+    try:
+        latest_ticket = db.scalar(
+            select(Ticket)
+            .where(Ticket.session_id == s.id, Ticket.tenant_id == settings.TENANT_DEFAULT)
+            .order_by(Ticket.updated_at.desc())
+            .limit(1)
+        )
+        if latest_ticket:
+            ticket_info = SessionTicketInfo(
+                ticket_id=str(latest_ticket.id),
+                status=latest_ticket.status.value,
+                source=latest_ticket.source or "ai",
+            )
+    except Exception:  # noqa: BLE001 - fail-open
+        logger.warning("session detail ticket 读取失败（降级 None）", exc_info=True)
     return SessionDetail(
         id=str(s.id),
         title=s.title,
         profile=profile,
         handoff_summary=handoff_summary,
         conv_state=s.conv_state,
+        ticket=ticket_info,
         messages=[
             SessionMessage(
                 id=str(m.id),

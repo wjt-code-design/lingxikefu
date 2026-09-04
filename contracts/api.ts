@@ -94,6 +94,13 @@ export interface SessionConvState {
   slots?: Record<string, string>; // 已收集槽位（如 order_no）
   clarify_count?: number; // 澄清追问次数（批次C 用）
 }
+/** D3（2026-09-04）：会话详情内嵌的最新工单摘要（刷新后恢复工单气泡用）。
+ *  状态流转详情走 GET /tickets/{id}（TicketStatusBadge 轮询），此处仅展示必需三字段。 */
+export interface SessionTicketInfo {
+  ticket_id: string;
+  status: TicketStatus;
+  source: string; // ai（LLM 自动）/ manual（用户主动转人工）
+}
 export interface SessionDetail {
   id: string;
   title?: string;
@@ -101,6 +108,7 @@ export interface SessionDetail {
   profile?: SessionProfile;
   handoff_summary?: SessionHandoffSummary;
   conv_state?: SessionConvState | null; // 批次B：会话状态机（客服观察用）
+  ticket?: SessionTicketInfo | null; // D3：本会话最新工单（无则 null）
 }
 /** Branch 3：人工客服代发消息请求体（POST /sessions/{id}/messages，仅 admin/agent 可用）。 */
 export interface AgentMessageReq {

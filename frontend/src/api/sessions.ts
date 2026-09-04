@@ -24,6 +24,7 @@ interface BackendSessionDetail {
   profile?: SessionDetail['profile']; // Phase D：用户画像（agent/admin 视角返回；顾客端 undefined）
   handoff_summary?: SessionDetail['handoff_summary']; // 转人工交接摘要（agent/admin 视角）
   conv_state?: SessionDetail['conv_state']; // 批次B：会话状态机（阶段+槽位跨轮记忆；旧会话为 null）
+  ticket?: SessionDetail['ticket']; // D3：本会话最新工单摘要（刷新恢复气泡用；无则 null）
 }
 
 function toSession(s: BackendSession): Session {
@@ -67,6 +68,7 @@ export async function getSessionDetail(id: string, limit?: number): Promise<Sess
     profile: r.data.profile, // Phase D：透传画像（agent/admin 可见；顾客端 undefined）
     handoff_summary: r.data.handoff_summary, // 转人工交接摘要（agent/admin 可见）
     conv_state: r.data.conv_state, // 批次B：透传会话状态机（客服观察用；旧会话为 null）
+    ticket: r.data.ticket, // D3：透传最新工单（ChatContainer 据此恢复转人工气泡；漏传则恒 undefined 永不恢复）
   };
 }
 

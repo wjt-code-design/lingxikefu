@@ -289,6 +289,12 @@ export function ChatContainer({
         setUserProfile(d.profile); // Phase D：客服视角展示画像
         setHandoffSummary(d.handoff_summary); // 转人工交接摘要（客服视角展示）
         setMessages(d.messages.map(toChatMessage));
+        // D3（2026-09-04）：会话带最新工单 → 恢复「转人工」气泡（旧版是纯本地
+        // state，刷新即丢，用户重进会话看不到工单进度）。复用 manualTicket 渲染
+        // 路径：TicketNotice + TicketStatusBadge 既有轮询自动跟进状态流转。
+        if (d.ticket) {
+          setManualTicket({ id: d.ticket.ticket_id, loading: false, error: null });
+        }
         // 溯源面板（2026-08-25）：历史加载默认选中最后一条 AI 回复 → 右栏显示其溯源；
         // 客服可再点其他 AI 回复切换（点哪条看哪条）。无 AI 回复（如纯人工会话）不选中。
         const lastAssistant = [...d.messages].reverse().find((m) => m.role === 'assistant');

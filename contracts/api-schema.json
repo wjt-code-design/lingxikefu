@@ -4802,6 +4802,16 @@
               }
             ],
             "title": "Conv State"
+          },
+          "ticket": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionTicketInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -5031,6 +5041,30 @@
         ],
         "title": "SessionMessageSource",
         "description": "消息引用来源（对齐契约 MessageSource：chunk_id/doc_id/doc_title/snippet/score）。\n2026-08-21：会话详情补曝光引用来源，修复历史消息无溯源（此前详情接口不含 sources）。"
+      },
+      "SessionTicketInfo": {
+        "properties": {
+          "ticket_id": {
+            "type": "string",
+            "title": "Ticket Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "ticket_id",
+          "status",
+          "source"
+        ],
+        "title": "SessionTicketInfo",
+        "description": "D3（2026-09-04）：会话详情内嵌的最新工单摘要（前端刷新后恢复工单气泡用）。\n\n只回传展示必需三字段——工单号/状态/来源；状态流转详情走 TicketStatusBadge\n既有轮询（GET /tickets/{id}），此处不做第二份真源。"
       },
       "StatsTrendResp": {
         "properties": {
