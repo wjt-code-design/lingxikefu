@@ -91,14 +91,19 @@ def list_knowledge_bases(
     db: Session = Depends(get_db),
 ) -> KBListResp:
     repo = KnowledgeBaseRepository(db)
+    kbs = repo.list_all()
+    # B2-3 防 N+1：两条 GROUP BY 批量统计替代逐 KB 两次 COUNT（旧实现 2N+1 查询）
+    kb_ids = [kb.id for kb in kbs]
+    doc_counts = repo.doc_counts(kb_ids)
+    chunk_counts = repo.chunk_counts(kb_ids)
     items = [
         KBItem(
             kb_id=str(kb.id),
             name=kb.name,
-            doc_count=repo.doc_count(kb.id),
-            chunk_count=repo.chunk_count(kb.id),
+            doc_count=doc_counts.get(kb.id, 0),
+            chunk_count=chunk_counts.get(kb.id, 0),
         )
-        for kb in repo.list_all()
+        for kb in kbs
     ]
     return KBListResp(items=items)
 

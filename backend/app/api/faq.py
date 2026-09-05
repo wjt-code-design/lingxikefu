@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -40,13 +41,18 @@ def list_faq(db: Session = Depends(get_db)) -> FaqListResp:
             .group_by(Chunk.kb_id)
         ).all()
     )
+    # B2-3 防 N+1：全部文档一次 in_ 批量取回按 kb_id 分组（旧实现循环内逐 KB 查，
+    # 匿名公开端点 → KB 数线性放大查询数）。created_at 倒序在分组内保持（SQL 全局排序）。
+    docs_by_kb: dict[Any, list[Document]] = {}
+    for d in db.scalars(
+        select(Document)
+        .where(Document.kb_id.in_(kb_ids), Document.tenant_id == tenant)
+        .order_by(Document.created_at.desc())
+    ).all():
+        docs_by_kb.setdefault(d.kb_id, []).append(d)
     items: list[FaqKbItem] = []
     for kb in kbs:
-        docs = db.scalars(
-            select(Document)
-            .where(Document.kb_id == kb.id, Document.tenant_id == tenant)
-            .order_by(Document.created_at.desc())
-        ).all()
+        docs = docs_by_kb.get(kb.id, [])
         items.append(
             FaqKbItem(
                 kb_id=str(kb.id),

@@ -190,3 +190,53 @@ def test_quick_kb_coverage_gate_threshold():
     assert check_kb_coverage("怎么开发票 保修多久") is True
     # 与全部话术零交集 → 全部未覆盖 → 不通过
     assert check_kb_coverage("量子力学波动方程与算符对易关系") is False
+
+
+def test_faq_no_n_plus_one_queries():
+    """B2-3 防 N+1：/faq 文档查询次数不随 KB 数线性增长。
+
+    旧实现循环内逐 KB select(Document)（1 KB = 1 查询 + 首批 1 查询）；
+    修复后全部文档一次 in_ 批量取回。手法：engine before 事件计数含
+    "FROM documents" 的 SELECT——3 个 KB 下旧实现 ≥3 次、新实现恒 1 次。
+    """
+    engine = _make_engine()
+    Local = sessionmaker(bind=engine, expire_on_commit=False)
+
+    doc_selects: list[str] = []
+
+    from sqlalchemy import event
+
+    @event.listens_for(engine, "before_cursor_execute")
+    def _count(conn, cursor, statement, params, context, executemany):  # noqa: ANN001
+        if "FROM documents" in statement:
+            doc_selects.append(statement)
+
+    def _override():
+        db = Local()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _override
+    try:
+        with Local() as db:
+            for i in range(3):
+                kb = KnowledgeBase(id=uuid.uuid4(), name=f"KB-{i}")
+                db.add(kb)
+                db.flush()
+                db.add(Document(
+                    id=uuid.uuid4(), kb_id=kb.id, name=f"d{i}.md",
+                    status=DocumentStatus.indexed, chunk_count=1, sha256=str(i) * 64,
+                ))
+            db.commit()
+        with TestClient(app) as c:
+            doc_selects.clear()
+            r = c.get(f"{API}/faq")
+        assert r.status_code == 200
+        assert len(r.json()["items"]) == 3
+        # 新实现：documents 表 SELECT 恰 1 次（批量 in_）；旧实现此处会是 3（逐 KB）
+        assert len(doc_selects) == 1, f"documents 查询 {len(doc_selects)} 次（应恒 1，N+1 回归）"
+    finally:
+        event.remove(engine, "before_cursor_execute", _count)
+        app.dependency_overrides.clear()

@@ -314,7 +314,13 @@ async def stream_answer(
         # 引用编号修复（确定性）：流式已发原始 [来源N]，落库/缓存用校正后全文（fixed_content）。
         # Chat 层回填答案缓存时复用该 key；避免在 done 分支再次执行 rewrite。
         # 这是内部流事件字段，Chat 只向前端转发自己的 done 数据，因而不扩展 SSE 契约。
-        fixed_content = fix_citations("".join(parts), result.chunks) if parts else ""
+        # B2-4：bigram 交集是重 CPU（长回答 × top5 长 chunk），搬 worker 线程不阻塞事件循环。
+        answer_text = "".join(parts)
+        fixed_content = (
+            await run_in_threadpool(fix_citations, answer_text, result.chunks)
+            if answer_text
+            else ""
+        )
         yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query, "fixed_content": fixed_content})
     except Exception:  # noqa: BLE001
         logger.exception("RAG 生成失败")
@@ -362,6 +368,15 @@ _CIT_OVERLAP_THRESHOLD = 0.30
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]{2,}")
 
 
+def _bigrams(text: str) -> set[str]:
+    """连续中文切 2 字窗口集合（与 eval_faithfulness 判定同口径：只切中文）。"""
+    bg: set[str] = set()
+    for w in _CJK_RE.findall(text):
+        for i in range(len(w) - 1):
+            bg.add(w[i : i + 2])
+    return bg
+
+
 def _sentence_overlap(sentence: str, chunk_text: str) -> float:
     """引用点句子与 chunk 的 2 字窗口交集比例（0-1）。
 
@@ -369,16 +384,10 @@ def _sentence_overlap(sentence: str, chunk_text: str) -> float:
     窗口，忽略数字/标点/换行——否则 fix_citations 与 judge_citations 在阈值边界分歧
     （Q052 长句段落实测：全字符 0.543 vs 中文口径 0.27），导致保留 eval 判定无效的引用。
     """
-    s_bg: set[str] = set()
-    for w in _CJK_RE.findall(sentence):
-        for i in range(len(w) - 1):
-            s_bg.add(w[i : i + 2])
-    c_bg: set[str] = set()
-    for w in _CJK_RE.findall(chunk_text):
-        for i in range(len(w) - 1):
-            c_bg.add(w[i : i + 2])
+    s_bg = _bigrams(sentence)
     if not s_bg:
         return 0.0
+    c_bg = _bigrams(chunk_text)
     return len(s_bg & c_bg) / len(s_bg)
 
 
@@ -394,6 +403,9 @@ def fix_citations(answer: str, chunks: list[RetrievedChunk]) -> str:
     """
     if not chunks or "[来源" not in answer:
         return answer
+    # B2-4：chunk bigram 入口预计算一次复用（旧实现每引用点 × 每 chunk 重算全量
+    # bigram，长回答 + top5 长 chunk 时重复 CPU 阻塞事件循环）。
+    chunk_bgs = [_bigrams(c.text) for c in chunks]
     parts = re.split(r"(\[来源\d+\])", answer)
     out: list[str] = []
     cur = ""
@@ -410,11 +422,14 @@ def fix_citations(answer: str, chunks: list[RetrievedChunk]) -> str:
             out.append(cur)
             cur = ""
         if sentence:
+            s_bg = _bigrams(sentence)
+            s_len = len(s_bg)
             best_i, best_ov = 0, 0.0
-            for i, c in enumerate(chunks):
-                ov = _sentence_overlap(sentence, c.text)
-                if ov > best_ov:
-                    best_i, best_ov = i, ov
+            if s_len:
+                for i, c_bg in enumerate(chunk_bgs):
+                    ov = len(s_bg & c_bg) / s_len
+                    if ov > best_ov:
+                        best_i, best_ov = i, ov
             if best_ov >= _CIT_OVERLAP_THRESHOLD:
                 out.append(f"[来源{best_i + 1}]")
             else:

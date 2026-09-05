@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -41,18 +42,28 @@ class KnowledgeBaseRepository:
         self.db.delete(kb)
         self.db.commit()
 
-    def doc_count(self, kb_id: UUID) -> int:
-        return (
-            self.db.query(Document)
-            .filter_by(kb_id=kb_id, tenant_id=settings.TENANT_DEFAULT)
-            .count()
+    def doc_counts(self, kb_ids: list[UUID]) -> dict[UUID, int]:
+        """批量统计各 KB 文档数（B2-3 防 N+1：一次 GROUP BY 替代逐 KB COUNT）。"""
+        if not kb_ids:
+            return {}
+        return dict(
+            self.db.execute(
+                select(Document.kb_id, func.count(Document.id))
+                .where(Document.kb_id.in_(kb_ids), Document.tenant_id == settings.TENANT_DEFAULT)
+                .group_by(Document.kb_id)
+            ).all()
         )
 
-    def chunk_count(self, kb_id: UUID) -> int:
-        return (
-            self.db.query(Chunk)
-            .filter_by(kb_id=kb_id, tenant_id=settings.TENANT_DEFAULT)
-            .count()
+    def chunk_counts(self, kb_ids: list[UUID]) -> dict[UUID, int]:
+        """批量统计各 KB 切片数（B2-3 防 N+1：一次 GROUP BY 替代逐 KB COUNT）。"""
+        if not kb_ids:
+            return {}
+        return dict(
+            self.db.execute(
+                select(Chunk.kb_id, func.count(Chunk.id))
+                .where(Chunk.kb_id.in_(kb_ids), Chunk.tenant_id == settings.TENANT_DEFAULT)
+                .group_by(Chunk.kb_id)
+            ).all()
         )
 
 
