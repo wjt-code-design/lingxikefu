@@ -468,7 +468,14 @@ async def chat_stream(
                 # done 带 answer_source=quick，前端 SourcePanel 区分「预置话术无引用」空态。
                 # 5-2 失效面：KB 变更后新版本未通过覆盖检查（is_enabled_for）→ 不短路自然落 RAG，
                 # 防陈旧话术；从未跑过覆盖检查的环境恒放行（向后兼容），禁用时按版本 warning 一次。
-                if quick_ans and quick_answers.is_enabled_for(kb_version):
+                # B2-8（收敛修正）：is_enabled_for 内含同步 Redis GET（_REDIS_COVERED_KEY）
+                # ——搬 worker 线程消除 loop 阻塞（Redis 半开时 socket_timeout=2 会冻结全
+                # 服务 SSE，同 C1 try_consume 纪律）。规划书原拟"60s TTL 缓存"会引入覆盖
+                # 判定滞后（新导入 KB 若失覆盖，quick 仍放行 ≤60s），违背本模块"宁慢勿错"
+                # fail-closed 设计，故不采纳缓存、只做搬运。`and` 短路：quick_ans 空时不调用。
+                if quick_ans and await run_in_threadpool(
+                    quick_answers.is_enabled_for, kb_version
+                ):
                     yield ("intent", {"intent": "qa", "refuse": False})
                     for delta in _split_answer(quick_ans):
                         yield ("token", {"delta": delta})

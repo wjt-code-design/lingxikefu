@@ -138,6 +138,13 @@ async def lifespan(_: FastAPI):
         await close_shared_client()
     except Exception:  # noqa: BLE001
         logger.exception("shared chat client close failed (non-blocking)")
+    # B2-9：视觉共享 client 同款优雅关闭（ImageAgent 图片理解用）
+    try:
+        from app.llm_clients.volcengine_vision import close_shared_vision_client
+
+        await close_shared_vision_client()
+    except Exception:  # noqa: BLE001
+        logger.exception("shared vision client close failed (non-blocking)")
 
 
 def _recover_stale_imports() -> None:
