@@ -15,11 +15,6 @@ import logging
 trace_var: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", default="")
 
 
-def get_trace_id() -> str:
-    """读取当前请求的 trace_id（无则空串）。"""
-    return trace_var.get()
-
-
 def set_trace_id(tid: str) -> None:
     """设置当前请求的 trace_id（chat_stream 入口 / gen 内调用一次即可）。"""
     trace_var.set(tid or "")

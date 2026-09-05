@@ -1,8 +1,10 @@
 """RAG 管线（BU-03/BU-05 核心）：intent → 检索 → prompt → 流式生成。
 
-设计（vet-plan 裁定）：
-- 纯函数式 4 步，不做 LangGraph / query rewrite / sparse / rerank（MVP 关闭，
-  接口预留开关，recall 基线不达标再开）。
+设计（vet-plan 裁定 + 现状同步）：
+- 纯函数式管线（PipelineRunner 编排 5 节点：intent → rewrite → cache → retrieve → refuse），
+  不用 LangGraph。query rewrite 与 sparse（hybrid 检索，RAG_ENABLE_HYBRID=True）已启用；
+  仅 rerank 关闭（RAG_ENABLE_RERANK=False，接口预留开关，recall 基线不达标再开）。
+  生成阶段不在本管线内——由 Chat 层用 build_qa_messages 组装后流式调用（见 stream_answer）。
 - intent 用规则式（轻量、省 LLM 调用）：闲聊/转人工关键词命中即短路，
   不再调 LLM 做意图分类（单租户客服场景关键词足够）。
 - 诚实性：检索 top-1 分数低于阈值 → 拒答提示转人工，绝不编造（fail-closed）。

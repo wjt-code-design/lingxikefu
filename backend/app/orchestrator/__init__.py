@@ -26,7 +26,7 @@ class PipelineRunner:
     """轻量 RAG 管线调度器。
 
     与 LangGraph 的区别：
-    - 当前只有 6 个节点、2 个条件分支，用 if/for 足够
+    - 节点数少（当前 5 个）、条件分支少，用 if/for 足够
     - 不需要图序列化、状态持久化、checkpoint 恢复
     - 未来节点 > 20 时再迁移到 LangGraph
     """

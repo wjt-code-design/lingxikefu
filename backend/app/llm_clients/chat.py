@@ -139,7 +139,6 @@ class OpenAILikeChatClient(ChatClient):
 
         思维链透传（TTFT 感知优化）：LongCat 开思考时 reasoning_content 先于 content
         流式到达（实测首块 ~2s），上层可把"思考中"即时反馈给用户；content 为正式回答。
-        stream() 保持旧 str 契约（仅 content），供 generate.py 等无思考展示需求的调用方。
         """
         payload = self._payload(messages, model, stream=True, kwargs=kwargs)
         headers, body = self._request(payload)
