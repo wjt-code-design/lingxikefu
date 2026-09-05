@@ -218,3 +218,65 @@ describe('MessageBubble AI 气泡布局修正（2026-09-03）', () => {
     expect(document.querySelector('.chat-msg__actions')).toBeNull();
   });
 });
+
+/** 2026-09-05 顾客端轻量溯源（替代 2026-08-21「顾客端完全隐藏」）：
+ *  给「确信感」而非「审计权」——气泡底部一行小字徽标，仅露文档标题（去扩展名），
+ *  不可点击、不展开 chunk 详情；staff 保持完整 SourceAccordion，两者互斥不叠加。 */
+describe('MessageBubble 顾客端轻量溯源徽标', () => {
+  const HINT_SEL = '.chat-msg__source-hint';
+
+  it('顾客 + AI 消息有 sources → 显示「依据《X》等 N 篇官方资料」，标题去 .md 扩展名', () => {
+    renderBubble({ content: '答案。', sources: SOURCES }); // 默认 role=user
+    const hint = document.querySelector(HINT_SEL);
+    expect(hint).not.toBeNull();
+    expect(hint!.textContent).toContain('依据《售后政策》');
+    expect(hint!.textContent).toContain('2 篇');
+    expect(hint!.textContent).not.toContain('.md');
+  });
+
+  it('单来源 → 「依据《X》官方资料」无「等 N 篇」', () => {
+    renderBubble({ content: '答案。', sources: [SOURCES[0]] });
+    const hint = document.querySelector(HINT_SEL);
+    expect(hint).not.toBeNull();
+    expect(hint!.textContent).toContain('依据《售后政策》官方资料');
+    expect(hint!.textContent).not.toMatch(/等 \d+ 篇/);
+  });
+
+  it('徽标纯展示：无 role=button / tabindex / 点击不展开面板（无审计权）', () => {
+    renderBubble({ content: '答案。', sources: SOURCES });
+    const hint = document.querySelector(HINT_SEL)!;
+    expect(hint.getAttribute('role')).toBeNull();
+    expect(hint.getAttribute('tabindex')).toBeNull();
+    fireEvent.click(hint);
+    expect(document.querySelector('.chat-source__panel')).toBeNull();
+    expect(document.querySelector('.chat-source__toggle')).toBeNull();
+  });
+
+  it('顾客 + 无 sources（LLM 直答/拒答）→ 不渲染徽标（诚实：不假装有依据）', () => {
+    renderBubble({ content: '答案。', sources: [] });
+    expect(document.querySelector(HINT_SEL)).toBeNull();
+    renderBubble({ content: '答案。' });
+    expect(document.querySelector(HINT_SEL)).toBeNull();
+  });
+
+  it('staff 视角不渲染轻量徽标（完整 SourceAccordion 已覆盖，防叠加）', () => {
+    renderBubble({ content: '答案。', sources: SOURCES }, 'self', 'agent');
+    expect(document.querySelector(HINT_SEL)).toBeNull();
+    expect(document.querySelector('.chat-source__toggle')).not.toBeNull();
+  });
+
+  it('user/agent 发言气泡不渲染徽标（仅 AI 回复有溯源）', () => {
+    useAuthStore.setState({
+      token: 't', refreshToken: 't', role: 'user',
+      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+    });
+    const { rerender } = render(
+      <MessageBubble msg={{ id: 'u1', role: 'user', content: 'hi', sources: SOURCES }} onRate={vi.fn()} />,
+    );
+    expect(document.querySelector(HINT_SEL)).toBeNull();
+    rerender(
+      <MessageBubble msg={{ id: 'a1', role: 'agent', content: 'hello', sources: SOURCES }} onRate={vi.fn()} />,
+    );
+    expect(document.querySelector(HINT_SEL)).toBeNull();
+  });
+});

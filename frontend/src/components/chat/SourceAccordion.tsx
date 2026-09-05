@@ -3,7 +3,7 @@ import { FolderOpenOutlined, FolderOutlined } from '@ant-design/icons';
 import type { MessageSource } from '@/contracts/api';
 
 /** 去掉文件扩展名，仅显示文档名（退换货政策.md → 退换货政策） */
-function docName(title: string): string {
+export function docName(title: string): string {
   return title.replace(/\.(md|pdf|txt|docx?|xlsx?|csv)$/i, '');
 }
 

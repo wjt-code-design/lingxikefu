@@ -1295,6 +1295,13 @@ main h1.ant-typography {
 .chat-source__toggle:hover {
   background: rgba(150, 200, 232, 0.2);
 }
+/* 2026-09-05 顾客端轻量溯源徽标：纯展示小字（无 cursor/边框，与 staff 可交互 toggle 区分） */
+.chat-msg__source-hint {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  color: var(--color-text-tertiary, rgba(0, 0, 0, 0.45));
+}
 .chat-source__panel {
   margin-top: 4px;
   border: 1px solid var(--border);

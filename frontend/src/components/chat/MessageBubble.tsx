@@ -6,7 +6,7 @@ import { CopyOutlined, CustomerServiceOutlined } from '@ant-design/icons';
 import type { ChatMessage } from './types';
 import type { MessageSource } from '@/contracts/api';
 import { MarkdownContent } from '@/components/common/MarkdownContent';
-import { SourceAccordion } from './SourceAccordion';
+import { SourceAccordion, docName } from './SourceAccordion';
 import { ThumbsBar } from './ThumbsBar';
 import { OrderCards } from './OrderCards';
 import { detectOrderTrack } from './orderTrack';
@@ -279,6 +279,19 @@ export function MessageBubble({
             }}
             highlightN={sourceOpen ? highlightN : null}
           />
+        )}
+        {/* 2026-09-05 顾客端轻量溯源：给「确信感」而非「审计权」——仅露文档标题、
+            不可点击展开；无 sources（LLM 直答/拒答）不渲染，不假装有依据。
+            staff 走完整 SourceAccordion，两者互斥。 */}
+        {!isStaff && isAi && msg.sources && msg.sources.length > 0 && (
+          <div className="chat-msg__source-hint">
+            {(() => {
+              const titles = [...new Set(msg.sources!.map((s) => docName(s.doc_title)))];
+              return titles.length === 1
+                ? `依据《${titles[0]}》官方资料`
+                : `依据《${titles[0]}》等 ${titles.length} 篇官方资料`;
+            })()}
+          </div>
         )}
         {!isUser && !isAgent && msg.ticketId && (
           <div className="chat-msg__ticket">
