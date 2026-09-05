@@ -16,7 +16,7 @@
 
 5d4525070d7129b344bf1c8ae48e9819011317991267b164b02dcde5c66a351a *backend/scripts/eval_faithfulness.py
 7034bf8433f4b323b1acb60c95944f617f4db3c1597b3de24b3a3de2b595a17f *评测问题库.md
-b1aad5fe4c493978c45e35eb3ba40299f6359a980128ef55cb2318e109730923 *ground-truth.md
+316e9d3e4b4a9f228138bf83bb9bfa785eb7b6c310cdafd232a0fb4bae94c3f5 *ground-truth.md
 135e00f9f54272aae992d199408690d01d8bf3d34e1ade632814f5e892a898c2 *口语化评测集.md
 
 # 2026-08-30 判定脚本 hash 同步（G2 授权变更）：run_faithfulness_eval 加可选 sample/kb_id 参数
@@ -25,3 +25,8 @@ b1aad5fe4c493978c45e35eb3ba40299f6359a980128ef55cb2318e109730923 *ground-truth.m
 #   确定性引用校正（评测口径=生产持久化口径，方案 C 收尾），当时漏同步本文件，
 #   本次合规补登（先例 0575c14）。同日 error 率上限门禁落地于独立脚本
 #   eval_gate_error_rate.py（不在冻结清单，判定语义零变化）。
+# 2026-09-06 ground-truth.md hash 补登（B2-6 引入 CI 校验时暴露）：6561047（GT 断言
+#   粒度收窄三期修订，qa 断言失败 6 题归因「相邻条款混入必答断言」）改了本文件但漏
+#   同步 hash——因 CI 此前从不校验 BASELINE，漂移静默。本次按变更流程合规补登为
+#   6561047 后真实值 316e9d3e（git log 6561047..HEAD 对该文件零改动，工作区干净，
+#   即当前值=应有冻结值）。配套新增 scripts/check_baseline_hashes.py + CI 校验 step。

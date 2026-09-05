@@ -60,6 +60,12 @@ jobs:
         run: pip install "ruff==0.16.4"
       - name: Ruff check
         run: ruff check app tests alembic scripts
+      # B2-6：评测基线冻结清单完整性校验（防判定脚本/评测集被改后 CI 仍绿的假绿防线）。
+      # 纯标准库、秒级完成，挂 lint（每次 push 必跑，不受 eval job 路径过滤影响）。
+      # 2026-09-06 引入即抓到既有漏登：ground-truth.md @6561047 改后未同步 hash。
+      - name: Baseline integrity (BASELINE.sha256)
+        working-directory: .
+        run: python scripts/check_baseline_hashes.py
 
   test:
     name: Unit tests (pytest)
