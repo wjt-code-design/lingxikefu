@@ -16,7 +16,7 @@ trace_var: contextvars.ContextVar[str] = contextvars.ContextVar("trace_id", defa
 
 
 def set_trace_id(tid: str) -> None:
-    """设置当前请求的 trace_id（chat_stream 入口 / gen 内调用一次即可）。"""
+    """设置当前请求的 trace_id（chat_stream 入口调用一次即可）。"""
     trace_var.set(tid or "")
 
 

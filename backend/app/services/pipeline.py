@@ -13,7 +13,6 @@ class Pipeline:
     # 输入
     query: str
     kb_id: UUID
-    user_id: str = ""
     history: list[dict] = field(default_factory=list)
     kb_version: str | None = None
 
@@ -31,9 +30,7 @@ class Pipeline:
     # 阶段日志（调试/排障用）
     stages: list[dict] = field(default_factory=list)
 
-    # 输出
-    final_answer: str = ""
-    sources: list[dict] = field(default_factory=list)
+    # 输出（生成阶段在 Chat 层，不落本上下文；errors 供 Runner 失败路径记录）
     errors: list[str] = field(default_factory=list)
 
     def add_stage(self, name: str, error: str | None = None) -> None:
