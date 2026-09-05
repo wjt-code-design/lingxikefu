@@ -10,7 +10,7 @@ from app.models.user import UserRole
 
 class LoginReq(BaseModel):
     account: str  # 邮箱或手机号
-    password: str
+    password: str  # 不加 max_length：超长由 verify_password fail-safe 拒（避免 422/401 语义混乱）
 
 
 class RegisterReq(BaseModel):
@@ -30,6 +30,10 @@ class RegisterReq(BaseModel):
         # 因此"同时包含字母和数字"的 AND 语义必须用 field_validator 实现（Python re）。
         if not re.search(r"[A-Za-z]", v) or not re.search(r"\d", v):
             raise ValueError("密码需同时包含字母和数字")
+        # B2-5：bcrypt 对 >72 字节的口令静默截断 → 前 72 字节相同即同密码（可冒用等价类）。
+        # 注册侧按 UTF-8 字节数拒绝（非字符数——多字节口令字符数 <72 仍可能超字节）。
+        if len(v.encode("utf-8")) > 72:
+            raise ValueError("密码过长（UTF-8 不超过 72 字节）")
         return v
 
 
