@@ -101,16 +101,12 @@ async def test_do_eval_binds_current_kb_version(monkeypatch):
 
     monkeypatch.setattr("app.core.database.SessionLocal", Local)
 
-    async def _fake_faithfulness(db, limit=0, kb_name=None):
-        return [("qa", 0.9, 10, 9), ("refuse", 1.0, 4, 4)]
-
-    def _fake_recall(db, limit=0, kb_name=None, top_k=5):
+    async def _fake_stage(stage, *, limit=0, sample=0, top_k=5, kb_name=None, kb_id=None):
+        if stage == "faithfulness":
+            return [("qa", 0.9, 10, 9), ("refuse", 1.0, 4, 4)]
         raise RuntimeError("recall 中途挂（锁定失败留痕行同样绑定版本）")
 
-    monkeypatch.setattr(
-        "scripts.eval_faithfulness.run_faithfulness_eval", _fake_faithfulness, raising=False
-    )
-    monkeypatch.setattr("scripts.eval_recall.run_recall_eval", _fake_recall, raising=False)
+    monkeypatch.setattr("app.api.eval.run_eval_stage", _fake_stage)
 
     from app.api.eval import _do_eval
 

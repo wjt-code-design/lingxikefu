@@ -491,6 +491,17 @@ def _latest_user_message(db: OrmSession, session_id: uuid.UUID) -> str | None:
     return m.content if m else None
 
 
+def _load_session_conv_state(db: OrmSession, session_id: uuid.UUID) -> dict | None:
+    """同步读会话 conv_state（不存在则 404）——H2 补漏：搬 worker 线程。
+
+    仅取 suggest 所需的 conv_state（用于并入 prompt 提示），避免在 async 体内直呼 DB。
+    """
+    s = db.scalar(select(Session).where(Session.id == session_id))
+    if not s:
+        raise HTTPException(status_code=404, detail="session not found")
+    return s.conv_state
+
+
 @router.post("/{session_id}/suggest", response_model=SuggestResp)
 async def suggest_reply(
     session_id: uuid.UUID,
@@ -504,9 +515,8 @@ async def suggest_reply(
     - 不扣用户配额（内部工具）；
     - LLM 用非流式 complete（客服点按钮等 1-2s 可接受，无逐字上屏需求）。
     """
-    s = db.scalar(select(Session).where(Session.id == session_id))
-    if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+    # H2 补漏：会话存在性校验 + conv_state 读取搬 worker 线程（同文件其余 DB 纪律一致）
+    conv_state = await run_in_threadpool(_load_session_conv_state, db, session_id)
 
     question = (body.question or "").strip()
     if not question:
@@ -532,7 +542,7 @@ async def suggest_reply(
             session_id,
             question,
             # 大扫查修复（M-1）：建议 prompt 并入会话状态——顾客已提供订单号时不再重复索要
-            state_hint=conversation_state.to_prompt_hint(s.conv_state),
+            state_hint=conversation_state.to_prompt_hint(conv_state),
             latest_kb_id=_latest_kb_id,
             search_kb=search_kb,
             chat_client=get_chat_client,

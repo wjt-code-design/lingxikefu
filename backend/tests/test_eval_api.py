@@ -10,7 +10,6 @@ recall（检索召回）同样从未接入后台评测中心。
 from __future__ import annotations
 
 import asyncio
-import builtins
 import threading
 import time
 import uuid
@@ -53,7 +52,7 @@ def test_recall_script_exports_run_recall_eval():
 
 @pytest.mark.asyncio
 async def test_do_eval_writes_faithfulness_and_recall(monkeypatch):
-    """_do_eval 应同时落 faithfulness 与 recall 两组指标（当前零 recall → 红测锁定）。"""
+    """_do_eval 应同时落 faithfulness 与 recall 两组指标（B1-2：经 run_eval_stage 子进程接缝）。"""
     written: list[EvalResult] = []
 
     class _FakeDB:
@@ -68,19 +67,20 @@ async def test_do_eval_writes_faithfulness_and_recall(monkeypatch):
 
     monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
 
-    async def _fake_faithfulness(db, limit=0, kb_name=None):
-        return [("faithfulness", 0.9, 10, 9), ("refuse", 1.0, 8, 8)]
+    stages_called: list[str] = []
 
-    def _fake_recall(db, limit=0, kb_name=None, top_k=5):  # 同步：与真实 run_recall_eval 一致（eval.py 走 to_thread）
+    async def _fake_stage(stage, *, limit=0, sample=0, top_k=5, kb_name=None, kb_id=None):
+        stages_called.append(stage)
+        if stage == "faithfulness":
+            return [("faithfulness", 0.9, 10, 9), ("refuse", 1.0, 8, 8)]
         return [("recall", 0.88, 80, 70), ("honesty", 0.0, 8, 8)]
 
-    monkeypatch.setattr(
-        "scripts.eval_faithfulness.run_faithfulness_eval", _fake_faithfulness, raising=False
-    )
-    monkeypatch.setattr("scripts.eval_recall.run_recall_eval", _fake_recall, raising=False)
+    monkeypatch.setattr("app.api.eval.run_eval_stage", _fake_stage)
 
     await _do_eval("test-run-1")
 
+    # B1-2 核心断言：两阶段都走隔离子进程接缝（不再 import 主进程内直调）
+    assert stages_called == ["faithfulness", "recall"], f"子进程接缝调用异常: {stages_called}"
     metrics = {r.metric for r in written}
     assert "faithfulness" in metrics, f"faithfulness 未写入: {[r.metric for r in written]}"
     # 防假绿：recall 必须是 DONE 且 score 精确（若走了 except 会写 FAILED/score=0，此处即红）
@@ -146,16 +146,12 @@ def test_eval_run_endpoint_triggers_background_and_writes_recall(client, monkeyp
 
     monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
 
-    async def _fake_faithfulness(db, limit=0, kb_name=None):
-        return [("faithfulness", 0.9, 10, 9), ("refuse", 1.0, 8, 8)]
-
-    def _fake_recall(db, limit=0, kb_name=None, top_k=5):  # 同步：与真实一致（to_thread）
+    async def _fake_stage(stage, *, limit=0, sample=0, top_k=5, kb_name=None, kb_id=None):
+        if stage == "faithfulness":
+            return [("faithfulness", 0.9, 10, 9), ("refuse", 1.0, 8, 8)]
         return [("recall", 0.88, 80, 70), ("honesty", 0.0, 8, 8)]
 
-    monkeypatch.setattr(
-        "scripts.eval_faithfulness.run_faithfulness_eval", _fake_faithfulness, raising=False
-    )
-    monkeypatch.setattr("scripts.eval_recall.run_recall_eval", _fake_recall, raising=False)
+    monkeypatch.setattr("app.api.eval.run_eval_stage", _fake_stage)
 
     r = client.post(f"{API}/admin/eval/run", json={}, headers=_h(ADMIN, "admin"))
     assert r.status_code == 200, f"HTTP {r.status_code}: {r.text}"
@@ -285,8 +281,8 @@ def test_run_eval_holds_task_ref_until_done(client, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_do_eval_import_failure_writes_failed_record(monkeypatch):
-    """P3-⑭③：scripts 导入失败 → 落 FAILED 记录并日志明示，不阻塞另一阶段。"""
+async def test_do_eval_stage_failure_writes_failed_record(monkeypatch):
+    """P3-⑭③（B1-2 接缝）：单阶段失败（子进程异常）→ 落 FAILED 记录并日志明示，不阻塞另一阶段。"""
     written: list[EvalResult] = []
 
     class _FakeDB:
@@ -301,34 +297,23 @@ async def test_do_eval_import_failure_writes_failed_record(monkeypatch):
 
     monkeypatch.setattr("app.core.database.SessionLocal", lambda: _FakeDB())
 
-    # recall 阶段用 fake（真函数会按真实 db 查 KB，_FakeDB 无 scalar 会误判为本阶段失败）
-    def _fake_recall(db, limit=0, kb_name=None, top_k=5):
+    async def _fake_stage(stage, *, limit=0, sample=0, top_k=5, kb_name=None, kb_id=None):
+        if stage == "faithfulness":
+            raise RuntimeError("faithfulness 子进程崩溃（模拟非零退出）")
         return [("recall", 0.88, 80, 70)]
 
-    monkeypatch.setattr(
-        "scripts.eval_faithfulness.run_faithfulness_eval", _fake_recall, raising=False
-    )
-    monkeypatch.setattr("scripts.eval_recall.run_recall_eval", _fake_recall, raising=False)
+    monkeypatch.setattr("app.api.eval.run_eval_stage", _fake_stage)
 
-    orig_import = builtins.__import__
-
-    def _raising_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name.startswith("scripts.eval_faithfulness"):
-            raise ImportError(f"No module named '{name}'")
-        return orig_import(name, globals, locals, fromlist, level)
-
-    monkeypatch.setattr(builtins, "__import__", _raising_import)
-
-    await _do_eval("test-import-fail")
+    await _do_eval("test-stage-fail")
 
     failed = [r for r in written if r.status == EvalStatus.FAILED]
-    assert failed, f"导入失败未落 FAILED 记录: {[r.metric for r in written]}"
+    assert failed, f"阶段失败未落 FAILED 记录: {[r.metric for r in written]}"
     assert any(r.metric == "faithfulness" for r in failed), (
         f"FAILED 记录缺失 faithfulness: {[r.metric for r in written]}"
     )
     recall_done = [r for r in written if r.metric == "recall" and r.status == EvalStatus.DONE]
     assert recall_done, (
-        f"faithfulness 模块缺失不应阻塞 recall 阶段: {[r.metric for r in written]}"
+        f"faithfulness 失败不应阻塞 recall 阶段: {[r.metric for r in written]}"
     )
 
 

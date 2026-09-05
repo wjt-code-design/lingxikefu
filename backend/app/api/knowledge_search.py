@@ -60,18 +60,23 @@ async def search_knowledge(
         return KnowledgeSearchResp(query=req.query, hits=[])
 
     # 批量查 Document 标题（参照 chat.py _fetch_doc_titles）+ KB 名
+    # H2 补漏：同步 DB 查询搬 worker 线程
     doc_ids = {uuid.UUID(c.doc_id) for c in chunks}
-    doc_titles = {
-        str(d.id): d.name
-        for d in db.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
-    }
-    kb = db.scalar(
-        select(KnowledgeBase).where(
-            KnowledgeBase.id == kb_id,
-            KnowledgeBase.tenant_id == settings.TENANT_DEFAULT,
+
+    def _fetch_meta() -> tuple[dict[str, str], str]:
+        doc_titles = {
+            str(d.id): d.name
+            for d in db.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
+        }
+        kb = db.scalar(
+            select(KnowledgeBase).where(
+                KnowledgeBase.id == kb_id,
+                KnowledgeBase.tenant_id == settings.TENANT_DEFAULT,
+            )
         )
-    )
-    kb_name = kb.name if kb else ""
+        return doc_titles, (kb.name if kb else "")
+
+    doc_titles, kb_name = await run_in_threadpool(_fetch_meta)
 
     return KnowledgeSearchResp(
         query=req.query,

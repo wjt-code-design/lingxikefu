@@ -55,14 +55,17 @@ async def publish_batch(
     batch.status = svc.KBBatchStatus.evaluating
     batch.eval_result_id = None  # 重发布清旧锚点（新快检完成后回填）
     await run_in_threadpool(db.commit)
-    audit_log(
-        db,
-        actor_id=payload["sub"],
-        actor_role=payload.get("role"),
-        action="kb.batch.publish",
-        resource="kb_publish_batch",
-        resource_id=batch_id,
-        detail=f"docs={len(batch.doc_ids)}",
+    # H2 补漏：audit_log 内含同步 DB 写（add+commit），搬 worker 线程
+    await run_in_threadpool(
+        lambda: audit_log(
+            db,
+            actor_id=payload["sub"],
+            actor_role=payload.get("role"),
+            action="kb.batch.publish",
+            resource="kb_publish_batch",
+            resource_id=batch_id,
+            detail=f"docs={len(batch.doc_ids)}",
+        )
     )
     svc.spawn_quick_check(batch_id)
     return BatchActionResp(

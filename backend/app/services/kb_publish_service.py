@@ -29,6 +29,8 @@ from app.models.eval_result import EvalResult, EvalStatus
 from app.models.kb_publish import KBBatchStatus, KBPublishBatch
 from app.models.knowledge import Document, DocumentStatus, KnowledgeBase
 from app.services import kb_lookup, vector_service
+from app.services.eval_gate import gate_passed as _gate_passed
+from app.services.eval_runner import run_eval_stage
 from app.services.notification_service import create_notification
 from app.services.vector_service import VectorStoreError
 
@@ -301,12 +303,12 @@ async def _run_quick_check_stage(
     形态对齐 eval.py._run_stage：异常 → FAILED 占位行（同样绑定 kb_version）；
     kb_version 取"评测时刻"值（发布前文档全部 indexed，版本稳定），fail-open → None。
     M3：kb 以物化字段（name/id）传入，job 已在评测前结束读事务。
+    B1-2：评测经 eval_runner 隔离子进程执行——主 loop 不再被同步 run_pipeline
+    （本地 embedding + Qdrant 同步 HTTP）逐题阻塞（快检 ~20min 期间全站 SSE 冻结洞）。
     """
     try:
-        from scripts.eval_faithfulness import run_faithfulness_eval
-
-        result = await run_faithfulness_eval(
-            db, kb_name=kb_name, sample=QUICK_CHECK_SAMPLE, kb_id=kb_id
+        result = await run_eval_stage(
+            "faithfulness", sample=QUICK_CHECK_SAMPLE, kb_name=kb_name, kb_id=str(kb_id)
         )
     except Exception as e:  # noqa: BLE001 - 单阶段失败显式兜底（P3-⑭ 先例）
         logger.exception("批次 %s 快检执行失败（FAILED 留痕）", batch_id)
@@ -368,18 +370,6 @@ def _persist_eval_rows(
         rows.append(row)
     db.commit()
     return rows
-
-
-def _gate_passed(rows: list[EvalResult]) -> bool:
-    """快检门禁判定：复用 eval.py._gate_passed 同阈值同实现（qa≥85%/refuse≥90%/citation≥95%）。
-
-    阈值单一真源在 eval.py（与发布门禁 v1 观测面同式）；服务层引用 API 模块属既有
-    异味（kb_lookup 下沉前 sessions→chat 同型），多消费方时一并下沉。
-    空 rows / 无 qa 样本 → False（宁可拦下可疑发布，不做部分发布）。
-    """
-    from app.api.eval import _gate_passed as _eval_gate_passed
-
-    return _eval_gate_passed(rows)
 
 
 def _fail_summary(rows: list[EvalResult]) -> str:

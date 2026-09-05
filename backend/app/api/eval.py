@@ -19,6 +19,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session as OrmSession
 
 from app.api.deps import require_admin
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.eval_result import EvalResult, EvalStatus
 from app.schemas.eval import (
@@ -29,6 +30,8 @@ from app.schemas.eval import (
     EvalTriggerResp,
 )
 from app.services import kb_lookup
+from app.services.eval_gate import gate_passed as _gate_passed
+from app.services.eval_runner import run_eval_stage
 
 logger = logging.getLogger(__name__)
 
@@ -176,27 +179,6 @@ def eval_gate(
     )
 
 
-def _gate_passed(rows: list[EvalResult]) -> bool:
-    """发布门禁判定 v1：与 scripts.eval_faithfulness._pass_all 同阈值，按落表 stats 重算。
-
-    EvalResult 只存每指标 score/total（无 run 级 pass_all 布尔），脚本冻结不可改签名，
-    故在观测侧按字段重算：qa≥85%（无 qa 样本 → 不通过）；refuse≥90%、citation≥95%
-    （有该指标行才判——citation 采样运行带引用样本时同样判 95%，比脚本 full_run-only
-    略严：观测面宁可偏严不偏松）。FAILED 行（score=0/total=0）天然不通过。
-    """
-    done = {r.metric: r for r in rows if r.status == EvalStatus.DONE}
-    qa = done.get("qa")
-    if qa is None or qa.total == 0 or qa.score < 0.85:
-        return False
-    refuse = done.get("refuse")
-    if refuse is not None and refuse.total and refuse.score < 0.9:
-        return False
-    cit = done.get("citation")
-    if cit is not None and cit.total and cit.score < 0.95:
-        return False
-    return True
-
-
 @router.post("/eval/run")
 async def run_eval(
     req: EvalTriggerReq,
@@ -231,10 +213,10 @@ async def run_eval(
 
 
 async def _do_eval(run_id: str, limit: int = 0, kb_name: str | None = None) -> None:
-    """后台评测执行器。
+    """后台评测执行器（B1-2：两阶段均经隔离子进程，主事件循环零阻塞）。
 
-    复用 scripts/ 里的评测逻辑，结果写入 EvalResult 表。
-    P3-⑭：评测脚本导入失败 / 执行异常均落 FAILED 记录并日志明示，不静默。
+    结果写入 EvalResult 表；P3-⑭：阶段失败（子进程非零退出/超时/不可解析）
+    落 FAILED 记录并日志明示，不静默。
     三期 3：每阶段完成落表时把当时 kb_version 绑定到该阶段全部行（含 FAILED 留痕行），
     gate 端点据此回答"当前版本是否评测通过"；版本解析失败 fail-open（行不绑定，不阻塞评测）。
     """
@@ -242,33 +224,17 @@ async def _do_eval(run_id: str, limit: int = 0, kb_name: str | None = None) -> N
 
     db = SessionLocal()
     try:
-        # faithfulness（P3-⑭：脆弱导入显式兜底——缺脚本时落 FAILED，日志明示根因）
-        try:
-            from scripts.eval_faithfulness import run_faithfulness_eval
-        except ImportError:
-            logger.exception("import scripts.eval_faithfulness 失败（模块缺失/损坏），faithfulness 不可用")
-            # 脚本缺失 → _resolve_kb 同源不可用，FAILED 行不绑定版本（None，gate 不误报）
-            db.add(_failed_eval_row(run_id, "faithfulness", None))
-            db.commit()
-        else:
-            await _run_stage(
-                db, run_id, "faithfulness", kb_name,
-                run_faithfulness_eval(db, limit=limit, kb_name=kb_name),
-            )
-
-        # recall（同步脚本经 to_thread 执行，避免阻塞事件循环）
-        try:
-            from scripts.eval_recall import run_recall_eval
-        except ImportError:
-            logger.exception("import scripts.eval_recall 失败（模块缺失/损坏），recall 不可用")
-            db.add(_failed_eval_row(run_id, "recall", None))
-            db.commit()
-        else:
-            await _run_stage(
-                db, run_id, "recall", kb_name,
-                asyncio.to_thread(run_recall_eval, db, limit=limit, kb_name=kb_name),
-            )
-
+        await _run_stage(
+            db, run_id, "faithfulness", kb_name,
+            run_eval_stage("faithfulness", limit=limit, kb_name=kb_name),
+        )
+        await _run_stage(
+            db, run_id, "recall", kb_name,
+            run_eval_stage(
+                "recall", limit=limit, kb_name=kb_name,
+                top_k=settings.RETRIEVAL_TOP_K,
+            ),
+        )
     except Exception:
         logger.exception("eval run %s failed", run_id)
     finally:

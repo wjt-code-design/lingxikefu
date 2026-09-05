@@ -188,10 +188,15 @@ def _seed_batch(
 
 
 def _stub_eval(monkeypatch, result=None, exc: Exception | None = None) -> dict:
-    """快检桩：记录调用参数（sample/kb_id 必须正确），返回预设指标或抛异常。"""
+    """快检桩：记录调用参数（sample/kb_id 必须正确），返回预设指标或抛异常。
+
+    B1-2：接缝从 scripts.eval_faithfulness.run_faithfulness_eval 改到
+    app.services.kb_publish_service.run_eval_stage（隔离子进程入口）——
+    kb_id 经 str() 传入（子进程参数序列化），断言侧按字符串比对。
+    """
     captured: dict = {}
 
-    async def fake_eval(db, limit=0, kb_name=None, sample=0, kb_id=None):
+    async def fake_stage(stage, *, limit=0, sample=0, top_k=5, kb_name=None, kb_id=None):
         captured["sample"] = sample
         captured["kb_id"] = kb_id
         captured["kb_name"] = kb_name
@@ -201,7 +206,7 @@ def _stub_eval(monkeypatch, result=None, exc: Exception | None = None) -> dict:
         return result if result is not None else [("qa", 0.9, 10, 9), ("refuse", 1.0, 5, 5)]
 
     monkeypatch.setattr(
-        "scripts.eval_faithfulness.run_faithfulness_eval", fake_eval, raising=False
+        "app.services.kb_publish_service.run_eval_stage", fake_stage
     )
     return captured
 

@@ -185,6 +185,53 @@ def _update_conv_state_locked(db: OrmSession, session_id: uuid.UUID, message: st
     return new_state
 
 
+def _check_session_access(
+    db: OrmSession, session_id: uuid.UUID, user_id: uuid.UUID, role: str | None
+) -> uuid.UUID:
+    """校验会话归属（H2 补漏：同步 DB 查询搬 worker 线程）。
+
+    owner 可答；agent/admin 可代答（T5）；他人 user 拒绝（404 防探测）。
+    返回会话 owner id（gen 外捕获画像归属用）。HTTPException 在 worker 内抛出
+    同样能穿透 run_in_threadpool 冒泡到 FastAPI（既有 _persist_answer 同层语义）。
+    """
+    s = db.scalar(select(Session).where(Session.id == session_id))
+    if not s:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="session not found")
+    if s.user_id != user_id and role not in ("admin", "agent"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="session not found")
+    return s.user_id
+
+
+def _persist_user_message(
+    db: OrmSession,
+    session_id: uuid.UUID,
+    content: str,
+    is_agent_reply: bool,
+    agent_user_id: uuid.UUID,
+) -> Message:
+    """写 user 消息 + touch 会话（H2 补漏：两次 commit 搬 worker 线程）。
+
+    返回 attach 在请求 session 上的 Message（gen 内继续用 .id/.intent）。
+    落库失败由调用方捕获并回滚配额（R2 语义零改动）。
+    """
+    user_msg = Message(
+        session_id=session_id,
+        role=MessageRole.user,
+        content=content,
+        intent="qa",
+        meta={"agent_id": str(agent_user_id)} if is_agent_reply else None,
+    )
+    db.add(user_msg)
+    db.commit()
+    db.refresh(user_msg)
+    # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
+    sess = db.get(Session, session_id)
+    if sess is not None:
+        sess.updated_at = datetime.now(UTC)
+        db.commit()
+    return user_msg
+
+
 def _mark_clarifying_locked(db: OrmSession, session_id: uuid.UUID) -> dict:
     """M7（bughunt-concurrency）：clarify 回写走行锁重读——与 _update_conv_state_locked
     同款纪律。旧实现用请求视角的内存快照整 blob 覆盖：同会话并发请求在流式期间
@@ -219,13 +266,12 @@ async def chat_stream(
         raise HTTPException(status_code=422, detail="invalid session_id")
 
     # 1) 校验会话归属：owner 可答；agent/admin 可代答（T5，身份写入消息 meta）；他人 user 拒绝（404 防探测）
-    s = db.scalar(select(Session).where(Session.id == session_id))
-    if not s:
-        raise HTTPException(status_code=404, detail="session not found")
+    #    H2 补漏：同步 DB 查询搬 worker 线程（同文件其余 DB 操作纪律一致）
     role = payload.get("role")
-    if s.user_id != user_id and role not in ("admin", "agent"):
-        raise HTTPException(status_code=404, detail="session not found")
-    is_agent_reply = s.user_id != user_id  # 代答：来源 agent/admin
+    session_owner_id = await run_in_threadpool(
+        _check_session_access, db, session_id, user_id, role
+    )
+    is_agent_reply = session_owner_id != user_id  # 代答：来源 agent/admin
 
     # 2) 配额原子扣减闸门（M2：try_consume 修复 TOCTOU，fail-closed 超额拒答）
     #    R2：client_msg_id 作幂等键 —— 断连重试同一请求不重复扣费
@@ -244,20 +290,11 @@ async def chat_stream(
 
     # 3) 写 user 消息（T5：代答时记录 agent 身份，溯源用）
     #    R2：落库失败 → 回滚已扣配额（消息没写成不扣费）
+    #    H2 补漏：两次 commit 搬 worker 线程
     try:
-        user_msg = Message(
-            session_id=session_id,
-            role=MessageRole.user,
-            content=req.content,
-            intent="qa",
-            meta={"agent_id": str(user_id)} if is_agent_reply else None,
+        user_msg = await run_in_threadpool(
+            _persist_user_message, db, session_id, req.content, is_agent_reply, user_id
         )
-        db.add(user_msg)
-        db.commit()
-        db.refresh(user_msg)
-        # BUG-03：touch 会话 updated_at（新消息后历史面板排序浮顶）
-        s.updated_at = datetime.now(UTC)
-        db.commit()
     except Exception:
         await run_in_threadpool(
             quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
@@ -271,10 +308,7 @@ async def chat_stream(
     if kb_id is not None:
         kb_version = await run_in_threadpool(_kb_version_str, db, kb_id)
 
-    # 画像归属：会话 owner。在 gen 外捕获：历史上 gen 内 sources 迭代用 `s` 遮蔽过外层
-    # Session 导致闭包 UnboundLocalError（测试亲眼红过）；L2 改名 src 后遮蔽已消除，
-    # gen 外捕获保留为防御惯例。
-    session_owner_id = s.user_id
+    # 画像归属：会话 owner——已在 1) 校验段（_check_session_access 返回值）取得。
     # P0-1 trace_id：复用 HTTP 中间件生成的 request_id，贯通业务链路（日志 / SSE done）。
     trace_id = getattr(request.state, "request_id", "") or uuid.uuid4().hex[:12]
 
