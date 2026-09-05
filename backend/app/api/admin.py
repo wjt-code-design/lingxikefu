@@ -51,7 +51,8 @@ def list_users(
 ) -> UserListResp:
     """分页列出租户内用户（account 取 email/phone 兜底）；keyword 模糊搜邮箱/手机号（UI 审查中7）。
 
-    排除 guest（匿名体验账号，2026-09-04 批次B）：管理面不掺无凭证体验主体。
+    排除 guest：游客系统已下线（2026-09-05），但库中可能残留历史 guest 行
+    （超期清理调度器已随之移除），管理面不掺无凭证体验主体，过滤保留。
     """
     tenant = settings.TENANT_DEFAULT
     cond = [User.tenant_id == tenant, User.status != "guest"]

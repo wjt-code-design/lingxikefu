@@ -1,10 +1,6 @@
-import { useState } from 'react';
-import { Button, Card, Col, Row, Typography, message } from 'antd';
+import { Button, Card, Col, Row, Typography } from 'antd';
 import { CommentOutlined, SafetyCertificateOutlined, ThunderboltOutlined } from '@ant-design/icons';
-import { Link, useNavigate } from 'react-router-dom';
-import type { ApiError } from '@/contracts/api';
-import { guestLogin, me } from '@/api/auth';
-import { useAuthStore } from '@/store/authStore';
+import { Link } from 'react-router-dom';
 
 /** 产品预览区：纯CSS模拟对话界面，展示"灵犀长什么样" */
 function ProductPreview() {
@@ -43,27 +39,6 @@ function ProductPreview() {
 
 /** 品牌落地页：记忆点 = 网格背景 + 光点漂浮 + 产品预览 */
 export function LandingPage() {
-  const navigate = useNavigate();
-  const [guestLoading, setGuestLoading] = useState(false);
-
-  // 批次B（2026-09-04）：免登录体验——后端 /auth/guest 签发真实 guest 主体
-  // （低配额 + 每 IP 每日限发 + 超期自动清理），token 入 store 后直接进 /chat。
-  // 旧「免登录体验」曾是空头承诺（D1：后端无匿名会话，发消息即 401），现已兑现。
-  const onGuestExperience = async () => {
-    setGuestLoading(true);
-    try {
-      const resp = await guestLogin();
-      useAuthStore.setState({ token: resp.access_token, refreshToken: resp.refresh_token });
-      const meResp = await me();
-      useAuthStore.getState().setUser(meResp);
-      navigate('/chat');
-    } catch (e) {
-      message.error((e as ApiError).message || '体验入口暂时不可用，请注册后使用');
-    } finally {
-      setGuestLoading(false);
-    }
-  };
-
   return (
     <div className="landing">
       {/* 背景：网格 + 光点 */}
@@ -87,16 +62,8 @@ export function LandingPage() {
             基于知识库的智能问答，7×24 小时在线。解决不了？一键转人工客服。
           </Typography.Paragraph>
           <div className="landing__cta">
-            <Button
-              type="primary"
-              size="large"
-              loading={guestLoading}
-              onClick={() => void onGuestExperience()}
-            >
-              免登录体验
-            </Button>
             <Link to="/login">
-              <Button size="large">登录</Button>
+              <Button type="primary" size="large">登录</Button>
             </Link>
             <Link to="/register">
               <Button size="large">注册</Button>

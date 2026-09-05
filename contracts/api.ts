@@ -49,7 +49,6 @@ export interface MeResp {
   role: Role;
   quota_left: number;
   quota_total: number; // 每日配额上限（2026-08-20 后端补齐，此前恒 undefined）
-  guest?: boolean; // 匿名体验主体（2026-09-04 批次B）：前端据此展示注册引导
 }
 
 // ---------- Sessions ----------

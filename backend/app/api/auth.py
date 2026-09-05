@@ -1,7 +1,6 @@
-"""Auth 路由（BU-02）：/api/v1/auth/register|login|guest|refresh|logout|me。"""
+"""Auth 路由（BU-02）：/api/v1/auth/register|login|refresh|logout|me。"""
 from __future__ import annotations
 
-from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -25,7 +24,6 @@ from app.schemas.auth import (
 from app.schemas.knowledge import OkResp
 from app.schemas.roles import RoleListResp
 from app.services.auth import AuthError, AuthService
-from app.services.guest_service import issue_guest
 from app.services.quota import get_quota_service
 from app.services.user_profile_service import reset_profile
 
@@ -80,25 +78,6 @@ def login(req: LoginReq, request: Request, db: Session = Depends(get_db)) -> Aut
     return AuthResp(user_id=str(user.id), access_token=access, refresh_token=refresh)
 
 
-@router.post("/guest", response_model=AuthResp, status_code=status.HTTP_201_CREATED)
-def guest_login(request: Request, db: Session = Depends(get_db)) -> AuthResp:
-    """匿名体验主体签发（D1 完整特性，2026-09-04 批次B）。
-
-    免登录问答体验：建真实 guest User 行 + 普通 access/refresh JWT（access 带
-    guest claim）。防滥用三闸之一在此：每 IP 每日发放上限（按日固定窗口计数）；
-    低配额闸在 chat 层（try_consume(guest=True)）、留存清理闸在调度器
-    （purge_expired_guests）。
-    """
-    ip = _client_ip(request)
-    key = f"ratelimit:guest:{ip}:{date.today().isoformat()}"
-    # 窗口 24h + 每次计数刷新 TTL：语义近似「每 IP 每日」，跨日新键自然归零
-    if not rate_limit(key, settings.GUEST_ISSUE_PER_IP_PER_DAY, 24 * 3600):
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "今日匿名体验次数已用完，请注册后继续")
-    user = issue_guest(db)
-    access, refresh = AuthService.issue_tokens(user, guest=True)
-    return AuthResp(user_id=str(user.id), access_token=access, refresh_token=refresh)
-
-
 @router.post("/refresh", response_model=RefreshResp)
 def refresh(req: RefreshReq, db: Session = Depends(get_db)) -> RefreshResp:
     svc = AuthService(db)
@@ -136,8 +115,7 @@ def me(
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
     quota_svc = get_quota_service()
-    is_guest = bool(payload.get("guest"))
-    quota_total = quota_svc.daily_limit(guest=is_guest)
+    quota_total = quota_svc.daily_limit()
     quota_left = max(0, quota_total - quota_svc.used_today(str(user.id)))
     return MeResp(
         user_id=str(user.id),
@@ -146,7 +124,6 @@ def me(
         role=user.role,
         quota_left=quota_left,
         quota_total=quota_total,
-        guest=is_guest,
     )
 
 
