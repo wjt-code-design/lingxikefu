@@ -98,9 +98,39 @@ class OpenAILikeChatClient(ChatClient):
             "stream": stream,
             **{k: v for k, v in kwargs.items() if k not in ("stream",)},
         }
+        if stream:
+            # usage 埋点（2026-09-05 LongCat 收费）：流式默认不返回 usage，显式要求
+            # 末块附带（实测 LongCat 支持，usage 块 choices 为空、不进正文）。
+            payload.setdefault("stream_options", {"include_usage": True})
         if not settings.LLM_ENABLE_THINKING and "chat_template_kwargs" not in payload:
             payload["chat_template_kwargs"] = {"enable_thinking": False}
         return payload
+
+    @staticmethod
+    def _log_usage(usage: dict | None, *, path: str, model: str) -> None:
+        """结构化 usage 日志（成本对账唯一数据源；聚合口径=按日 sum 各字段）。
+
+        fail-open：字段缺失只打已知部分，绝不为观测反噬主链路（无 usage 直接跳过）。
+        字段对齐 LongCat 计费维度：cached 输入 ¥0.04/M vs 未命中 ¥2/M（折扣价），
+        reasoning 计入 completion 价——分开记才能算出真实钱账。
+        """
+        if not usage:
+            return
+        try:
+            details_c = usage.get("completion_tokens_details") or {}
+            details_p = usage.get("prompt_tokens_details") or {}
+            logger.info(
+                "llm_usage path=%s model=%s prompt_tokens=%s completion_tokens=%s "
+                "reasoning_tokens=%s cached_tokens=%s",
+                path,
+                model,
+                usage.get("prompt_tokens", 0),
+                usage.get("completion_tokens", 0),
+                details_c.get("reasoning_tokens", 0),
+                details_p.get("cached_tokens", 0),
+            )
+        except Exception:  # noqa: BLE001 - 观测代码永不影响主链路
+            logger.debug("llm_usage 解析失败（忽略）", exc_info=True)
 
     async def stream_events(
         self, messages: list[dict], model: str | None = None, **kwargs
@@ -117,6 +147,7 @@ class OpenAILikeChatClient(ChatClient):
         last_err: httpx.HTTPStatusError | None = None
         for _attempt in range(2):  # 429/5xx 重试 1 次（TPM 分钟窗口偶发，2s 后自愈）
             try:
+                usage: dict | None = None
                 async with client.stream("POST", self._api_url(), content=body, headers=headers, timeout=_TIMEOUT) as resp:
                     resp.raise_for_status()
                     async for line in resp.aiter_lines():
@@ -129,6 +160,9 @@ class OpenAILikeChatClient(ChatClient):
                             chunk = json.loads(data)
                         except json.JSONDecodeError:
                             continue
+                        # include_usage 末块：usage 携带整次请求 token 账（choices 为空）
+                        if chunk.get("usage"):
+                            usage = chunk["usage"]
                         choices = chunk.get("choices") or []
                         if choices:
                             delta = choices[0].get("delta") or {}
@@ -138,7 +172,8 @@ class OpenAILikeChatClient(ChatClient):
                             content = delta.get("content")
                             if content:
                                 yield ("content", content)
-                    return
+                self._log_usage(usage, path="stream", model=str(payload.get("model") or ""))
+                return
             except httpx.HTTPStatusError as e:
                 last_err = e
                 if e.response.status_code in _RETRY_STATUS:
@@ -183,6 +218,7 @@ class OpenAILikeChatClient(ChatClient):
                     resp = await client.post(self._api_url(), content=body, headers=headers, timeout=client_timeout)
                 resp.raise_for_status()
                 data = resp.json()
+                self._log_usage(data.get("usage"), path="complete", model=str(payload.get("model") or ""))
                 choices = data.get("choices") or []
                 if not choices:
                     return ""

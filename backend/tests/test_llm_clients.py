@@ -257,6 +257,147 @@ class TestLongCatChat:
         assert out == [("content", "重试后回答")]
 
 
+async def _drain(agen) -> list:
+    return [x async for x in agen]
+
+
+class TestUsageLogging:
+    """usage 埋点（2026-09-05 LongCat 收费后成本对账）：prompt/completion/reasoning/cached
+    四字段进结构化日志。日志采集聚合 = 真实账单代理；无 usage 的响应不报错（fail-open，
+    成本观测绝不能反噬主链路）。"""
+
+    def _usage_chunk(self) -> str:
+        # 探针实测（2026-09-05）：LongCat 流式末块 usage 形状
+        return (
+            'data: {"choices":[],"usage":{"prompt_tokens":1000,'
+            '"completion_tokens":300,'
+            '"completion_tokens_details":{"reasoning_tokens":200},'
+            '"prompt_tokens_details":{"cached_tokens":800}}}'
+        )
+
+    @staticmethod
+    def _fake_stream(captured: dict, sse_lines: list[str]):
+        def fake_stream(self, method, url, content=None, headers=None, timeout=None):
+            captured["url"] = url
+            captured["body"] = json.loads(content)
+
+            class _R:
+                def raise_for_status(self):
+                    pass
+
+                def aiter_lines(self):
+                    async def gen():
+                        for line in sse_lines:
+                            yield line
+
+                    return gen()
+
+                async def __aenter__(self):
+                    return self
+
+                async def __aexit__(self, *exc):
+                    return False
+
+            return _R()
+
+        return fake_stream
+
+    def test_stream_events_payload_requests_include_usage(self, monkeypatch):
+        """流式必须带 stream_options.include_usage，否则末块无 usage（账收不齐）。"""
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
+        captured: dict = {}
+        sse = ['data: {"choices":[{"delta":{"content":"a"}}]}', "data: [DONE]"]
+        monkeypatch.setattr(httpx.AsyncClient, "stream", self._fake_stream(captured, sse))
+
+        import asyncio
+
+        asyncio.run(_drain(OpenAILikeChatClient().stream_events([{"role": "user", "content": "q"}])))
+        assert captured["body"]["stream_options"] == {"include_usage": True}
+
+    def test_stream_events_logs_usage(self, monkeypatch, caplog):
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
+        sse = [
+            'data: {"choices":[{"delta":{"content":"回答"}}]}',
+            self._usage_chunk(),
+            "data: [DONE]",
+        ]
+        monkeypatch.setattr(httpx.AsyncClient, "stream", self._fake_stream({}, sse))
+
+        import asyncio
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="app.llm_clients.chat"):
+            out = asyncio.run(_drain(OpenAILikeChatClient().stream_events([{"role": "user", "content": "q"}])))
+        # usage 块不得混进正文（choices 为空的块不产出 delta）
+        assert out == [("content", "回答")]
+        lines = [r.getMessage() for r in caplog.records if "llm_usage" in r.getMessage()]
+        assert len(lines) == 1
+        msg = lines[0]
+        assert "prompt_tokens=1000" in msg
+        assert "completion_tokens=300" in msg
+        assert "reasoning_tokens=200" in msg
+        assert "cached_tokens=800" in msg
+        assert "path=stream" in msg
+
+    def test_complete_logs_usage(self, monkeypatch, caplog):
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
+
+        async def fake_post(self, url, content=None, headers=None, timeout=None):
+            class _R:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {
+                        "choices": [{"message": {"content": "ok"}}],
+                        "usage": {
+                            "prompt_tokens": 50,
+                            "completion_tokens": 20,
+                            "completion_tokens_details": {"reasoning_tokens": 0},
+                            "prompt_tokens_details": {"cached_tokens": 10},
+                        },
+                    }
+
+            return _R()
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+        import asyncio
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="app.llm_clients.chat"):
+            out = asyncio.run(OpenAILikeChatClient().complete([{"role": "user", "content": "q"}]))
+        assert out == "ok"
+        lines = [r.getMessage() for r in caplog.records if "llm_usage" in r.getMessage()]
+        assert len(lines) == 1
+        assert "prompt_tokens=50" in lines[0]
+        assert "path=complete" in lines[0]
+
+    def test_missing_usage_no_log_no_crash(self, monkeypatch, caplog):
+        """响应无 usage 字段（provider 省略）：主链路照常返回，不打账不炸。"""
+        monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
+
+        async def fake_post(self, url, content=None, headers=None, timeout=None):
+            class _R:
+                def raise_for_status(self):
+                    pass
+
+                def json(self):
+                    return {"choices": [{"message": {"content": "ok"}}]}
+
+            return _R()
+
+        monkeypatch.setattr(httpx.AsyncClient, "post", fake_post)
+
+        import asyncio
+        import logging
+
+        with caplog.at_level(logging.INFO, logger="app.llm_clients.chat"):
+            out = asyncio.run(OpenAILikeChatClient().complete([{"role": "user", "content": "q"}]))
+        assert out == "ok"
+        assert not [r for r in caplog.records if "llm_usage" in r.getMessage()]
+
+
 class TestSharedClientLifecycle:
     """共享 AsyncClient 生命周期（2026-09-02 pitfall-sweep）：关闭幂等 + 关后可重建。"""
 

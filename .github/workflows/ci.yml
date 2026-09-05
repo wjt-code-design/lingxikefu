@@ -23,6 +23,27 @@ env:
   PYTHON_VERSION: "3.13"
 
 jobs:
+  # 变更检测：eval 门禁（真金白银调 LongCat）只在评测面文件变更时跑。
+  # 纯前端/文档/样式 push 不触发 20 题 LLM 评测（收费后每次抽样 ≈ ¥0.6-1，零信号不花）。
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    # paths-filter 在无 diff 上下文的事件上会报错；手动全量无需过滤（eval 的 if 已短路）
+    if: github.event_name != 'workflow_dispatch'
+    outputs:
+      eval: ${{ steps.filter.outputs.eval }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            eval:
+              - 'backend/**'
+              - 'contracts/**'
+              - 'eval-and-samples/**'
+              - '.github/workflows/ci.yml'
+
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -283,6 +304,12 @@ jobs:
   eval:
     name: Eval gate (hard)
     runs-on: ubuntu-latest
+    # 成本门禁（LongCat 收费，2026-09-05）：仅评测面变更跑 20 题抽样；workflow_dispatch
+    # 手动全量不受限（inputs.full_eval 恒为显式花钱入口）。
+    needs: changes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      needs.changes.outputs.eval == 'true'
     services:
       postgres:
         image: postgres:16-alpine
