@@ -57,6 +57,7 @@ def client():
             status=DocumentStatus.indexed,
             chunk_count=3,
             sha256="a" * 64,
+            raw_text="退货需在签收七日内发起申请，商品保持完好。",
         ))
         db.add(Document(
             id=DOC2_ID,
@@ -149,6 +150,36 @@ def test_quick_kb_coverage_detects_drift():
     drifted = uncovered_questions("仅包含保修与退货相关内容")
     assert "可以开发票吗？" in drifted, f"发票话题无 KB 依据，应告警: {drifted}"
     assert "支持哪些支付方式？" in drifted
+
+
+def test_faq_doc_public_content(client):
+    """方案A：公开原文端点——已索引文档返回 raw_text 全文 + 名称级元信息。"""
+    r = client.get(f"{API}/faq/docs/{DOC1_ID}/content")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["doc_id"] == str(DOC1_ID)
+    assert data["name"] == "七天无理由.md"
+    assert data["kb_name"] == "退款政策"
+    assert data["status"] == "indexed"
+    assert data["content"] == "退货需在签收七日内发起申请，商品保持完好。"
+
+
+def test_faq_doc_public_content_not_indexed(client):
+    """未索引完成（parsing）/无原文 → 404（不展示半成品内容）。
+
+    message 断言防假绿：端点未实现时 FastAPI 也回 404（message=Not Found），
+    必须命中业务文案才算真走到 404 分支（统一错误契约 {code, message, request_id}）。
+    """
+    r = client.get(f"{API}/faq/docs/{DOC2_ID}/content")
+    assert r.status_code == 404
+    assert "文档" in r.json()["message"]
+
+
+def test_faq_doc_public_content_cross_tenant_404(client):
+    """跨租户/未知 doc_id → 404（不泄漏存在性）。"""
+    r = client.get(f"{API}/faq/docs/{uuid.uuid4()}/content")
+    assert r.status_code == 404
+    assert "文档" in r.json()["message"]
 
 
 def test_quick_kb_coverage_gate_threshold():

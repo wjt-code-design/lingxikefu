@@ -1,18 +1,21 @@
 """FAQ 路由（Phase 4）：/api/v1/faq 帮助中心匿名公开访问（无鉴权）。
 
 返回 tenant 过滤的知识库 + 各 KB 文档清单（status/chunks）。
-安全边界：只返回文档名称级信息，**禁止**返回 chunk 全文。
+安全边界：清单只返回名称级信息；原文端点仅放行**已索引**文档的 raw_text
+（政策原文本意公开），未索引/无原文/跨租户一律 404，不泄漏存在性。
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from uuid import UUID
+
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.knowledge import Chunk, Document, KnowledgeBase
-from app.schemas.faq import FaqDocItem, FaqKbItem, FaqListResp
+from app.models.knowledge import Chunk, Document, DocumentStatus, KnowledgeBase
+from app.schemas.faq import FaqDocContentResp, FaqDocItem, FaqKbItem, FaqListResp
 
 router = APIRouter(prefix="/faq", tags=["faq"])
 
@@ -63,3 +66,38 @@ def list_faq(db: Session = Depends(get_db)) -> FaqListResp:
             )
         )
     return FaqListResp(items=items)
+
+
+@router.get("/docs/{doc_id}/content", response_model=FaqDocContentResp)
+def get_doc_content(
+    doc_id: UUID,
+    db: Session = Depends(get_db),
+) -> FaqDocContentResp:
+    """方案A：政策原文浏览——返回单篇**已索引**文档的公开原文。
+
+    404 统一口径（不区分「不存在 / 跨租户 / 未索引 / 无原文」）：
+    未就绪内容不展示，也不泄漏存在性。
+    """
+    tenant = settings.TENANT_DEFAULT
+    row = db.execute(
+        select(Document, KnowledgeBase.name)
+        .join(KnowledgeBase, KnowledgeBase.id == Document.kb_id)
+        .where(
+            Document.id == doc_id,
+            Document.tenant_id == tenant,
+            KnowledgeBase.tenant_id == tenant,
+            Document.status == DocumentStatus.indexed,
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在或暂不可读")
+    doc, kb_name = row
+    if not doc.raw_text:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在或暂不可读")
+    return FaqDocContentResp(
+        doc_id=str(doc.id),
+        name=doc.name,
+        kb_name=kb_name,
+        status=doc.status.value,
+        content=doc.raw_text,
+    )

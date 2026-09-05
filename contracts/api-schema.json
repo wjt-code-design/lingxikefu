@@ -2018,6 +2018,50 @@
         }
       }
     },
+    "/api/v1/faq/docs/{doc_id}/content": {
+      "get": {
+        "tags": [
+          "faq"
+        ],
+        "summary": "Get Doc Content",
+        "description": "方案A：政策原文浏览——返回单篇**已索引**文档的公开原文。\n\n404 统一口径（不区分「不存在 / 跨租户 / 未索引 / 无原文」）：\n未就绪内容不展示，也不泄漏存在性。",
+        "operationId": "get_doc_content_api_v1_faq_docs__doc_id__content_get",
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FaqDocContentResp"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/knowledge/search": {
       "post": {
         "tags": [
@@ -3798,6 +3842,40 @@
           "message"
         ],
         "title": "EvalTriggerResp"
+      },
+      "FaqDocContentResp": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "title": "Doc Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "kb_name": {
+            "type": "string",
+            "title": "Kb Name"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "name",
+          "kb_name",
+          "status",
+          "content"
+        ],
+        "title": "FaqDocContentResp",
+        "description": "方案A：政策原文浏览——单篇已索引文档的公开原文（raw_text）。"
       },
       "FaqDocItem": {
         "properties": {

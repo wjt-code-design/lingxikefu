@@ -4,6 +4,7 @@ import { Button, Input, Typography } from 'antd';
 import {
   CarryOutOutlined,
   DownOutlined,
+  FileTextOutlined,
   InfoCircleOutlined,
   QuestionCircleOutlined,
   RocketOutlined,
@@ -14,15 +15,16 @@ import {
 } from '@ant-design/icons';
 import { Link } from 'react-router-dom';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
-import { getPublicFaq } from '@/api/faq';
+import { getFaqDocContent, getPublicFaq } from '@/api/faq';
 import type { DocStatus, FaqKBItem } from '@/contracts/api';
 import './FaqPage.css';
 
 /**
- * FAQ 公开浏览页（Phase 4 · 匿名可访问，挂 User 端 WidgetShell 下）
- * - 数据：GET /faq（公开无鉴权）→ 知识库 → 结构化 FAQ；有真实数据展示真实，
- *   无数据时回退到内置静态 FAQ 兜底，页面顶部说明条随数据源切换文案。
- * - 交互：顶部关键词搜索（对 问题/答案 前端过滤）+ 分类 Tab 过滤 + 本地 state 手风琴展开。
+ * 政策原文 / FAQ 公开浏览页（Phase 4 · 匿名可访问，挂 User 端 WidgetShell 下）
+ * - 数据：GET /faq（公开无鉴权）→ 知识库文档清单；有真实数据 = 政策原文浏览入口
+ *   （已索引文档可「阅读原文」，GET /faq/docs/{id}/content），无数据时回退到
+ *   内置静态 FAQ 兜底，页面顶部说明条随数据源切换文案（诚实标注内容来源与定位）。
+ * - 交互：顶部关键词搜索（前端过滤）+ 分类 Tab 过滤 + 本地 state 手风琴展开。
  * - 视觉：冷灰统一调性 + 海盐蓝点缀；仅消费 tokens.css 变量。
  */
 
@@ -31,6 +33,8 @@ interface FaqItem {
   a: string;
   status?: DocStatus;
   chunks?: number;
+  /** 真实数据态：文档 id（仅已索引文档提供原文阅读） */
+  docId?: string;
 }
 
 interface FaqCategory {
@@ -58,7 +62,7 @@ const CAT_ICON_POOL: ReactNode[] = [
   <InfoCircleOutlined key="i" />,
 ];
 
-/** 将后端 /faq 返回的知识库结构映射为 FAQ 分类（文档 → 问答条目） */
+/** 将后端 /faq 返回的知识库结构映射为分类（文档 → 条目；已索引文档可阅读原文） */
 function buildRealCategories(items: FaqKBItem[]): FaqCategory[] {
   return items.map((kb, i) => ({
     key: `kb:${kb.kb_id}`,
@@ -67,10 +71,11 @@ function buildRealCategories(items: FaqKBItem[]): FaqCategory[] {
     items: (kb.docs ?? []).map((d) => ({
       q: d.name,
       a: kb.description
-        ? `${kb.description}（本条目对应知识库「${kb.kb_name}」，收录 ${d.chunks} 个内容分块。）`
-        : `本条目来自知识库「${kb.kb_name}」，当前收录 ${d.chunks} 个内容分块，可在在线客服中检索引用。`,
+        ? `${kb.description}（本文档收录于知识库「${kb.kb_name}」，共 ${d.chunks} 个内容分块。）`
+        : `本文档收录于知识库「${kb.kb_name}」，共 ${d.chunks} 个内容分块，可展开阅读原文。`,
       status: d.status,
       chunks: d.chunks,
+      docId: d.status === 'indexed' ? d.doc_id : undefined,
     })),
   }));
 }
@@ -314,21 +319,25 @@ export function FaqPage() {
           </Link>
         </section>
 
-        {/* 顶部说明条 */}
+        {/* 顶部说明条（诚实标注内容来源与页面定位） */}
         <div className="faq__notice" role="note">
           <InfoCircleOutlined aria-hidden="true" />
           <span>
             {useReal
-              ? '以下内容来自企业知识库，由系统自动生成'
+              ? '以下政策原文来自企业知识库，点击条目可展开阅读原文'
               : '知识库暂无可展示内容，以下为通用帮助，接入知识库后将自动替换'}
           </span>
         </div>
 
         {/* 头部 */}
         <header className="faq__header">
-          <Typography.Title className="faq__title">常见问题</Typography.Title>
+          <Typography.Title className="faq__title">
+            {useReal ? '政策原文' : '常见问题'}
+          </Typography.Title>
           <Typography.Paragraph className="faq__sub">
-            搜索关键词或按分类浏览，快速找到你关心的问题
+            {useReal
+              ? '搜索关键词或按知识库分类浏览，展开条目阅读政策原文'
+              : '搜索关键词或按分类浏览，快速找到你关心的问题'}
           </Typography.Paragraph>
         </header>
 
@@ -481,9 +490,52 @@ function FaqItemRow({ id, item, catName, isOpen, onToggle }: FaqItemRowProps) {
       {isOpen ? (
         <div id={`faq-a-${id}`} className="faq-item__a">
           <p>{item.a}</p>
+          {item.docId ? <DocContentReader docId={item.docId} /> : null}
         </div>
       ) : null}
     </div>
+  );
+}
+
+/** 政策原文阅读器：点击「阅读原文」按需拉取（公开端点，仅已索引文档有入口） */
+function DocContentReader({ docId }: { docId: string }) {
+  const [open, setOpen] = useState(false);
+  const { data, isFetching, isError } = useQuery({
+    queryKey: ['faq-doc-content', docId],
+    queryFn: () => getFaqDocContent(docId),
+    enabled: open,
+  });
+
+  if (!open) {
+    return (
+      <Button
+        size="small"
+        icon={<FileTextOutlined />}
+        onClick={() => setOpen(true)}
+        className="faq-item__read"
+      >
+        阅读原文
+      </Button>
+    );
+  }
+  if (isFetching) {
+    return (
+      <p className="faq-item__doc-loading" role="status">
+        原文加载中…
+      </p>
+    );
+  }
+  if (isError || !data) {
+    return (
+      <p className="faq-item__doc-error" role="alert">
+        原文暂不可读，请稍后重试
+      </p>
+    );
+  }
+  return (
+    <article className="faq-item__doc" aria-label={`${data.name} 原文`}>
+      <pre className="faq-item__doc-body">{data.content}</pre>
+    </article>
   );
 }
 

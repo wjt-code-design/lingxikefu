@@ -295,6 +295,15 @@ export interface FaqKBItem {
 export interface PublicFaqResp {
   items: FaqKBItem[];
 }
+/** GET /faq/docs/{doc_id}/content（公开 · 方案A 政策原文浏览）——仅已索引文档放行。
+ *  命名与后端 schema 严格一致（FaqDocContentResp），避免 IGNORE_EXTRA 噪音。 */
+export interface FaqDocContentResp {
+  doc_id: string;
+  name: string;
+  kb_name: string;
+  status: DocStatus;
+  content: string;
+}
 
 // ---------- Feedback ----------
 export interface FeedbackReq {

@@ -352,6 +352,37 @@
   color: var(--text-2);
   animation: faq-answer-in var(--dur-base) var(--ease-out);
 }
+
+/* 方案A：政策原文阅读器 */
+.faq-item__read {
+  margin-top: 10px;
+}
+.faq-item__doc {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--color-surface);
+  animation: faq-answer-in var(--dur-base) var(--ease-out);
+}
+.faq-item__doc-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: inherit;
+}
+.faq-item__doc-loading,
+.faq-item__doc-error {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-3);
+}
+.faq-item__doc-error {
+  color: var(--color-danger);
+}
 @keyframes faq-answer-in {
   from {
     opacity: 0;

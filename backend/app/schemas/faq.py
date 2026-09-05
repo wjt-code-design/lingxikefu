@@ -11,6 +11,16 @@ class FaqDocItem(BaseModel):
     chunks: int
 
 
+class FaqDocContentResp(BaseModel):
+    """方案A：政策原文浏览——单篇已索引文档的公开原文（raw_text）。"""
+
+    doc_id: str
+    name: str
+    kb_name: str
+    status: str
+    content: str
+
+
 class FaqKbItem(BaseModel):
     kb_id: str
     kb_name: str
