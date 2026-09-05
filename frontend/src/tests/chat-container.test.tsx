@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { ConfigProvider } from 'antd';
@@ -232,5 +232,108 @@ describe('P3-⑫ 历史加载 stale 守卫', () => {
     await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '新会话的问题');
     await userEvent.click(screen.getByRole('button', { name: '发送' }));
     await waitFor(() => expect(mockCreateSession).toHaveBeenCalled());
+  });
+});
+
+/** B1-3（2026-09-06 深度审查）：轮询在途切会话 → 旧会话轮询结果不得写入新会话。
+ *  与 P3-⑫ 同族守卫：历史加载有 sessionParamRef 守卫，但顾客端 3s 轮询与观察
+ *  视角 4s 轮询的 .then 此前无守卫——切会话瞬间在途响应把旧会话 agent 消息/画像
+ *  追加进新会话（串会话）。本用例钉住顾客端轮询路径。 */
+describe('B1-3 轮询 stale 守卫', () => {
+  it('轮询在途时点新建 → 旧会话轮询消息不写入，后续发送创建新会话', async () => {
+    vi.useFakeTimers();
+    try {
+      let resolvePoll!: (d: SessionDetail) => void;
+      let calls = 0;
+      // call#1 = 历史加载（立即返回含 agent 消息 → intervention 真 → 轮询启动）
+      // call#2+ = 轮询 tick（首次挂起，捕获 resolver 模拟在途）
+      vi.mocked(mockGetSessionDetail).mockImplementation(() => {
+        calls += 1;
+        if (calls === 1) {
+          return Promise.resolve({
+            id: 'old-session',
+            messages: [
+              { id: 'a1', role: 'agent', content: '人工客服早先回复', created_at: '2026-01-01T00:00:00Z' },
+            ],
+          } as unknown as SessionDetail);
+        }
+        return new Promise((res) => {
+          resolvePoll = res;
+        });
+      });
+      useAuthStore.setState({
+        token: 't', refreshToken: 't', role: 'user',
+        user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+      });
+      render(
+        <ConfigProvider>
+          <MemoryRouter initialEntries={['/chat?session=old-session']}>
+            <NavButton to="/chat" label="go-new" />
+            <ChatContainer />
+          </MemoryRouter>
+        </ConfigProvider>
+      );
+      // 历史加载 resolve → 消息上屏 + sessionId 落定 + 轮询 effect 启动
+      await vi.waitFor(() => expect(screen.getByText('人工客服早先回复')).toBeInTheDocument());
+      // 推进到第一次轮询 tick（3s）→ 在途挂起。分多段推进 + 微任务 flush，
+      // 消除「effect 注册 interval 的时刻」与 fake clock 起点的相对偏差。
+      for (let i = 0; i < 8 && typeof resolvePoll !== 'function'; i++) {
+        await vi.advanceTimersByTimeAsync(1000);
+      }
+      await vi.waitFor(() => expect(typeof resolvePoll).toBe('function'));
+      // 用户此刻点「新建」→ 清态（fireEvent 同步，绕开 userEvent 与假计时器冲突）
+      fireEvent.click(screen.getByRole('button', { name: 'go-new' }));
+      await vi.advanceTimersByTimeAsync(0);
+      // 在途轮询此刻才返回（携带旧会话的新 agent 消息）——守卫必须丢弃
+      resolvePoll({
+        id: 'old-session',
+        messages: [
+          { id: 'a1', role: 'agent', content: '人工客服早先回复', created_at: '2026-01-01T00:00:00Z' },
+          { id: 'a2', role: 'agent', content: '轮询来的旧会话消息', created_at: '2026-01-01T00:01:00Z' },
+        ],
+      } as unknown as SessionDetail);
+      await vi.advanceTimersByTimeAsync(50);
+      expect(screen.queryByText('轮询来的旧会话消息')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(mockGetSessionDetail).mockReset();
+      vi.mocked(mockGetSessionDetail).mockResolvedValue({ id: 'sess-1', messages: [] } as unknown as SessionDetail);
+    }
+  });
+});
+
+/** B1-4（2026-09-06 深度审查）：首条消息后点「新建」必须真正开新会话。
+ *  旧实现用 window.history.replaceState 同步 URL——react-router 不知情，
+ *  sessionParam 恒 null → 「从有参切无参」清理分支永不触发 → 点新建后继续
+ *  输入仍发进旧会话（静默失效）。修复=改用 navigate(..., {replace:true})。 */
+describe('B1-4 首条消息后新建清态', () => {
+  it('发送首条消息后点新建 → 消息清空且再发送创建新会话', async () => {
+    useAuthStore.setState({
+      token: 't', refreshToken: 't', role: 'user',
+      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+    });
+    render(
+      <ConfigProvider>
+        <MemoryRouter initialEntries={['/chat']}>
+          <NavButton to="/chat" label="go-new" />
+          <ChatContainer />
+        </MemoryRouter>
+      </ConfigProvider>
+    );
+    // 首条消息 → 创建会话 sess-1（createSession 默认桩）
+    await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '第一句话');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() => expect(mockCreateSession).toHaveBeenCalled());
+    expect(screen.getByText('第一句话')).toBeInTheDocument();
+    // 点「新建」→ 应清态（旧 bug：sessionParam 恒 null → 清理分支不触发）
+    await userEvent.click(screen.getByRole('button', { name: 'go-new' }));
+    await waitFor(() => expect(screen.queryByText('第一句话')).not.toBeInTheDocument());
+    // 再发送 → 必须创建全新会话（旧 bug：sessionId 未清 → 续写旧会话，不建新）
+    const before = vi.mocked(mockCreateSession).mock.calls.length;
+    await userEvent.type(screen.getByRole('textbox', { name: '问题输入' }), '第二句话');
+    await userEvent.click(screen.getByRole('button', { name: '发送' }));
+    await waitFor(() =>
+      expect(vi.mocked(mockCreateSession).mock.calls.length).toBeGreaterThan(before)
+    );
   });
 });

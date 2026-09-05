@@ -318,9 +318,13 @@ export function ChatContainer({
     !!manualTicket?.id || !!ticketId || messages.some((m) => m.role === 'agent');
   useEffect(() => {
     if (!sessionId || observeMode || !intervention) return;
+    const sid = sessionId; // B1-3：发起时捕获，回调内比对最新值（闭包 sid 与发起时恒等）
     const timer = setInterval(() => {
-      getSessionDetail(sessionId)
+      getSessionDetail(sid)
         .then((d) => {
+          // B1-3（2026-09-06 深度审查）：stale 守卫——在途响应返回时用户已切会话
+          // （sessionIdRef 变化）则丢弃，杜绝旧会话 agent 消息写入新会话（同 :287 模式）。
+          if (sessionIdRef.current !== sid) return;
           setMessages((prev) => {
             const existing = new Set(prev.map((m) => m.id));
             const fresh = d.messages
@@ -351,10 +355,14 @@ export function ChatContainer({
   const lastAgentSendRef = useRef(0);
   useEffect(() => {
     if (!sessionId || !observeMode) return;
+    const sid = sessionId; // B1-3：发起时捕获（同顾客端轮询守卫）
     const timer = setInterval(() => {
       if (Date.now() - lastAgentSendRef.current < 4_000) return;
-      getSessionDetail(sessionId)
+      getSessionDetail(sid)
         .then((d) => {
+          // B1-3（2026-09-06 深度审查）：stale 守卫——切会话/退出观察态后在途响应丢弃，
+          // 杜绝旧会话消息/画像写入新界面。
+          if (sessionIdRef.current !== sid) return;
           setUserProfile(d.profile);
           setHandoffSummary(d.handoff_summary);
           setMessages((prev) => {
@@ -474,12 +482,12 @@ export function ChatContainer({
           const s = await createSession(title);
           sid = s.id;
           setSessionId(sid);
-          // P0-3：首次发问成功后把 session_id 同步到 URL（replaceState 不触发路由重渲染）
-          try {
-            window.history.replaceState({}, '', `?session=${sid}`);
-          } catch {
-            /* URL 更新失败不影响对话 */
-          }
+          // B1-4（2026-09-06 深度审查）：首条消息后同步 session 到 URL 必须走 router
+          // navigate（replace），不能用 window.history.replaceState——后者不通知
+          // react-router，useSearchParams 的 sessionParam 恒 null，导致「从有参切无参」
+          // 的新建清理分支永不触发（点新建仍续写旧会话）。navigate 后 sessionParam
+          // 变 sid，但下方 :275 `sessionParam === sessionId` 守卫短路返回，不重载历史。
+          navigate(`/chat?session=${sid}`, { replace: true });
         } catch {
           setCreating(false);
           setCreateError('会话创建失败，请重试');
