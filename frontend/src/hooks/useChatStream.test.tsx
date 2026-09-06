@@ -47,17 +47,36 @@ function installScriptedFetch() {
   );
 }
 
+/** B2-7：可控 rAF 队列——token 合帧不依赖真实 16ms 时钟，测试显式驱动 flush。 */
+function installRafQueue() {
+  const queue: FrameRequestCallback[] = [];
+  vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+    queue.push(cb);
+    return queue.length;
+  });
+  vi.stubGlobal('cancelAnimationFrame', () => {});
+  return {
+    pending: () => queue.length,
+    flush: () => {
+      const cbs = queue.splice(0, queue.length);
+      cbs.forEach((cb) => cb(0));
+    },
+  };
+}
+
 describe('useChatStream 停止生成（H3）', () => {
   beforeEach(() => installScriptedFetch());
   afterEach(() => vi.unstubAllGlobals());
 
   it('停止后 stage 落到 done、已收 tokens 保留', async () => {
+    const raf = installRafQueue(); // B2-7：token 进缓冲，需显式合帧后才可见
     const { result } = renderHook(() => useChatStream());
     act(() => {
       void result.current.stream({ session_id: null, content: '问点啥' } as never);
     });
     await act(async () => {}); // 交付 generating + token 两帧
     expect(result.current.stage).toBe('generating');
+    act(() => raf.flush());
     expect(result.current.tokens).toBe('部分回答');
 
     act(() => {
@@ -66,6 +85,21 @@ describe('useChatStream 停止生成（H3）', () => {
     // H3：旧实现此处仍是 generating（streaming 恒真，输入区永久禁用）→ 红
     expect(result.current.stage).toBe('done');
     expect(result.current.tokens).toBe('部分回答');
+  });
+
+  it('stop 前在途 delta 不丢尾（终止态强制 flush）', async () => {
+    installRafQueue(); // 故意不合帧
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '问点啥' } as never);
+    });
+    await act(async () => {});
+    expect(result.current.tokens).toBe(''); // 缓冲未合帧（B2-7 节流生效）
+    act(() => {
+      result.current.stop();
+    });
+    expect(result.current.tokens).toBe('部分回答'); // stop 强制 flush，部分回答完整
+    expect(result.current.stage).toBe('done');
   });
 });
 
@@ -294,6 +328,33 @@ function installOneShotFetch(frames: string[]) {
     )
   );
 }
+
+describe('useChatStream token 合帧节流（B2-7）', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('连续多 token → rAF 只排队一次合帧，末态文本完整', async () => {
+    const raf = installRafQueue();
+    const deltas = ['你', '好', '，', '退', '货', '政', '策', '如', '下'];
+    const frames = [
+      'data: {"event":"stage","data":{"stage":"generating"}}\n\n',
+      ...deltas.map((d) => `data: {"event":"token","data":{"delta":"${d}"}}\n\n`),
+      'data: {"event":"done","data":{"message_id":"m1"}}\n\n',
+    ];
+    installOneShotFetch(frames);
+
+    const { result } = renderHook(() => useChatStream());
+    act(() => {
+      void result.current.stream({ session_id: null, content: '退货' } as never);
+    });
+    await act(async () => {});
+
+    // 9 个 token 只触发 1 次 rAF 排队（done 前）——旧实现每 token 一次 setState
+    expect(raf.pending()).toBeLessThanOrEqual(1);
+    // done 强制 flush → 末态文本完整
+    expect(result.current.tokens).toBe('你好，退货政策如下');
+    expect(result.current.stage).toBe('done');
+  });
+});
 
 describe('useChatStream 工具回答标记（T3.1）', () => {
   afterEach(() => vi.unstubAllGlobals());

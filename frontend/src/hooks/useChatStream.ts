@@ -71,11 +71,52 @@ export function useChatStream() {
   const [state, setState] = useState<ChatStreamState>(INITIAL);
   const abortRef = useRef<AbortController | null>(null);
 
+  // B2-7 流式止血：token/reasoning delta 先进 ref 缓冲，rAF 节流合并 setState
+  // （≤16ms 一帧）——旧实现每 token 一次 setState → 全树重渲 + Markdown 全文重解析，
+  // 长回答时渲染开销随 token 数线性放大。done/error/stop/流终止等末态边界强制
+  // 同步 flush 保「所见=完整」；reset/新流开始丢弃缓冲（不跨轮泄漏）。
+  const deltaBuf = useRef({ tokens: '', reasoning: '' });
+  const rafRef = useRef<number | null>(null);
+
+  const flushDeltas = useCallback(() => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    const buf = deltaBuf.current;
+    if (!buf.tokens && !buf.reasoning) return;
+    deltaBuf.current = { tokens: '', reasoning: '' };
+    setState((s) => ({
+      ...s,
+      tokens: s.tokens + buf.tokens,
+      reasoning: s.reasoning + buf.reasoning,
+    }));
+  }, []);
+
+  const scheduleFlush = useCallback(() => {
+    if (rafRef.current !== null) return; // 本帧已排队：后续 delta 搭同一班车
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      flushDeltas();
+    });
+  }, [flushDeltas]);
+
   // C1：组件卸载时中止进行中的流（防连接泄漏 + 已卸载组件上的 setState）
-  useEffect(() => () => abortRef.current?.abort(), []);
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    },
+    []
+  );
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    deltaBuf.current = { tokens: '', reasoning: '' }; // 丢弃在途缓冲（新轮从零）
     setState(INITIAL);
   }, []);
 
@@ -84,11 +125,12 @@ export function useChatStream() {
   // stage 会永远停在 retrieving/generating → streaming 恒真 → 输入区永久禁用。
   // 落到 done 保留已收 tokens，ChatContainer 的 finalize 照常把部分回答并入历史。
   const stop = useCallback(() => {
+    flushDeltas(); // B2-7：先并入在途 delta，再落终止态（部分回答不丢尾）
     setState((s) =>
       s.stage === 'retrieving' || s.stage === 'generating' ? { ...s, stage: 'done' } : s
     );
     abortRef.current?.abort();
-  }, []);
+  }, [flushDeltas]);
 
   /** 发起流式请求并逐事件更新本地状态。可被 AbortController 中断（新请求/卸载）。 */
   const stream = useCallback(async (req: Omit<ChatStreamReq, 'stream'>): Promise<void> => {
@@ -98,6 +140,7 @@ export function useChatStream() {
     const token = useAuthStore.getState().token;
 
     const base = import.meta.env.VITE_API_BASE || API_PREFIX;
+    deltaBuf.current = { tokens: '', reasoning: '' }; // B2-7：新流丢弃上轮在途缓冲
     setState({ stage: 'retrieving', tokens: '', reasoning: '', sources: [] });
     // 兜底超时：超时则中止 fetch 并转超时错误（区分于用户主动 reset 的静默中止）
     let timedOut = false;
@@ -160,6 +203,8 @@ export function useChatStream() {
       const decoder = new TextDecoder('utf-8');
       let buf = '';
 
+      // B2-7：token/reasoning 进缓冲等 rAF 合帧；其余事件（stage/sources/done/error）
+      // 是状态跃迁点，先 flush 保证「跃迁前内容完整」，再直接 setState。
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -172,11 +217,23 @@ export function useChatStream() {
           // #9 加固：拼接全部 data 行再 parse；失败 warn（见 api/sse.ts）
           const ev = parseSSEFrame<SSEEvent>(frame);
           if (!ev) continue; // 非 data 帧（心跳/空行）忽略
+          if (ev.event === 'token') {
+            deltaBuf.current.tokens += ev.data.delta;
+            scheduleFlush();
+            continue;
+          }
+          if (ev.event === 'reasoning') {
+            deltaBuf.current.reasoning += ev.data.delta;
+            scheduleFlush();
+            continue;
+          }
+          flushDeltas();
           setState((s) => applyEvent(s, ev));
         }
       }
       // B3：流被服务端中途关闭（read 正常结束但未收到 done/error 事件）→ 落到终止态。
       // 否则 stage 永远停在 retrieving/generating → streaming 恒真 → 输入区永久禁用。
+      flushDeltas(); // B2-7：末态前并入在途 delta（错误文案不吞已收内容）
       setState((s) =>
         s.stage === 'retrieving' || s.stage === 'generating'
           ? {
@@ -190,6 +247,7 @@ export function useChatStream() {
       if ((e as Error).name === 'AbortError') {
         // 用户 reset（silent）或兜底超时（显式报错）
         if (timedOut) {
+          flushDeltas(); // B2-7：超时终止前并入在途 delta
           setState((s) => ({
             ...s,
             stage: 'error',
@@ -197,6 +255,7 @@ export function useChatStream() {
           }));
         }
       } else {
+        flushDeltas(); // B2-7：网络错误终止前并入在途 delta
         setState((s) => ({
           ...s,
           stage: 'error',
@@ -206,7 +265,7 @@ export function useChatStream() {
     } finally {
       clearTimeout(timer);
     }
-  }, []);
+  }, [flushDeltas, scheduleFlush]);
 
   return { ...state, reset, stop, stream };
 }
