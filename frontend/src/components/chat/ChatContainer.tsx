@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Button, Alert } from 'antd';
-import { BulbOutlined, CloseOutlined, SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined, FileAddOutlined } from '@ant-design/icons';
+import { BulbOutlined, CloseOutlined, SwapOutlined, TruckOutlined, ToolOutlined, SafetyCertificateOutlined, UserOutlined, FileAddOutlined, FileTextOutlined } from '@ant-design/icons';
 import { sendFeedback } from '@/api/chat';
 import { createSession, getSessionDetail, rateSatisfaction, sendAgentMessage, suggestReply } from '@/api/sessions';
 import { escalateSession, createTicket } from '@/api/tickets';
@@ -16,7 +16,10 @@ import type { ChatMessage } from './types';
 
 /** 快捷问题单一数据源（2026-08-21 合并原 HOT_SCENARIOS + MORE_GROUPS，消除双数组漂移）。
  * 每问题可带 `featured:true`（首屏精品卡片）+ `d` 描述；其余进"更多常见问题"折叠分组。
- * 改问题/加分组一律改这里，一处维护。 */
+ * 改问题/加分组一律改这里，一处维护。
+ * 精品区布局（2026-09-06）：6 组 × 2 条 featured = 3+3 两行等高对齐
+ * （旧 4 组中保修维修/账户支付各只 1 条，3 列网格排成 3+1 落单且参差）。
+ * 所有 `d` 描述均取自 kb/ 政策原文（发货与时效/账号与安全/常见问题FAQ/商品保修条款），不臆造。 */
 const QUESTION_GROUPS = [
   {
     key: 'aftersale',
@@ -34,11 +37,18 @@ const QUESTION_GROUPS = [
     icon: <TruckOutlined />,
     title: '配送物流',
     questions: [
+      { q: '下单后多久发货？', d: '现货 · 48 小时内发出', featured: true },
+      { q: '物流单号在哪查？', d: '出库后同步至我的订单', featured: true },
+      { q: '预售要等多久？' },
+    ],
+  },
+  {
+    key: 'payment',
+    icon: <FileTextOutlined />,
+    title: '发票支付',
+    questions: [
       { q: '支持哪些支付方式？', d: '微信 / 支付宝 / 银联', featured: true },
       { q: '可以开发票吗？', d: '电子发票 · 随时申请', featured: true },
-      { q: '物流单号在哪查？' },
-      { q: '下单后多久发货？' },
-      { q: '预售要等多久？' },
     ],
   },
   {
@@ -47,7 +57,7 @@ const QUESTION_GROUPS = [
     title: '保修维修',
     questions: [
       { q: '保修多久？', d: '整机保修 · 全国联保', featured: true },
-      { q: '屏幕有坏点保修吗？' },
+      { q: '屏幕有坏点保修吗？', d: '亮点坏点 · 保修范围内', featured: true },
       { q: '电池健康度低于80%保修吗？' },
       { q: '手机配置参数在哪看？' },
       { q: '系统怎么升级？' },
@@ -56,10 +66,10 @@ const QUESTION_GROUPS = [
   {
     key: 'account',
     icon: <UserOutlined />,
-    title: '账户支付',
+    title: '账户设置',
     questions: [
       { q: '如何修改收货地址？', d: '个人中心 · 随时修改', featured: true },
-      { q: '怎么修改登录密码？' },
+      { q: '怎么修改登录密码？', d: '账号设置 · 安全页', featured: true },
       { q: '如何绑定或解绑手机号？' },
       { q: '短信验证码收不到怎么办？' },
     ],
@@ -69,9 +79,9 @@ const QUESTION_GROUPS = [
     icon: <SafetyCertificateOutlined />,
     title: '价保与回收',
     questions: [
-      { q: '价保怎么申请？退差价多久到账？' },
+      { q: '价保怎么申请？退差价多久到账？', d: '7 天降价 · 原路退回', featured: true },
+      { q: '手机可以以旧换新吗？', d: '线上估价 · 旧机抵扣', featured: true },
       { q: '优惠券能叠加使用吗？' },
-      { q: '手机可以以旧换新吗？' },
       { q: '以旧换新怎么估价？' },
     ],
   },
