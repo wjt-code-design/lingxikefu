@@ -290,6 +290,38 @@ async def stream_answer(
         yield ("done", {"message_id": "", "rewritten_query": result.rewritten_query})
         return
 
+    # B2-1 singleflight：热问并发防击穿——同 rewritten_query 并发 miss 时只让
+    # winner 生成，waiter 轮询精确层复用完整回填（含 sources）。user_profile 非空
+    # 跳过抢锁（Chat 层回填门禁本就禁个性化答案入缓存，抢了也没人回填，纯浪费）。
+    # 清闸时机=生成段 finally：done 事件被 Chat 层处理完（含 cache_put 回填）后
+    # 生成器才恢复执行 → waiter 轮询到的一定是已回填的完整值，无「放闸早于回填」竞态。
+    # 函数级导入：与 steps/cache_check 同风格，规避 answer_cache↔rag_service 潜在环。
+    from app.services.answer_cache import (
+        end_generation,
+        generation_key,
+        try_begin_generation,
+        wait_for_exact,
+    )
+
+    sf_key: str | None = None
+    if not user_profile:
+        sf_key = generation_key(result.rewritten_query, str(kb_id))
+        won = await run_in_threadpool(try_begin_generation, sf_key)
+        if not won:
+            hit = await run_in_threadpool(
+                wait_for_exact, result.rewritten_query, kb_version, str(kb_id)
+            )
+            if hit:
+                # winner 回填已到 → 与 from_cache 分支同形态复用（省一次检索+LLM）；
+                # done 无 rewritten_query → Chat 层回填门禁自然跳过（不二次回填）。
+                for delta in _split_tokens(hit.get("answer", "")):
+                    yield ("token", {"delta": delta})
+                yield ("sources", {"sources": hit.get("sources", [])})
+                yield ("done", {"message_id": "", "cache_hit": True})
+                return
+            # 等待超时 → fail-open 照常生成；waiter 不持锁不清闸（TTL 兜底）
+            sf_key = None
+
     try:
         topic = extract_topic(history)  # 兜底：无状态提示时维持旧行为
         messages = build_qa_messages(
@@ -325,6 +357,12 @@ async def stream_answer(
     except Exception:  # noqa: BLE001
         logger.exception("RAG 生成失败")
         yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
+    finally:
+        # B2-1：winner 收尾清闸。done 被 Chat 层消费（含 cache_put 回填）后生成器
+        # 恢复执行才走到这里 → 放闸必然晚于回填，waiter 无半态竞态；
+        # error/断连（aclose）同样清闸，失败生成不占锁到 TTL。
+        if sf_key:
+            await run_in_threadpool(end_generation, sf_key)
 
 
 def _no_llm_reply(result: RagResult) -> str:

@@ -195,6 +195,115 @@ def test_semantic_hit_similar_question(monkeypatch):
     assert r is not None and r["answer"] == "7天内可退"
 
 
+# --- B2-1 singleflight（热问并发防击穿）-------------------------------------
+
+_SETTINGS_ON = type("S", (), {
+    "ANSWER_CACHE_ENABLED": True,
+    "ANSWER_CACHE_THRESHOLD": 0.95,
+    "ANSWER_CACHE_TTL_HOURS": 24,
+})()
+
+
+class _NxFakeRedis(_FakeRedis):
+    """支持 SET NX 语义的假 Redis：nx=True 且键已存在 → 不写、返回 None（同真 redis）。"""
+
+    def set(self, k, v, ex=None, nx=False):
+        if nx and k in self.store:
+            return None
+        self.store[k] = v
+        return True
+
+
+def test_try_begin_generation_lock_acquired_once(monkeypatch):
+    """同一 key 并发只有一人抢到生成权；后来者拿 False（进等待路径）。"""
+    monkeypatch.setattr(answer_cache, "settings", _SETTINGS_ON)
+    r = _NxFakeRedis()
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+    assert answer_cache.try_begin_generation("gen:k") is True
+    assert answer_cache.try_begin_generation("gen:k") is False
+
+
+def test_try_begin_generation_fail_open_when_disabled_or_redis_down(monkeypatch):
+    """缓存关闭 → 恒 True（零 Redis 触碰，行为同旧版）；Redis 挂 → 恒 True fail-open（照常生成）。"""
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {"ANSWER_CACHE_ENABLED": False})())
+
+    def _boom():
+        raise AssertionError("开关关闭时不应触碰 Redis")
+
+    monkeypatch.setattr(answer_cache, "get_redis", _boom)
+    assert answer_cache.try_begin_generation("gen:k") is True
+
+    class _Down:
+        def set(self, *a, **k):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(answer_cache, "settings", _SETTINGS_ON)
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: _Down())
+    assert answer_cache.try_begin_generation("gen:k") is True
+
+
+def test_wait_for_exact_returns_backfilled_payload(monkeypatch):
+    """等待方轮询精确层：回填出现即返回完整 payload（含 sources）；版本不符不复用。"""
+    monkeypatch.setattr(answer_cache, "settings", _SETTINGS_ON)
+    r = _NxFakeRedis()
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_INTERVAL", 0.01)
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_TIMEOUT", 0.2)
+
+    # 尚未回填 → 超时 None（fail-open：等待方照常生成，不报错）
+    assert answer_cache.wait_for_exact("保修多久", "v1", None) is None
+
+    put("保修多久", "12 个月", [{"chunk_id": "c1"}], ["d1"], "v1")
+    got = answer_cache.wait_for_exact("保修多久", "v1", None)
+    assert got and got["answer"] == "12 个月" and got["sources"]
+    # KB 版本推进 → 旧回填不复用
+    assert answer_cache.wait_for_exact("保修多久", "v2", None) is None
+
+
+def test_wait_for_exact_fail_open_when_redis_down_or_disabled(monkeypatch):
+    """Redis 挂 → None（等待方照常生成）；缓存关闭 → None（无锁语义，行为同旧版）。"""
+    monkeypatch.setattr(answer_cache, "settings", _SETTINGS_ON)
+
+    class _Down:
+        def get(self, k):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: _Down())
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_INTERVAL", 0.01)
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_TIMEOUT", 0.05)
+    assert answer_cache.wait_for_exact("保修多久", "v1", None) is None
+
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {"ANSWER_CACHE_ENABLED": False})())
+    assert answer_cache.wait_for_exact("保修多久", "v1", None) is None
+
+
+def test_end_generation_clears_lock_key(monkeypatch):
+    """winner 收尾清闸：gen key 删除（后续新爆发立即抢锁），精确缓存值不动。"""
+    monkeypatch.setattr(answer_cache, "settings", _SETTINGS_ON)
+    r = _NxFakeRedis()
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+    r.store["gen:a"] = "1"
+    r.store["other"] = "keep"
+    answer_cache.end_generation("gen:a")
+    assert "gen:a" not in r.store
+    assert r.store["other"] == "keep"
+
+    class _Down:
+        def delete(self, k):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: _Down())
+    answer_cache.end_generation("gen:a")  # fail-open 不抛即通过
+
+
+def test_generation_key_normalizes_and_isolates_kb():
+    """gen key 与精确层 key 同源归一：同问句同库恒同键（等待方轮询的正是 winner 回填的那个键）。"""
+    k1 = answer_cache.generation_key("保修多久", "kb-a")
+    k2 = answer_cache.generation_key("  保修多久  ", "kb-a")  # strip 归一
+    assert k1 == k2
+    assert answer_cache.generation_key("保修多久", "kb-b") != k1  # kb 隔离
+
+
 # --- P2-⑨ -------------------------------------------------------------------
 
 

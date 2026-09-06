@@ -7,6 +7,8 @@
   集合不一致即 miss——语义阈值挡不住一词之差的翻转，实体锁定在无数体句时恒放行
 - **KB 版本失效**：payload 记录 kb_version（KB.updated_at），不一致即 miss 并清理
 - **fail-open**：任何异常降级走 RAG（不阻断）；开关 ANSWER_CACHE_ENABLED 一键关闭
+- **B2-1 singleflight**：cache miss 的 qa 生成段用 Redis SET NX 生成锁合并同问并发——
+  抢到锁者生成，后来者轮询精确层复用完整回填（含 sources），超时/Redis 挂照常生成
 - 不缓存内容由调用方过滤（handoff/个人上下文/拒答不 put）
 """
 from __future__ import annotations
@@ -15,6 +17,7 @@ import hashlib
 import json
 import logging
 import threading
+import time
 import uuid
 from datetime import datetime
 
@@ -137,6 +140,83 @@ def _delete_exact_if_unchanged(key: str, expected: str) -> None:
         get_redis().eval(_DEL_IF_UNCHANGED_LUA, 1, key, expected)
     except Exception:  # noqa: BLE001 - fail-open
         logger.debug("answer_cache CAS 删除失败（fail-open，保留旧值待 TTL）", exc_info=True)
+
+
+# --- B2-1 singleflight（热问并发防击穿）--------------------------------------
+# 问题：同一热问句并发全 miss → N 次检索+LLM（成本与延迟随并发线性放大）。
+# 机制：cache miss 的 qa 生成段先抢 Redis 生成锁（SET NX EX）——抢到者（winner）照常
+# 生成并在 Chat 层回填后 end_generation 清闸；没抢到者（waiter）轮询精确层复用 winner
+# 的完整回填（含 sources），轮询超时/Redis 不可用 → 照常生成（fail-open，绝不 500）。
+# 锁 TTL=90s 兜底 winner 崩溃（进程被杀不 DEL）；等待预算远小于生成时长上限，
+# 等待失败只是退化为旧行为（重复生成），不产生错误答案。
+# 边界：非流式 cache_check 节点（评测路径）不加锁——评测逐题串行，无并发击穿面。
+
+#: 生成锁前缀（与精确层分离：锁值是占位符，缓存值是完整 payload JSON）
+_SF_PREFIX = "answer_cache_gen:"
+#: 锁兜底 TTL（秒）：远大于单次生成 P99（含思维链），小于用户可感知挂起
+_SF_LOCK_TTL = 90
+#: waiter 轮询间隔/总预算（秒）。模块级常量便于测试缩短（monkeypatch）。
+_SF_WAIT_INTERVAL = 1.0
+_SF_WAIT_TIMEOUT = 5.0
+
+
+def generation_key(query: str, kb_id: str | None = None) -> str:
+    """生成锁 key：与精确层同源归一（sha256 + kb_id 段），保证 waiter 轮询的
+    正是 winner 回填的那个键。"""
+    return _SF_PREFIX + (f"{kb_id}:" if kb_id else "") + _normalize_key(query)
+
+
+def try_begin_generation(gen_key: str) -> bool:
+    """抢生成锁：SET NX EX。True=抢到（winner 照常生成）或 fail-open（缓存关闭/Redis 挂）；
+    False=他人正在生成（调用方进等待路径）。"""
+    if not settings.ANSWER_CACHE_ENABLED:
+        return True  # 无缓存语义 → 无锁语义，行为同旧版
+    try:
+        return bool(get_redis().set(gen_key, "1", ex=_SF_LOCK_TTL, nx=True))
+    except Exception:  # noqa: BLE001 - fail-open：Redis 挂不挡生成
+        logger.debug("singleflight 抢锁失败（fail-open 照常生成）", exc_info=True)
+        return True
+
+
+def wait_for_exact(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | None:
+    """waiter 轮询精确层直至 winner 回填出现或预算耗尽。
+
+    只读 Redis 精确层（不走语义层/embedding——等待路径越轻越好，且 winner 回填
+    必写精确层）。命中语义与 get() 精确层一致：kb_version 不符 → 不复用。
+    任何异常 → None（fail-open，调用方照常生成）。
+    """
+    if not settings.ANSWER_CACHE_ENABLED:
+        return None
+    key = _EXACT_PREFIX + (f"{kb_id}:" if kb_id else "") + _normalize_key(query)
+    deadline = time.monotonic() + _SF_WAIT_TIMEOUT
+    try:
+        while time.monotonic() < deadline:
+            time.sleep(_SF_WAIT_INTERVAL)
+            raw = get_redis().get(key)
+            if not raw:
+                continue
+            payload = json.loads(raw)
+            if payload.get("kb_version") == kb_version and (
+                kb_id is None or payload.get("kb_id") == str(kb_id)
+            ):
+                return payload
+            return None  # 版本不符：旧值，不复用
+    except Exception:  # noqa: BLE001 - fail-open
+        logger.debug("singleflight 等待失败（fail-open 照常生成）", exc_info=True)
+        return None
+
+
+def end_generation(gen_key: str) -> None:
+    """winner 收尾清闸（回填后调用）：删锁让后续新爆发立即重新抢锁。
+
+    精确缓存值不动。fail-open：删除失败由锁 TTL 兜底过期。
+    """
+    if not settings.ANSWER_CACHE_ENABLED:
+        return  # 无锁语义 → 零 Redis 触碰（与 try_begin/wait 的开关短路一致）
+    try:
+        get_redis().delete(gen_key)
+    except Exception:  # noqa: BLE001 - fail-open
+        logger.debug("singleflight 清闸失败（锁 TTL 兜底）", exc_info=True)
 
 
 def get(query: str, kb_version: str | None, kb_id: str | None = None) -> dict | None:

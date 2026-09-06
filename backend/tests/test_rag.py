@@ -401,6 +401,182 @@ async def test_stream_answer_retrieval_error_no_qdrant_url_leak(patch, monkeypat
         assert settings.QDRANT_URL not in payload, f"{event_type} 泄漏内部 URL"
 
 
+# --- B2-1 singleflight（stream_answer 接线）----------------------------------
+
+
+async def test_stream_answer_winner_locks_and_clears(patch, monkeypatch):
+    """winner 路径：抢到锁 → 照常生成，done 带 rewritten_query，收尾清闸一次。"""
+    calls: list = []
+    monkeypatch.setattr(
+        "app.services.answer_cache.try_begin_generation",
+        lambda k: calls.append(("begin", k)) or True,
+    )
+    monkeypatch.setattr(
+        "app.services.answer_cache.end_generation",
+        lambda k: calls.append(("end", k)),
+    )
+    events = [e async for e in stream_answer("保修多久", uuid4())]
+    done = next(d for t, d in events if t == "done")
+    assert "cache_hit" not in done  # winner 不是缓存复用
+    assert patch.calls, "winner 必须照常调 LLM"
+    kinds = [c[0] for c in calls]
+    assert kinds == ["begin", "end"], f"抢锁一次+清闸一次，实际 {calls}"
+    assert calls[0][1] == calls[1][1], "清闸的 key 必须与抢锁一致"
+
+
+async def test_stream_answer_waiter_reuses_backfill_without_llm(patch, monkeypatch):
+    """waiter 路径：抢锁失败 + 轮询命中 → 复用 winner 回填（token+sources+cache_hit），零 LLM。"""
+    monkeypatch.setattr("app.services.answer_cache.try_begin_generation", lambda k: False)
+    monkeypatch.setattr(
+        "app.services.answer_cache.wait_for_exact",
+        lambda q, v, kb=None: {"answer": "整机保修12个月", "sources": [{"chunk_id": "c9"}]},
+    )
+    ended: list = []
+    monkeypatch.setattr("app.services.answer_cache.end_generation", lambda k: ended.append(k))
+
+    events = [e async for e in stream_answer("保修多久", uuid4())]
+    answer = "".join(d["delta"] for t, d in events if t == "token")
+    assert answer == "整机保修12个月"
+    src = next(d for t, d in events if t == "sources")
+    assert src["sources"] == [{"chunk_id": "c9"}]  # 完整回填（含 sources）
+    done = next(d for t, d in events if t == "done")
+    assert done.get("cache_hit") is True
+    assert "rewritten_query" not in done  # 防 Chat 层二次回填
+    assert patch.calls == []  # waiter 不调 LLM
+    assert ended == [], "waiter 不持锁，不清闸（防误删 winner 的锁）"
+
+
+async def test_stream_answer_waiter_timeout_failopen_generates(patch, monkeypatch):
+    """等待超时 → fail-open 照常生成（退化为旧行为，不报错不 500）。"""
+    monkeypatch.setattr("app.services.answer_cache.try_begin_generation", lambda k: False)
+    monkeypatch.setattr("app.services.answer_cache.wait_for_exact", lambda q, v, kb=None: None)
+    events = [e async for e in stream_answer("保修多久", uuid4())]
+    assert patch.calls, "等待失败必须照常生成"
+    types = [t for t, _ in events]
+    assert types[-1] == "done" and "token" in types
+
+
+async def test_singleflight_concurrent_same_query_one_llm_call(patch, monkeypatch):
+    """B2-1 验收（规划书）：并发 2 同问（fake redis）→ LLM 桩只调 1 次。
+
+    端到端模拟生产闭环：winner 生成 → 消费者（= Chat 层回填门禁）cache_put →
+    清闸；waiter 抢锁失败 → 轮询精确层复用完整回填。慢 LLM + 起跑延迟保证
+    waiter 在 winner 持锁期间进入等待，复现「并发全 miss」击穿场景。
+    """
+    import asyncio
+    import json as _json
+
+    from app.services import answer_cache
+
+    class _NxFake:
+        def __init__(self):
+            self.store: dict = {}
+
+        def set(self, k, v, ex=None, nx=False):
+            if nx and k in self.store:
+                return None
+            self.store[k] = v
+            return True
+
+        def get(self, k):
+            return self.store.get(k)
+
+        def delete(self, k):
+            self.store.pop(k, None)
+
+    r = _NxFake()
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_INTERVAL", 0.02)
+    # cache_check 节点置 miss（击穿场景：两请求都 miss 进生成段）
+    monkeypatch.setattr(answer_cache, "get", lambda *a, **k: None)
+    # 慢 LLM（0.3s）：保证 waiter 起跑时 winner 仍持锁（否则 waiter 也抢到锁双生成）
+    async def slow_stream(messages, model=None, **kw):
+        patch.calls.append((messages, model))
+        await asyncio.sleep(0.3)
+        yield ("content", "整机保修12个月")
+
+    monkeypatch.setattr(patch, "stream_events", slow_stream)
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: type("Q", (), {
+        "get_collections": lambda self: type("C", (), {"collections": []})(),
+        "create_collection": lambda self, **k: None,
+        "upsert": lambda self, **k: None,
+    })())
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type(
+        "E", (), {"dim": 4, "embed": lambda self, a: [[0.1] * 4]}
+    )())
+
+    kb = uuid4()
+
+    async def consume():
+        """消费 stream_answer 并复刻 Chat 层回填门禁（done 带 rewritten_query → put）。"""
+        async for ev, d in stream_answer("保修多久", kb, kb_version="v1"):
+            if ev == "done" and isinstance(d.get("rewritten_query"), str) and d["rewritten_query"]:
+                answer_cache.put(
+                    d["rewritten_query"], "整机保修12个月", [], [], "v1", str(kb)
+                )
+
+    async def consume_waiter():
+        await asyncio.sleep(0.05)  # 让 winner 先抢锁
+        await consume()
+
+    await asyncio.gather(consume(), consume_waiter())
+    assert len(patch.calls) == 1, f"并发同问应只生成一次，实际 LLM 调用 {len(patch.calls)} 次"
+    # 精确层确有回填（waiter 复用的来源）
+    key = answer_cache._EXACT_PREFIX + f"{kb}:" + answer_cache._normalize_key("保修多久")
+    assert _json.loads(r.store[key])["answer"] == "整机保修12个月"
+
+
+async def test_singleflight_redis_down_both_generate_no_500(patch, monkeypatch):
+    """B2-1 验收：Redis 挂 → 两请求照常生成不 500（fail-open 退化为旧行为）。"""
+    import asyncio
+
+    from app.services import answer_cache
+
+    class _Down:
+        def set(self, *a, **k):
+            raise ConnectionError("redis down")
+
+        def get(self, k):
+            raise ConnectionError("redis down")
+
+        def delete(self, k):
+            raise ConnectionError("redis down")
+
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: _Down())
+    monkeypatch.setattr(answer_cache, "get", lambda *a, **k: None)
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_INTERVAL", 0.01)
+    monkeypatch.setattr(answer_cache, "_SF_WAIT_TIMEOUT", 0.03)
+
+    async def consume():
+        events = [e async for e in stream_answer("保修多久", uuid4(), kb_version="v1")]
+        assert [t for t, _ in events][-1] == "done"  # 无 error 事件
+
+    await asyncio.gather(consume(), consume())
+    assert len(patch.calls) == 2  # 双双照常生成（旧行为，不击穿报错）
+
+
+async def test_stream_answer_personalized_skips_lock(patch, monkeypatch):
+    """画像注入（回填门禁禁个性化入缓存）→ 不抢锁：抢了也没人回填，纯浪费。"""
+    touched: list = []
+    monkeypatch.setattr(
+        "app.services.answer_cache.try_begin_generation",
+        lambda k: touched.append(k) or True,
+    )
+    _events = [e async for e in stream_answer("保修多久", uuid4(), user_profile="常买冰箱")]
+    assert touched == [], "个性化请求不得触碰生成锁"
+    assert patch.calls  # 照常生成
+
+
 async def test_stream_answer_does_not_force_explicit_model(patch, monkeypatch):
     """回归保护：stream_answer 不应硬塞模型名（模型名单一真源在 client 侧）。
 
