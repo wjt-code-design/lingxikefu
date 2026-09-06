@@ -30,12 +30,12 @@ AUTO_MODELS = {'HTTPValidationError', 'ValidationError'}
 #   SessionMessageSource↔MessageSource（Task2/2026-08-24 坐席辅助引用来源，后端 docstring 自证对齐）
 # - 后端模型未回填契约（KNOWN_GAP，见 contracts/README.md，待后续轮次回填）：CreateSessionReq、
 #   CreateTicketReq、SatisfactionReq、AgentReplyReq、FrontendErrorReq、SessionItem、
-#   SessionMessage、FeedbackItem、FeedbackListResp、FeedbackResp、ModelSettings、QuotaSettings、
+#   SessionMessage、FeedbackItem、FeedbackListResp、FeedbackResp、ModelSettings、
 #   RagSettings、RateLimitSettings、FeedbackRating、EvalResultItem、EvalHistoryResp、
 #   EvalTriggerReq、EvalTriggerResp（评测中心，/admin/eval，待后续轮次回填）
 # - R3：StatusUpdateReq 已回填契约（S2 乐观锁），移出本列表按 A 类正常比对
 IGNORE_EXTRA = {
-    'ModelSettings', 'QuotaSettings', 'RagSettings', 'RateLimitSettings',
+    'ModelSettings', 'RagSettings', 'RateLimitSettings',
     'UserRole', 'FeedbackRating', 'SuggestionType', 'Body_upload_document_api_v1_knowledge_bases__kb_id__documents_post',
     'AdminSettingsResp', 'KnowledgeSearchHit', 'FaqDocItem', 'FaqKbItem', 'FaqListResp',
     'CreateSessionReq', 'CreateTicketReq', 'SatisfactionReq',

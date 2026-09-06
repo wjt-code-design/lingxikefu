@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/authStore';
  *
  * 导航闭环（2026-08-19）：
  * - 品牌可点击 → 回角色首页（user→/chat，agent→/agent/dashboard，admin→/admin/dashboard，匿名→/）；
- * - user 角色不在 /chat 时，顶栏显示"← 返回对话"按钮（覆盖 Profile / MyTickets / Faq / Help 所有子页面）；
+ * - user 角色不在 /chat 时，顶栏显示"← 返回对话"按钮（覆盖 MyTickets / Faq / Help 所有子页面）；
  * - agent/admin 补通知铃铛（避免从工作台进入 /chat 后收不到工单/转人工通知，成为导航孤岛）。
  */
 export function WidgetShell() {
