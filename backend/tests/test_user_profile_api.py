@@ -83,18 +83,7 @@ def client(monkeypatch):
         db.add(KnowledgeBase(id=uuid.UUID("33333333-3333-3333-3333-333333333333"), name="kb", tenant_id="default"))
         db.commit()
 
-    # 配额宽松
-    class FakeQuota:
-        def left_today(self, _uid):
-            return 10
-
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):
-            return (True, 0)
-
-        def refund(self, _uid, n=1, idem_key=None, content=None, token=None):
-            return 0
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())
+    # （2026-09-06 额度系统移除：原 FakeQuota patch 随配额机制下线）
     monkeypatch.setattr(
         "app.api.chat._latest_kb_id",
         lambda db: "33333333-3333-3333-3333-333333333333",

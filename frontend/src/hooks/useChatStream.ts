@@ -172,7 +172,7 @@ export function useChatStream() {
         resp = await doFetch(newToken);
       }
       if (!resp.ok) {
-        // P4：HTTP 错误优先透出后端 detail（如 429 配额「今日问答额度已用完」），
+        // P4：HTTP 错误优先透出后端 detail（如 429 限流提示），
         // 而非一律「请求失败（HTTP xxx）请稍后重试」误导为网络问题
         let detail = '';
         try {

@@ -121,14 +121,15 @@ def test_me_requires_auth(client):
     assert client.get(f"{API}/auth/me").status_code == 401
 
 
-def test_me_returns_profile_and_quota(client):
+def test_me_returns_profile(client):
     reg = _register(client, email="me@b.com").json()
     r = client.get(f"{API}/auth/me", headers={"Authorization": f"Bearer {reg['access_token']}"})
     assert r.status_code == 200
     data = r.json()
     assert data["email"] == "me@b.com"
     assert data["role"] == "user"
-    assert isinstance(data["quota_left"], int)
+    # 2026-09-06 额度系统移除：MeResp 不再含 quota_left/quota_total
+    assert "quota_left" not in data
 
 
 def test_consume_token_atomic_single_use(monkeypatch):

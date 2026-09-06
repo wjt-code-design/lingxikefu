@@ -8,7 +8,7 @@ import { useAuthStore } from '@/store/authStore';
 /**
  * 对话挂件最小外壳：无侧栏，极简顶条（品牌 + 用户菜单）。
  * 恒为浅色海盐系（拒绝深色），无主题切换——仅一种颜色，切换入口无意义，已移除。
- * 供 /widget（iframe 嵌入）、/chat（站内完整页）、/faq、/help、/tickets、/profile 复用。
+ * 供 /widget（iframe 嵌入）、/chat（站内完整页）、/faq、/help、/tickets 复用。
  *
  * 导航闭环（2026-08-19）：
  * - 品牌可点击 → 回角色首页（user→/chat，agent→/agent/dashboard，admin→/admin/dashboard，匿名→/）；

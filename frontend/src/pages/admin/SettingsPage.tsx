@@ -116,17 +116,6 @@ export function SettingsPage() {
           </KVRow>
         </Card>
 
-        {/* ④ 配额配置 */}
-        <Card
-          className="settings-card"
-          title="配额配置"
-          extra={<span className="settings-card__tag">只读</span>}
-        >
-          <p className="settings-card__desc">用户每日使用额度</p>
-          <KVRow label="每日对话配额" mono>
-            {data.quota.daily_limit}
-          </KVRow>
-        </Card>
       </div>
     );
   }
@@ -139,7 +128,7 @@ export function SettingsPage() {
             系统设置
           </Typography.Title>
           <Typography.Text className="settings-page__subtitle">
-            模型 / RAG / 限流 / 配额配置
+            模型 / RAG / 限流配置
           </Typography.Text>
           {data?.env ? <span className="settings-page__env">{data.env}</span> : null}
         </div>

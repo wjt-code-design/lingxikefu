@@ -72,7 +72,7 @@ def _make_client():
 
 @lru_cache(maxsize=1)
 def get_qdrant_client():
-    """进程内单例（对齐 embedding/quota 的单例约定，避免每次请求重连）。"""
+    """进程内单例（对齐 embedding 的单例约定，避免每次请求重连）。"""
     return _make_client()
 
 

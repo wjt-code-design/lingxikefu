@@ -47,7 +47,7 @@ IGNORE_EXTRA = {
     # 消费时移出本组并回填契约
     'BatchItem', 'BatchListResp', 'BatchActionResp', 'BatchEvalSummary', 'BatchEvalMetric',
     # 二期 admin/内部类型（前端暂无消费页面；消费时移出并补 TS 契约）
-    'IntentShadowStats', 'IntentShadowBucket', 'QuotaSettingsUpdate',
+    'IntentShadowStats', 'IntentShadowBucket',
 }
 
 INTERFACE_RE = re.compile(r'^export\s+interface\s+(\w+)\s*\{', re.MULTILINE)

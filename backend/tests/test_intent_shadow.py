@@ -133,17 +133,7 @@ def chat_client(monkeypatch):
         db.add(KnowledgeBase(id=KB_ID, name="星河测试库"))
         db.commit()
 
-    class FakeQuota:
-        def left_today(self, _uid):
-            return 10
-
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):
-            return (True, 0)
-
-        def refund(self, _uid, n=1, idem_key=None, content=None, token=None):
-            return 0
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())
+    # （2026-09-06 额度系统移除：原 FakeQuota patch 随配额机制下线）
     monkeypatch.setattr("app.api.chat._latest_kb_id", lambda db: KB_ID)
     # 影子采样全开（接线用例不测采样，采样语义在下方独立用例覆盖）
     monkeypatch.setattr(settings, "INTENT_SHADOW_SAMPLE", 1.0)

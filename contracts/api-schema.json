@@ -1115,32 +1115,6 @@
         }
       }
     },
-    "/api/v1/quota": {
-      "get": {
-        "tags": [
-          "quota"
-        ],
-        "summary": "Get Quota",
-        "operationId": "get_quota_api_v1_quota_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuotaResp"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/v1/admin/users": {
       "get": {
         "tags": [
@@ -1509,7 +1483,7 @@
           "admin"
         ],
         "summary": "Get Admin Settings",
-        "description": "返回当前运行配置（quota 组为 DB 生效值，其余分组从 settings 单一真源读取）。",
+        "description": "返回当前运行配置（全部从 settings 单一真源读取）。",
         "operationId": "get_admin_settings_api_v1_admin_settings_get",
         "responses": {
           "200": {
@@ -1518,53 +1492,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminSettingsResp"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
-    "/api/v1/admin/settings/quota": {
-      "put": {
-        "tags": [
-          "admin"
-        ],
-        "summary": "Put Quota Settings",
-        "description": "更新每日配额上限：写 app_settings KV + 清 60s 生效缓存（秒级生效，免重启）。",
-        "operationId": "put_quota_settings_api_v1_admin_settings_quota_put",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/QuotaSettingsUpdate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/QuotaSettings"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -2947,9 +2874,6 @@
           },
           "rate_limit": {
             "$ref": "#/components/schemas/RateLimitSettings"
-          },
-          "quota": {
-            "$ref": "#/components/schemas/QuotaSettings"
           }
         },
         "type": "object",
@@ -2957,8 +2881,7 @@
           "env",
           "model",
           "rag",
-          "rate_limit",
-          "quota"
+          "rate_limit"
         ],
         "title": "AdminSettingsResp"
       },
@@ -3437,18 +3360,6 @@
             "type": "boolean",
             "title": "Stream",
             "default": true
-          },
-          "client_msg_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "maxLength": 64
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Client Msg Id"
           },
           "image_paths": {
             "items": {
@@ -4433,22 +4344,12 @@
           },
           "role": {
             "$ref": "#/components/schemas/UserRole"
-          },
-          "quota_left": {
-            "type": "integer",
-            "title": "Quota Left"
-          },
-          "quota_total": {
-            "type": "integer",
-            "title": "Quota Total"
           }
         },
         "type": "object",
         "required": [
           "user_id",
-          "role",
-          "quota_left",
-          "quota_total"
+          "role"
         ],
         "title": "MeResp"
       },
@@ -4582,63 +4483,6 @@
         },
         "type": "object",
         "title": "OkResp"
-      },
-      "QuotaResp": {
-        "properties": {
-          "date": {
-            "type": "string",
-            "title": "Date"
-          },
-          "used": {
-            "type": "integer",
-            "title": "Used"
-          },
-          "limit": {
-            "type": "integer",
-            "title": "Limit"
-          },
-          "left": {
-            "type": "integer",
-            "title": "Left"
-          }
-        },
-        "type": "object",
-        "required": [
-          "date",
-          "used",
-          "limit",
-          "left"
-        ],
-        "title": "QuotaResp"
-      },
-      "QuotaSettings": {
-        "properties": {
-          "daily_limit": {
-            "type": "integer",
-            "title": "Daily Limit"
-          }
-        },
-        "type": "object",
-        "required": [
-          "daily_limit"
-        ],
-        "title": "QuotaSettings"
-      },
-      "QuotaSettingsUpdate": {
-        "properties": {
-          "daily_quota_limit": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Daily Quota Limit",
-            "description": "每日配额上限（正整数）"
-          }
-        },
-        "type": "object",
-        "required": [
-          "daily_quota_limit"
-        ],
-        "title": "QuotaSettingsUpdate",
-        "description": "PUT /admin/settings/quota 请求体：每日配额上限写通道（架构一期 6，大促动态上调）。\n\n>0 强约束（≤0 会让 try_consume 全量拒绝）；非整数 / 带小数由 int 校验拒绝 → 422。"
       },
       "RagSettings": {
         "properties": {

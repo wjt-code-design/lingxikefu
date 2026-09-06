@@ -5,9 +5,9 @@
 
 test_config.py 直接构造 Settings(**kwargs)，不依赖本环境变量。
 
-Redis 兜底：API 测试隐式依赖 Redis（is_revoked fail-closed / quota / telemetry）。
+Redis 兜底：API 测试隐式依赖 Redis（is_revoked fail-closed / telemetry）。
 本地无 Redis 时全部 401——用 fakeredis 全局替换（测试自洽，不依赖外部服务）；
-测试内部自带 patch 的用例（test_token_revocation / test_quota）优先生效，互不冲突。
+测试内部自带 patch 的用例（test_token_revocation）优先生效，互不冲突。
 """
 from __future__ import annotations
 
@@ -54,7 +54,6 @@ _REDIS_PATCH_TARGETS = (
     "app.core.rate_limit.get_redis",
     "app.services.answer_cache.get_redis",
     "app.api.telemetry.get_redis",
-    "app.services.quota.get_redis",
     "app.services.user_profile_service.get_redis",  # 2026-08-22 Phase B：画像幂等键查重
     "app.services.ticket_auto_scheduler.get_redis",  # 2026-08-22 工单扫描锁（互斥测试用 fakeredis）
     "app.services.quick_answers.get_redis",  # 架构三期 2：covered 版本锚点（chat quick 路径读 / 导入钩子写）

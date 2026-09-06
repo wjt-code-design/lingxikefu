@@ -1,8 +1,8 @@
-"""Chat API 测试（BU-06）：SSE 事件顺序 / 会话归属 / 配额 / 来源落库。
+"""Chat API 测试（BU-06）：SSE 事件顺序 / 会话归属 / 来源落库。
 
 - SQLite StaticPool + get_db 覆盖；建 session/message/message_sources/kb 表；
-- mock stream_answer（直接 yield 契约事件序列），不依赖真实 RAG/Qdrant/百炼；
-- mock quota（避免 Redis 依赖）。
+- mock stream_answer（直接 yield 契约事件序列），不依赖真实 RAG/Qdrant/百炼。
+（2026-09-06 额度系统移除：原 FakeQuota mock 随配额机制下线。）
 """
 from __future__ import annotations
 
@@ -72,30 +72,14 @@ def client(monkeypatch):
         db.add(KnowledgeBase(id=_uuid.UUID("33333333-3333-3333-3333-333333333333"), name="星河测试库"))
         db.commit()
 
-    # mock quota：余额充足，记录 try_consume 调用（M2 后消耗走原子闸门）
-    calls = {"consumed": 0}
-
-    class FakeQuota:
-        def left_today(self, _uid):
-            return 10
-
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):
-            # content/token：与生产签名对齐（content 指纹化幂等、token 归属凭证，2026-08-31）
-            calls["consumed"] += n
-            return (True, 0)
-
-        def refund(self, _uid, n=1, idem_key=None, content=None, token=None):
-            calls["consumed"] -= n
-            return 0
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())
+    # （2026-09-06 额度系统移除：原 FakeQuota mock 随配额机制下线）
     monkeypatch.setattr(
         "app.api.chat._latest_kb_id",
         lambda db: "33333333-3333-3333-3333-333333333333",
     )
 
     with TestClient(app) as c:
-        yield c, Local, calls
+        yield c, Local
     app.dependency_overrides.clear()
 
 
@@ -129,7 +113,7 @@ class _FakeStream:
 
 
 def test_chat_stream_events_and_persist(client, monkeypatch):
-    tc, Local, calls = client
+    tc, Local = client
     monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
 
     r = tc.post(
@@ -147,7 +131,7 @@ def test_chat_stream_events_and_persist(client, monkeypatch):
     assert '"sources"' in events[4]
     assert '"done"' in events[5]
 
-    # 落库：user + assistant 两条消息，1 条 source，配额已扣
+    # 落库：user + assistant 两条消息，1 条 source
     with Local() as db:
         msgs = db.scalars(select(Message)).all()
         roles = sorted(m.role.value for m in msgs)
@@ -157,7 +141,6 @@ def test_chat_stream_events_and_persist(client, monkeypatch):
         srcs = db.scalars(select(MessageSource)).all()
         assert len(srcs) == 1
         assert srcs[0].doc_id == __import__("uuid").UUID("55555555-5555-5555-5555-555555555555")
-    assert calls["consumed"] == 1
 
 
 def test_chat_stream_done_carries_trace_id(client, monkeypatch):
@@ -166,7 +149,7 @@ def test_chat_stream_done_carries_trace_id(client, monkeypatch):
     断言：响应头 X-Request-ID 与 done 事件 trace_id 同源——证明入口生成的
     request_id 已接入业务链路（此前只到错误模型，不进 SSE）。
     """
-    tc, _, _ = client
+    tc, _ = client
     monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
 
     r = tc.post(
@@ -184,7 +167,7 @@ def test_chat_stream_done_carries_trace_id(client, monkeypatch):
 
 def test_chat_cache_write_reuses_stream_rewritten_query(client, monkeypatch):
     """缓存回填采用 RAG 流提供的改写 key，不在 Chat 层重复调用 rewrite。"""
-    tc, _, _ = client
+    tc, _ = client
     writes = []
 
     async def _fake(*_a, **_k):
@@ -221,7 +204,7 @@ def test_chat_cache_fill_allows_topic_only_state(client, monkeypatch):
       一直被允许，回填侧对称收窄不自洽性即消除。
     个人化硬边界（订单号槽位/用户画像）仍禁回填，见下方两个测试。
     """
-    tc, _, _ = client
+    tc, _ = client
     writes = []
 
     async def _fake(*_a, **_k):
@@ -252,7 +235,7 @@ def test_chat_cache_fill_allows_topic_only_state(client, monkeypatch):
 
 def test_chat_cache_fill_skipped_when_order_slot(client, monkeypatch):
     """D4 硬边界：订单号槽位在会话状态中 → 回答绑定个人数据，禁回填。"""
-    tc, _, _ = client
+    tc, _ = client
     writes = []
 
     async def _fake(*_a, **_k):
@@ -287,7 +270,7 @@ def test_chat_cache_fill_skipped_when_clarify_round(client, monkeypatch):
     当前 clarify 分支的 done 不带 rewritten_query（天然不回填）；本测试显式锁定
     该语义——防未来 clarify 分支带上 rewritten_query 时静默把澄清话术灌进缓存。
     """
-    tc, _, _ = client
+    tc, _ = client
     writes = []
 
     async def _fake(*_a, **_k):
@@ -311,7 +294,7 @@ def test_chat_cache_fill_skipped_when_clarify_round(client, monkeypatch):
 
 def test_chat_cache_fill_skipped_when_user_profile(client, monkeypatch):
     """P2-③：个性化用户（画像非空）→ 不进精确层全局缓存（正确性优先）。"""
-    tc, _, _ = client
+    tc, _ = client
     writes = []
 
     async def _fake(*_a, **_k):
@@ -348,7 +331,7 @@ def test_chat_quick_answer_marks_source_and_honest_stage(client, monkeypatch):
       admin 后续可统计快捷命中率）
     - stage 进度提示不再谎报「已检索知识库」（该分支不检索，诚实标注）
     """
-    tc, Local, _ = client
+    tc, Local = client
     monkeypatch.setattr("app.api.chat.match_quick", lambda content: "预置答案：保修12个月")
 
     r = tc.post(
@@ -371,175 +354,6 @@ def test_chat_quick_answer_marks_source_and_honest_stage(client, monkeypatch):
         assert assistant.meta.get("answer_source") == "quick"
 
 
-def test_chat_stream_quota_exceeded_no_llm(client, monkeypatch):
-    tc, Local, calls = client
-
-    class EmptyQuota:
-        def left_today(self, _uid):
-            return 0
-
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):  # 与生产签名对齐（content/token，2026-08-31）
-            return (False, 0)  # 超限 → 闸门拒绝
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: EmptyQuota())
-    called = []
-
-    async def _fake(*_a, **_k):
-        called.append(1)
-        yield ("token", {"delta": "x"})
-
-    monkeypatch.setattr("app.api.chat.stream_answer", _fake)
-    r = tc.post(
-        f"{API}/chat/stream",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
-        headers=_headers(),
-    )
-    # P4：超额统一走 HTTP 429 + detail（不再 HTTP200+SSE error 双面不一致）；未调 LLM
-    assert r.status_code == 429
-    assert "今日问答额度已用完" in r.text
-    assert called == []  # 未调 LLM
-
-
-def test_chat_stream_error_event_refunds_quota(client, monkeypatch):
-    """S1（外部审查 2026-08-28）：SSE error 事件路径必须退配额。
-
-    rag_service 两个 error 源（RAG_RETRIEVAL/RAG_GENERATE）都在配额扣减之后触发——
-    error 即「已扣费但未交付回答」，配额必须回滚，否则用户额度被静默侵蚀。
-    断言：error 事件发生后净消耗归零（try_consume +1 被 refund 抵消，用户可再次消费）；
-    且 error 路径不落 assistant 消息（未交付不落库）。
-    """
-    tc, Local, calls = client
-
-    class _ErrorStream:
-        """替身 stream_answer：检索正常后生成失败（对齐 rag_service :259 真实序列）。"""
-
-        @staticmethod
-        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
-            yield ("stage", {"stage": "retrieving", "msg": "已检索知识库"})
-            yield ("stage", {"stage": "generating", "msg": "正在生成回答"})
-            yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
-
-    monkeypatch.setattr("app.api.chat.stream_answer", _ErrorStream())
-
-    r = tc.post(
-        f"{API}/chat/stream",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
-        headers=_headers(),
-    )
-    assert r.status_code == 200
-    assert '"event": "error"' in r.text and "RAG_GENERATE" in r.text
-
-    # S1 核心：error 路径退款 → 净消耗归零（修复前恒为 1——额度被静默侵蚀）
-    assert calls["consumed"] == 0
-
-    # 未交付不落 assistant 消息（仅 user 消息在库）
-    with Local() as db:
-        msgs = db.scalars(select(Message)).all()
-        assert [m.role for m in msgs] == [MessageRole.user]
-
-
-def test_chat_quota_redis_calls_off_event_loop(client, monkeypatch):
-    """C1（bughunt-concurrency Critical-1）：chat 热路径同步 Redis 调用必须搬出事件循环线程。
-
-    quota.try_consume（请求入口，每请求必经）与 quota.refund（finally 退款路径）
-    内部是同步 Redis 调用；若在事件循环线程直接执行，Redis 挂起（非宕机）会
-    冻结整个事件循环——所有并发请求堆积，服务整体不可用。
-
-    探测手段：asyncio.get_running_loop() 在事件循环线程内成功返回、在
-    run_in_threadpool 的 worker 线程内抛 RuntimeError。断言两次调用均不在
-    事件循环线程执行。
-    """
-    import asyncio
-
-    tc, Local, _calls = client
-
-    seen: dict[str, bool | None] = {"try_consume": None, "refund": None}
-
-    class ProbedQuota:
-        """记录 try_consume / refund 执行线程是否为事件循环线程。"""
-
-        def try_consume(self, *_a, **_k):
-            try:
-                asyncio.get_running_loop()
-                seen["try_consume"] = True  # 事件循环线程执行（红态：可冻结全服务）
-            except RuntimeError:
-                seen["try_consume"] = False  # worker 线程（绿态）
-            return (True, 0)
-
-        def refund(self, *_a, **_k):
-            try:
-                asyncio.get_running_loop()
-                seen["refund"] = True
-            except RuntimeError:
-                seen["refund"] = False
-            return 0
-
-    class _ErrorStream:
-        """yield error 事件触发 finally 退款路径（对齐 rag_service 真实序列）。"""
-
-        @staticmethod
-        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
-            yield ("error", {"code": "RAG_GENERATE", "message": "回答生成失败，请稍后重试"})
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: ProbedQuota())
-
-    # 成功流：探测 try_consume
-    monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
-    r = tc.post(
-        f"{API}/chat/stream",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
-        headers=_headers(),
-    )
-    assert r.status_code == 200
-    assert seen["try_consume"] is False, (
-        "quota.try_consume 在事件循环线程执行（同步 Redis 挂起将冻结整个服务）"
-    )
-
-    # error 流：探测 finally 中的 refund
-    monkeypatch.setattr("app.api.chat.stream_answer", _ErrorStream())
-    r = tc.post(
-        f"{API}/chat/stream",
-        json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
-        headers=_headers(),
-    )
-    assert r.status_code == 200
-    assert '"event": "error"' in r.text
-    assert seen["refund"] is False, (
-        "quota.refund 在事件循环线程执行（同步 Redis 挂起将冻结整个服务）"
-    )
-
-
-def test_chat_stream_early_failure_refunds_quota(client, monkeypatch):
-    """M6（bughunt-concurrency）：gen 内层 try 之前的异常 → 已扣费必须退款。
-
-    _fetch_history / agent_router.route / image_agent.run 等位于退款 finally
-    所属的 try 之前：此处异常从 gen 直接冒泡，finally 永不进入 → 配额白扣
-    + 会话留无回复消息。修复：外层 try/finally 包住整个 gen 体，退款与
-    降级排水成为真正的「单一收口」。
-    """
-    tc, Local, calls = client
-
-    async def _boom(*_a, **_k):
-        raise RuntimeError("db glitch")
-
-    monkeypatch.setattr("app.api.chat._fetch_history", _boom)
-    monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
-
-    try:
-        tc.post(
-            f"{API}/chat/stream",
-            json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "退货运费谁出", "stream": True},
-            headers=_headers(),
-        )
-        # 旧实现：流中断无退款；新实现：退款后流中断（两者响应形态都可接受）
-    except Exception:  # noqa: BLE001 - 流式响应中途断开在测试客户端表现为异常
-        pass
-    assert calls["consumed"] == 0, (
-        f"gen 早期异常未退款（consumed={calls['consumed']}）——配额被静默侵蚀"
-    )
-    # user 消息已落库（扣费在落库后），不断言库态
-
-
 def test_chat_clarify_writeback_row_lock(client, monkeypatch):
     """M7（bughunt-concurrency）：clarify 回写必须走行锁重读，防并发丢更新。
 
@@ -547,7 +361,7 @@ def test_chat_clarify_writeback_row_lock(client, monkeypatch):
     A 流到 done 用自己的旧快照 mark_clarifying 整 blob 覆盖 → B 的槽位丢失。
     修复：回写前 with_for_update 重读最新行再合并。
     """
-    tc, Local, calls = client
+    tc, Local = client
     monkeypatch.setattr("app.api.chat.stream_answer", _FakeStream())
 
     import uuid as _uuid
@@ -649,7 +463,7 @@ def test_session_ownership_agent_can_read_other_user(client):
 
 def test_chat_stream_handoff_creates_ticket(client, monkeypatch):
     """T1：intent=handoff → AI 建单（幂等 + 溯源锚点 message_id），done 带 ticket_id。"""
-    tc, Local, _ = client
+    tc, Local = client
 
     async def _fake(*_a, **_k):
         yield ("intent", {"intent": "handoff"})
@@ -689,7 +503,7 @@ def test_chat_stream_handoff_persists_summary(client, monkeypatch):
     注意两轮都不带订单号：一旦 conv_state 有 order_no + 订单类主题，订单工具分支
     （零 LLM 模板）会短路整条流，handoff 事件永远到不了。
     """
-    tc, Local, _ = client
+    tc, Local = client
 
     async def _qa(*_a, **_k):
         yield ("intent", {"intent": "qa"})
@@ -743,7 +557,7 @@ def test_chat_stream_refuse_intent_persisted(client, monkeypatch):
         yield ("done", {"message_id": ""})
 
     monkeypatch.setattr("app.api.chat.stream_answer", _fake)
-    tc, Local, _ = client
+    tc, Local = client
     r = tc.post(
         f"{API}/chat/stream",
         json={"session_id": "11111111-1111-1111-1111-111111111111", "content": "你们多久上市", "stream": True},
@@ -767,7 +581,7 @@ def test_agent_can_reply_on_user_session(client, monkeypatch):
     人工直复已迁移至 POST /sessions/{id}/messages（Branch 3，见 test_sessions_messages.py）；
     原 /chat/reply 端点已删除（前端零调用，且与新端点 role=agent 语义冲突）。
     """
-    tc, Local, _ = client
+    tc, Local = client
     agent_h = {
         "Authorization": f"Bearer {create_access_token('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'agent')}"
     }
@@ -844,7 +658,7 @@ def test_session_satisfaction(client):
 
 def test_chat_updates_conv_state(client, monkeypatch):
     """批次B：两轮对话驱动 conv_state——首轮退款主题→collecting，次轮补订单号→resolving。"""
-    c, Local, _ = client
+    c, Local = client
     # 批次D 起订单工具会截胡「订单主题+订单号」消息（查单命中即短路）——置空缓存
     # 让查单 miss 回落 RAG，本用例专注批次B state_hint 透传（工具分支由 order_tool 系列用例覆盖）
     import app.services.tools.order_tool as _ot
@@ -897,7 +711,7 @@ def test_chat_updates_conv_state(client, monkeypatch):
 
 def test_chat_conv_state_fail_open(client, monkeypatch):
     """批次B：状态写库异常不阻断问答（fail-open）——mock update 抛错，流照常完成。"""
-    c, _, _ = client
+    c, _ = client
     monkeypatch.setattr(
         "app.api.chat.conversation_state.update",
         lambda state, message: (_ for _ in ()).throw(RuntimeError("boom")),
@@ -915,7 +729,7 @@ def test_chat_conv_state_fail_open(client, monkeypatch):
 
 def test_chat_clarify_flow_updates_state(client, monkeypatch):
     """批次C：拒答轮（有澄清额度）→ done.clarify → conv_state 置 clarifying + 计数+1。"""
-    c, Local, _ = client
+    c, Local = client
 
     class _RefuseThenClarifyStream:
         """替身 stream_answer：模拟拒答且触发澄清（done 带 clarify=True）。
@@ -971,7 +785,7 @@ def test_chat_clarify_flow_updates_state(client, monkeypatch):
 
 def test_chat_clarify_left_decrements_across_rounds(client, monkeypatch):
     """批次C：额度耗尽（clarify_count=2）→ 拒答轮不再请求澄清（clarify_left=0 透传）。"""
-    c, Local, _ = client
+    c, Local = client
     captured: dict = {}
 
     class _CaptureStream:
@@ -1004,7 +818,7 @@ def test_chat_order_tool_branch(client, monkeypatch, tmp_path):
     """批次D：槽位订单号+订单主题 → 工具分支零 LLM 回答（meta 带 tool 标记）。"""
     import json as _json
 
-    c, Local, _ = client
+    c, Local = client
     data_file = tmp_path / "orders.json"
     data_file.write_text(
         _json.dumps({
@@ -1043,7 +857,7 @@ def test_chat_order_tool_branch(client, monkeypatch, tmp_path):
 
 def test_chat_order_tool_miss_falls_back_rag(client, monkeypatch):
     """批次D：订单号查不到 → 回落 RAG 正常流（不阻断）。"""
-    c, _, _ = client
+    c, _ = client
     import app.services.tools.order_tool as ot
     monkeypatch.setattr(ot, "_ORDERS_CACHE", {})
     monkeypatch.setattr("app.api.chat.order_tool._ORDERS_CACHE", {})
@@ -1059,7 +873,7 @@ def test_chat_order_tool_miss_falls_back_rag(client, monkeypatch):
 
 def test_chat_order_tool_no_slot_skips(client, monkeypatch):
     """批次D：无订单号槽位（纯主题消息）→ 不走工具分支（走 RAG）。"""
-    c, _, _ = client
+    c, _ = client
     called = {"n": 0}
 
     import app.api.chat as chat_mod
@@ -1121,7 +935,7 @@ def test_chat_image_fused_query_feeds_qa(client, monkeypatch, tmp_path):
     fake_vision = _FakeVisionClient()
     monkeypatch.setattr(_img_mod, "get_vision_client", lambda: fake_vision)
 
-    c, _, _ = client
+    c, _ = client
     seen: dict = {}
     monkeypatch.setattr("app.api.chat.stream_answer", _capture_stream(seen))
 
@@ -1144,7 +958,7 @@ def test_chat_image_fused_query_feeds_qa(client, monkeypatch, tmp_path):
 
 def test_chat_no_image_uses_raw_content(client, monkeypatch):
     """回归：无图请求 fused_query 为空 → stream_answer 收到原始 query。"""
-    c, _, _ = client
+    c, _ = client
     seen: dict = {}
     monkeypatch.setattr("app.api.chat.stream_answer", _capture_stream(seen))
 
@@ -1162,68 +976,3 @@ def test_chat_no_image_uses_raw_content(client, monkeypatch):
     assert seen["query"] == "退货运费谁出"
 
 
-def test_chat_stream_disconnect_refund_survives_cancellation(client, monkeypatch):
-    """S2（2026-09-03 并发审计）：断连取消下 finally 退款必须执行。
-
-    真实断连路径：starlette StreamingResponse 的 listen_for_disconnect 收到
-    http.disconnect → task group CancelScope 取消 → 取消注入生成器内部 await 点。
-    anyio 取消是**粘性**的（scope 内所有后续 checkpoint 再抛 CancelledError）→
-    finally 内裸 ``await run_in_threadpool(quota.refund)`` 立即再抛 → 退款永远
-    到不了 quota.refund，用户额度被静默侵蚀（排水同理到不了）。
-
-    复现方式：直接驱动端点返回的 body_iterator（与 starlette stream_response
-    消费同一 async generator），挂起型 stream_answer 把生成器停在内部 await，
-    消费方 anyio.move_on_after 取消 = 真实断连的取消形态。
-    """
-    import anyio
-    from app.api.chat import ChatStreamReq, chat_stream
-
-    _, Local, calls = client
-
-    class _HangStream:
-        """intent 后挂起：消费方取消注入生成器内部 await 点（真实断连形态）。"""
-
-        @staticmethod
-        async def __call__(query, kb_id, history=None, top_k=5, **kwargs):
-            yield ("intent", {"intent": "qa"})
-            await anyio.sleep(30)
-            yield ("done", {"message_id": ""})
-
-    monkeypatch.setattr("app.api.chat.stream_answer", _HangStream())
-
-    class _FakeRequest:
-        async def is_disconnected(self):
-            return False
-
-        class _State:
-            request_id = "disc-refund-trace"
-
-        state = _State()
-
-    async def _main():
-        req = ChatStreamReq(
-            session_id="11111111-1111-1111-1111-111111111111",
-            content="退货运费谁出",
-            stream=True,
-            client_msg_id="disc-refund-1",
-        )
-        with Local() as db:
-            resp = await chat_stream(
-                req,
-                _FakeRequest(),
-                {"sub": "22222222-2222-2222-2222-222222222222", "role": "user"},
-                db,
-            )
-
-            async def _drive():
-                async for _chunk in resp.body_iterator:
-                    pass  # 消费生成器（与 starlette stream_response 同构）
-
-            with anyio.move_on_after(0.3):
-                await _drive()
-
-    anyio.run(_main)
-    assert calls["consumed"] == 0, (
-        f"断连取消下退款未执行（consumed={calls['consumed']}）——finally 内裸 await "
-        "被粘性 CancelledError 杀死，配额被静默侵蚀"
-    )

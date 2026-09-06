@@ -16,8 +16,6 @@ vi.mock('@/api/auth', () => ({
   me: vi.fn(async (): Promise<MeResp> => ({
     user_id: 'u1',
     role: 'user',
-    quota_left: 5,
-    quota_total: 200,
   })),
   register: vi.fn(),
   refresh: vi.fn(),

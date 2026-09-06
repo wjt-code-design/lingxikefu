@@ -5,12 +5,12 @@
     → token{delta}* → sources → done{message_id}
     异常任一点 → error{code,message}（fail-closed，不静默）
 
-职责：校验 session 归属 → 配额预检 → 写 user 消息 → RAG 流式 → 落库 assistant 消息
-+ message_sources 真源（知识来源唯一真源）→ 成功扣减配额。
+职责：校验 session 归属 → 写 user 消息 → RAG 流式 → 落库 assistant 消息
++ message_sources 真源（知识来源唯一真源）。
 MVP 单知识库策略：取当前租户最新一个 KB（多 KB 选择留 Phase2）。
 
-R-6 断连语义（R2 已解决）：配额在 stream 开始前原子扣减（防刷）+ client_msg_id 幂等；
-若中途断开 / 知识库为空 / 系统异常，refund 回滚已扣配额（不白扣）；重试同一 client_msg_id 不重复扣费。
+（2026-09-06 额度系统移除：原「配额原子扣减 + client_msg_id 幂等 + 失败退款」
+机制整体下线，问答不再限次；断连/无 KB/异常路径不再涉及计费回滚。）
 """
 from __future__ import annotations
 
@@ -49,7 +49,6 @@ from app.services.kb_lookup import doc_titles as _kb_doc_titles_sync
 from app.services.kb_lookup import get_latest_kb_id as _latest_kb_id
 from app.services.kb_lookup import kb_version_str as _kb_version_str
 from app.services.quick_answers import match_quick
-from app.services.quota import get_quota_service
 from app.services.rag_service import _split_tokens as _split_answer
 from app.services.rag_service import stream_answer
 from app.services.session_context import build_handoff_summary, classify_handoff_risk
@@ -79,8 +78,6 @@ class ChatStreamReq(BaseModel):
     session_id: str = Field(min_length=1)
     content: str = Field(min_length=1, max_length=4000)
     stream: bool = True
-    # R2：客户端提问幂等键（前端生成、重试复用）——配额幂等扣费，断连重试不重复扣
-    client_msg_id: str | None = Field(default=None, max_length=64)
     # v1.3 图片理解：图片文件路径列表（前端上传后存储到临时目录，传递路径给后端）
     image_paths: list[str] = Field(default_factory=list)
 
@@ -276,33 +273,11 @@ async def chat_stream(
     )
     is_agent_reply = session_owner_id != user_id  # 代答：来源 agent/admin
 
-    # 2) 配额原子扣减闸门（M2：try_consume 修复 TOCTOU，fail-closed 超额拒答）
-    #    R2：client_msg_id 作幂等键 —— 断连重试同一请求不重复扣费
-    #    P4：超额统一走 HTTP 429（不再 HTTP200+SSE error 双面不一致——客户端语义应看状态码）
-    #    C1：try_consume 内是同步 Redis，必须搬出事件循环线程（否则 Redis 挂起冻结全服务）
-    #    M8 收尾：quota_token 为请求级归属凭证——try_consume 与全部 refund 路径成对传递，
-    #    refund 按 token 校验 marker 归属后才回滚（幂等命中的并发请求退款不误退持锁者配额）
-    quota = get_quota_service()
-    quota_token = uuid.uuid4().hex
-    allowed, _ = await run_in_threadpool(
-        quota.try_consume, str(user_id), 1,
-        idem_key=req.client_msg_id, token=quota_token,
-    )
-    if not allowed:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "今日问答额度已用完")
-
-    # 3) 写 user 消息（T5：代答时记录 agent 身份，溯源用）
-    #    R2：落库失败 → 回滚已扣配额（消息没写成不扣费）
+    # 2) 写 user 消息（T5：代答时记录 agent 身份，溯源用）
     #    H2 补漏：两次 commit 搬 worker 线程
-    try:
-        user_msg = await run_in_threadpool(
-            _persist_user_message, db, session_id, req.content, is_agent_reply, user_id
-        )
-    except Exception:
-        await run_in_threadpool(
-            quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-        )
-        raise
+    user_msg = await run_in_threadpool(
+        _persist_user_message, db, session_id, req.content, is_agent_reply, user_id
+    )
 
     kb_id = await run_in_threadpool(_latest_kb_id, db)
 
@@ -319,32 +294,17 @@ async def chat_stream(
         # P0-1：请求级 trace_id 注入 contextvar（RAG/Agent/工具日志统一带 trace_id；
         # asyncio 自动传播到同请求协程，anyio 线程池 worker 复制 context 同样生效）
         set_trace_id(trace_id)
-        # S1（外部审查 2026-08-28）：配额已在上方原子扣减（R2 扣费在生成前），gen 一旦开始
-        # 执行即「已扣费未交付」。consumed=True 表示配额仍被持有：未成功交付（done）的任何
-        # 出口（error 事件/断连/异常）都由 finally 统一退款；done 分支在 assistant 落库
-        # 成功后置 False（计费成立，不再退）。此前 error 事件只转发不退款——用户额度被静默侵蚀。
-        # M6（bughunt-concurrency）：try/finally 包住整个 gen 体——此前退款 finally 只护住
-        # 内层 try（LLM 生成段），_fetch_history/Router/ImageAgent 等早期异常直接冒泡
-        # （已扣费无退款无 error 事件）；现在退款+降级排水是真正的单一收口。
-        consumed = True
+        # M6（bughunt-concurrency）：try/finally 包住整个 gen 体——前置段
+        # （_fetch_history/Router/ImageAgent 等）异常冒泡时，ctx 可能已构建，
+        # 降级排水仍需到达（防静默改路径）。额度系统移除后本 finally 只剩排水职责。
         ctx: SharedContext | None = None
         prepared = False  # M6：前置段（历史/状态机/Router/ImageAgent/订单工具）完成标志
         try:
             # BUG-09：客户端已断开 → 提前终止，停止后续 LLM 调用（避免浪费 token）
             if await request.is_disconnected():
                 logger.info("chat stream aborted: client disconnected (pre)")
-                # R2：断连回滚配额，不白扣（token 校验归属）
-                await run_in_threadpool(
-                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-                )
-                consumed = False  # 本路径已显式退款，外层 finally 不再重复退
                 return
             if kb_id is None:
-                # R2：无知识库未生成 → 不扣费（token 校验归属）
-                await run_in_threadpool(
-                    quota.refund, str(user_id), 1, idem_key=req.client_msg_id, token=quota_token
-                )
-                consumed = False  # 同上：显式退款后置位，防外层 finally 双退
                 yield _sse({"event": "error", "data": {"code": "RAG_NO_KB", "message": "知识库为空，请先导入文档"}})
                 return
 
@@ -422,36 +382,16 @@ async def chat_stream(
             prepared = True  # M6：前置段全部完成（此行未达 = 异常/提前 return）
 
         finally:
-            # M6 收口：前置段异常冒泡时（prepared=False 且 consumed=True）退款——
-            # 此前退款 finally 只护 LLM 生成段，前置段异常已扣费但无退款无 error 事件。
-            # 前置段正常结束（prepared=True）不在此退，由内层段 finally 统一收口。
-            # 断连/无 KB 路径已显式退款并置 consumed=False，此处跳过（防双退）。
-            if consumed and not prepared:
-                # S2（2026-09-03 并发审计）：断连取消是 anyio 粘性取消——finally 内
-                # 裸 await 立即再抛 CancelledError，退款到不了 quota.refund。
-                # CancelScope(shield=True) 隔离取消风暴：断连照退不白扣；
-                # 退款自身异常吞掉（不阻断排水收口，quota.refund 幂等标记兜底重试）。
-                try:
-                    with anyio.CancelScope(shield=True):
-                        await run_in_threadpool(
-                            quota.refund,
-                            str(user_id),
-                            1,
-                            idem_key=req.client_msg_id,
-                            token=quota_token,
-                        )
-                except Exception:  # noqa: BLE001 - shield 已挡取消，这里只剩业务异常
-                    logger.exception("前置段退款失败（quota.refund 自身异常）")
-                consumed = False
-            # 前置段异常时 ctx 可能已构建（Router 记录的降级需排水）；正常路径由
-            # 内层段 finally 排水（drain 不幂等，双调用会双计数，此处条件化防重复）
+            # M6 收口：前置段异常时 ctx 可能已构建（Router 记录的降级需排水）；
+            # 正常路径由内层段 finally 排水（drain 不幂等，双调用会双计数，此处条件化防重复）。
+            # 额度系统移除（2026-09-06）：原「前置段异常退款」分支随配额机制一并下线。
             if not prepared and ctx is not None:
                 drain_degraded(ctx.degraded, trace_id=trace_id)
         try:
             # BUG-09：RAG/LLM 生成前再确认连接（检索可能耗时数秒）
             if await request.is_disconnected():
                 logger.info("chat stream aborted: client disconnected (pre-llm)")
-                return  # S1：consumed 仍 True → finally 统一退款（R2 断连回滚）
+                return
             quick_ans = await run_in_threadpool(match_quick, req.content)
 
             # 2026-08-22 Phase C：读取用户画像注入 prompt（fail-open：读取异常 → 不注入，回答照常）。
@@ -516,7 +456,7 @@ async def chat_stream(
                 # BUG-09：每收到一个事件检查客户端连接，断开即终止（不再消费下一个事件）
                 if await request.is_disconnected():
                     logger.info("chat stream aborted: client disconnected during %s", event)
-                    return  # S1：consumed 仍 True → finally 统一退款（R2 断连回滚）
+                    return
                 if event == "intent":
                     # R-2：真实意图（qa/handoff/chitchat）——落库用 + 转发客户端
                     intent = data.get("intent", "qa")
@@ -600,9 +540,6 @@ async def chat_stream(
                     msg_id = await _persist_answer(
                         db, session_id, content, source_payloads, intent, meta
                     )
-                    # S1：assistant 已落库 = 交付成立，计费生效（finally 不再退）。
-                    # 置于落库成功之后——落库失败仍走 finally 退款（不白扣）。
-                    consumed = False
                     # 2026-08-22 Phase B：assistant 落库后增量采集用户画像（幂等键=user_msg.id；
                     # fail-open：采集异常不影响响应；手打/快捷问题都记主题与实体）。
                     # 归属用 session_owner_id（会话 owner）而非当前操作者：agent/admin 代答时不把画像记到客服头上。
@@ -672,34 +609,14 @@ async def chat_stream(
                         done_data["answer"] = data["fixed_content"]
                     yield _sse({"event": "done", "data": done_data})
                 elif event == "error":
-                    # S1：error = 已扣费但未交付（rag_service 两个 error 源都在扣费后），
-                    # consumed 保持 True → finally 统一退款（此前只转发不退款，额度被静默侵蚀）。
                     yield _sse({"event": "error", "data": data})
         except Exception:  # pragma: no cover - 兜底，不向客户端泄漏内部细节
             logger.exception("chat stream 处理异常")
             yield _sse({"event": "error", "data": {"code": "SYS_ERROR", "message": "服务异常，请稍后重试"}})
         finally:
-            # S1：未交付出口统一退款（error 事件/断连/异常），单一收口防泄漏也防双退；
-            # done 已置 consumed=False（交付成立不退）。quota.refund 内部幂等标记再兜底一层。
-            # S2（2026-09-03 并发审计）：断连路径的取消是 anyio 粘性取消——finally 内
-            # 裸 await 立即再抛 CancelledError，退款永远到不了 quota.refund（用户额度
-            # 被静默侵蚀）。CancelScope(shield=True) 把退款隔离出取消风暴；退款自身
-            # 异常吞掉（不阻断排水收口）；排水是同步函数不受取消影响，无条件到达。
-            if consumed:
-                try:
-                    with anyio.CancelScope(shield=True):
-                        await run_in_threadpool(
-                            quota.refund,
-                            str(user_id),
-                            1,
-                            idem_key=req.client_msg_id,
-                            token=quota_token,
-                        )
-                except Exception:  # noqa: BLE001 - shield 已挡取消，这里只剩业务异常
-                    logger.exception("未交付退款失败（quota.refund 自身异常）")
-                consumed = False
             # P2-2：Agent 降级排水——正常结束/断连/异常全路径统一计数 + 结构化日志
-            # （防静默改路径：降级率从此可统计、可告警）
+            # （防静默改路径：降级率从此可统计、可告警）。
+            # 额度系统移除（2026-09-06）：原「未交付出口统一退款」收口随配额机制下线。
             drain_degraded(ctx.degraded, trace_id=trace_id)
 
     return StreamingResponse(gen(), media_type="text/event-stream")

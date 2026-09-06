@@ -191,7 +191,7 @@ export function ChatContainer({
   const sessionIdRef = useRef<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null); // I-1：会话创建失败提示
-  const [retryText, setRetryText] = useState<{ text: string; clientMsgId: string } | null>(null); // U1：最近失败消息 → 一键重试（含幂等键，重试复用不重复扣费）
+  const [retryText, setRetryText] = useState<string | null>(null); // U1：最近失败消息 → 一键重试（2026-09-06 额度移除：幂等键随配额机制下线，重试直接重发）
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const sessionParam = searchParams.get('session');
@@ -215,8 +215,7 @@ export function ChatContainer({
   const chatLayout: 'self' | 'observe' = isStaff ? 'observe' : 'self';
   // 当前流式对应的用户消息（P0-1：done/error 时按 id 定位并更新；text 用于失败重试兜底）
   // C1/C2：记录发起流时的 user 消息 + 会话；finalize 时比对 sessionId 防串台、防 ref 覆盖丢回答
-  // R2：clientMsgId 为客户端提问幂等键（重试复用，配额幂等扣费）
-  const streamingUserRef = useRef<{ id: string; text: string; sessionId: string | null; clientMsgId: string | null } | null>(null);
+  const streamingUserRef = useRef<{ id: string; text: string; sessionId: string | null } | null>(null);
   // P0-4：手动转人工结果气泡（独立于 SSE 流，HTTP 响应驱动）
   const [manualTicket, setManualTicket] = useState<{ id: string; loading: boolean; error: string | null } | null>(null);
   // W5：建单结果气泡（与转人工独立；仅记录工单，不改变介入视角）
@@ -443,7 +442,7 @@ export function ChatContainer({
       return [...next, assistant];
     });
     // U1：失败时记住用户消息 → Composer 旁"重试"按钮；成功/新发送时清空（重试复用幂等键，不重复扣费）
-    setRetryText(stage === 'error' && u.clientMsgId ? { text: u.text, clientMsgId: u.clientMsgId } : null);
+    setRetryText(stage === 'error' ? u.text : null);
     // P2-2：成功完成一轮对话 → 轮次 +1（done 才计，error 不计）
     if (stage === 'done') setTurnCount((n) => n + 1);
     // 快捷话术标记推送：每轮 finalize 覆盖（done 带 answer_source=quick；普通轮 undefined 清除）
@@ -460,7 +459,7 @@ export function ChatContainer({
   }, [stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, sessionId, onAnswerSourceChange]);
 
   const onSend = useCallback(
-    async (text: string, clientMsgId?: string): Promise<boolean> => {
+    async (text: string): Promise<boolean> => {
       // D1：未登录不发请求（避免 401 硬跳登录丢嵌入上下文）——提示登录并保留输入
       if (!authed) {
         setCreateError('登录后即可开始对话');
@@ -529,16 +528,16 @@ export function ChatContainer({
         }
         setCreating(false);
       }
-      // R2/C4：客户端提问幂等键（重试复用，配额幂等扣费）；本地消息 id 用稳定值，done 后对齐后端真 id
-      const cmid = clientMsgId || `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      // C4：本地消息 id 用稳定值，done 后对齐后端真 id
+      const cmid = `c-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
       const uid = `u-${cmid}`;
-      streamingUserRef.current = { id: uid, text, sessionId: sid, clientMsgId: cmid };
+      streamingUserRef.current = { id: uid, text, sessionId: sid };
       setMessages((prev) => [
         ...prev,
         { id: uid, role: 'user', content: text, status: 'sending', createdAt: Date.now() },
       ]);
       try {
-        await stream({ session_id: sid!, content: text, client_msg_id: cmid });
+        await stream({ session_id: sid!, content: text });
       } catch {
         // stream 内部错误已通过 SSE error 事件处理；此处兜底
       }
@@ -547,9 +546,9 @@ export function ChatContainer({
     [sessionId, stream, streaming, isStaff, intervened, authed]
   );
 
-  // U1：一键重试——重发失败的那条用户消息（复用幂等键，后端不重复扣费）
+  // U1：一键重试——重发失败的那条用户消息
   const onRetry = useCallback(() => {
-    if (retryText) onSend(retryText.text, retryText.clientMsgId);
+    if (retryText) onSend(retryText);
   }, [retryText, onSend]);
 
   // P0-4 / W5：主动转人工。视角切换(干预)立即乐观生效，不受后端成败影响；
@@ -885,7 +884,7 @@ export function ChatContainer({
               <Composer
                 disabled={streaming || creating}
                 onSend={onSend}
-                retry={retryText ? { text: retryText.text, onRetry } : null}
+                retry={retryText ? { text: retryText, onRetry } : null}
                 onEscalate={undefined}
                 onRegisterFill={registerFill}
                 onStop={stop}
@@ -896,7 +895,7 @@ export function ChatContainer({
           <Composer
             disabled={streaming || creating}
             onSend={onSend}
-            retry={retryText ? { text: retryText.text, onRetry } : null}
+            retry={retryText ? { text: retryText, onRetry } : null}
             onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
             onRegisterFill={registerFill}
             onStop={stop}

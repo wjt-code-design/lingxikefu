@@ -51,7 +51,7 @@ vi.mock('@/api/tickets', () => ({ escalateSession: vi.fn().mockResolvedValue({ t
 function Wrapper({ children }: { children: React.ReactNode }) {
   useAuthStore.setState({
     token: 't', refreshToken: 't', role: 'user',
-    user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+    user: { user_id: 'u', role: 'user' },
   });
   return (
     <ConfigProvider>
@@ -205,7 +205,7 @@ describe('P3-⑫ 历史加载 stale 守卫', () => {
     );
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'user',
-      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'user' },
     });
     render(
       <ConfigProvider>
@@ -263,7 +263,7 @@ describe('B1-3 轮询 stale 守卫', () => {
       });
       useAuthStore.setState({
         token: 't', refreshToken: 't', role: 'user',
-        user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+        user: { user_id: 'u', role: 'user' },
       });
       render(
         <ConfigProvider>
@@ -310,7 +310,7 @@ describe('B1-4 首条消息后新建清态', () => {
   it('发送首条消息后点新建 → 消息清空且再发送创建新会话', async () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'user',
-      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'user' },
     });
     render(
       <ConfigProvider>

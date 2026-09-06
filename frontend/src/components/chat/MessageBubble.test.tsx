@@ -13,7 +13,7 @@ function renderBubble(
 ) {
   useAuthStore.setState({
     token: 't', refreshToken: 't', role,
-    user: { user_id: role === 'user' ? 'u' : 's', role, quota_left: 10, quota_total: 200 },
+    user: { user_id: role === 'user' ? 'u' : 's', role },
   });
   return render(
     <MessageBubble
@@ -62,7 +62,7 @@ describe('MessageBubble 工具来源徽章（T3.3）', () => {
   it('user 角色消息即使误带 tool 也不渲染徽章', () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'user',
-      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'user' },
     });
     render(
       <MessageBubble
@@ -108,7 +108,7 @@ describe('MessageBubble 引用角标点击联动（批次 1）', () => {
   it('点击 sup 不误切溯源面板（onSelect 不被调用）', () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'agent',
-      user: { user_id: 's', role: 'agent', quota_left: 10, quota_total: 200 },
+      user: { user_id: 's', role: 'agent' },
     });
     const onSelect = vi.fn();
     render(
@@ -206,7 +206,7 @@ describe('MessageBubble AI 气泡布局修正（2026-09-03）', () => {
   it('user / agent 角色不渲染 .chat-msg__actions（设计意图：仅 AI 有底部操作行）', () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'user',
-      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'user' },
     });
     const { rerender } = render(
       <MessageBubble msg={{ id: 'u1', role: 'user', content: 'hi' }} onRate={vi.fn()} />,
@@ -268,7 +268,7 @@ describe('MessageBubble 顾客端轻量溯源徽标', () => {
   it('user/agent 发言气泡不渲染徽标（仅 AI 回复有溯源）', () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'user',
-      user: { user_id: 'u', role: 'user', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'user' },
     });
     const { rerender } = render(
       <MessageBubble msg={{ id: 'u1', role: 'user', content: 'hi', sources: SOURCES }} onRate={vi.fn()} />,

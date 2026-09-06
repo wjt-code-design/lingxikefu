@@ -102,9 +102,6 @@ class Settings(BaseSettings):
     # --- 安全（M1：登录/注册防爆破限流；测试/内部环境可关闭，prod 必须开启） ---
     RATE_LIMIT_ENABLED: bool = True
 
-    # --- 配额（BU-08：每用户每日问答上限，Redis 计数） ---
-    DAILY_QUOTA_LIMIT: int = 200
-
     # --- 答案缓存（T10：省 token + 提速；可一键降级） ---
     ANSWER_CACHE_ENABLED: bool = True
     # 语义命中余弦阈值：实测 0.95 过高——同义改写句（"如何申请七天无理由退货" vs

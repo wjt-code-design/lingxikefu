@@ -50,7 +50,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
     token: 't',
     refreshToken: 't',
     role: 'agent',
-    user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+    user: { user_id: 'u', role: 'agent' },
   });
   return (
     <ConfigProvider>

@@ -25,7 +25,7 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   '/tickets': { title: '我的工单', group: 'user', breadcrumb: ['服务', '我的工单'] },
   '/faq': { title: '帮助中心', group: 'user', breadcrumb: ['服务', '帮助中心'] },
   // UI 审查低20：/help 已重定向到 /faq，不再作为独立菜单/展示项（避免普通用户出现两个"帮助中心"）
-  '/profile': { title: '个人中心', group: 'user', breadcrumb: ['账户', '个人中心'] },
+  // 2026-09-06：/profile 个人中心随额度系统整体移除（元信息一并删除，防 RolesPage 幽灵菜单）
   // 死功能修复（2026-09-06）：/feedback 补入菜单后补齐路由元信息（此前孤儿页无派生元）
   '/feedback': { title: '意见反馈', group: 'user', breadcrumb: ['账户', '意见反馈'] },
 

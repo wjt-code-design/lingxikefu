@@ -51,15 +51,7 @@ def client(monkeypatch, tmp_path):
         db.add(KnowledgeBase(id=uuid.UUID("33333333-3333-3333-3333-333333333333"), name="e2e库"))
         db.commit()
 
-    # 配额 mock
-    class FakeQuota:
-        def try_consume(self, *a, **k):
-            return (True, 0)
-
-        def refund(self, *a, **k):
-            return 0
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())
+    # （2026-09-06 额度系统移除：原 FakeQuota patch 随配额机制下线）
     monkeypatch.setattr("app.api.chat._latest_kb_id", lambda db: uuid.UUID("33333333-3333-3333-3333-333333333333"))
 
     # 检索强制低分拒答（触发澄清链）——整体 patch search_kb（steps/retrieve 函数内

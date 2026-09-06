@@ -45,9 +45,8 @@ const KbSearchPage = lazy(() => import('@/pages/agent/KbSearchPage'));
 const FaqPage = lazy(() => import('@/pages/FaqPage'));
 // D2：用户侧「我的工单」（SideNav/ROUTE_META 早已注册 /tickets，缺页面致 404）
 const MyTicketsPage = lazy(() => import('@/pages/MyTicketsPage'));
-// T4'：新路由（403/个人中心/服务首页）
+// T4'：新路由（403/服务首页；/profile 个人中心随 2026-09-06 额度系统移除）
 const ErrorPage = lazy(() => import('@/pages/ErrorPage'));
-const ProfilePage = lazy(() => import('@/pages/ProfilePage'));
 const LandingPage = lazy(() => import('@/pages/LandingPage'));
 const UserFeedbackPage = lazy(() => import('@/pages/FeedbackPage'));
 
@@ -100,18 +99,6 @@ export function AppRoutes() {
           }
         >
           <Route index element={<ChatPage />} />
-        </Route>
-
-        {/* T4'：个人中心（user/agent/admin 均可；/auth/me 已有） */}
-        <Route
-          path="/profile"
-          element={
-            <RequireAuth>
-              <AdminLayout />
-            </RequireAuth>
-          }
-        >
-          <Route index element={<ProfilePage />} />
         </Route>
 
         {/* D2：用户侧我的工单（登录可见；数据按 Session.user_id 后端隔离） */}

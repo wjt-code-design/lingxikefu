@@ -31,7 +31,7 @@ describe('D4：user 角色通知铃铛', () => {
     useAuthStore.setState({
       token: 't',
       refreshToken: 'r',
-      user: { user_id: 'u1', role: 'user', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u1', role: 'user' },
       role: 'user',
     });
   });
@@ -49,7 +49,7 @@ describe('D4：user 角色通知铃铛', () => {
 
   it('agent 角色保持渲染（回归保护）', () => {
     useAuthStore.setState({
-      user: { user_id: 'a1', role: 'agent', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'a1', role: 'agent' },
       role: 'agent',
     });
     renderBell();

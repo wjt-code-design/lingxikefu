@@ -330,7 +330,7 @@ def test_draft_worker_missing_ticket_noop(monkeypatch):
 
 @pytest.fixture
 def chat_client(monkeypatch):
-    """/chat/stream 最小环境（同 test_chat_api 手法：mock quota/kb，真实 conv_state）。"""
+    """/chat/stream 最小环境（同 test_chat_api 手法：mock kb，真实 conv_state）。"""
     Local = _sqlite(
         [
             SessionModel.__table__, Message.__table__,
@@ -352,17 +352,7 @@ def chat_client(monkeypatch):
         db.add(KnowledgeBase(id=KB_ID, name="星河测试库"))
         db.commit()
 
-    class FakeQuota:
-        def left_today(self, _uid):
-            return 10
-
-        def try_consume(self, _uid, n=1, idem_key=None, content=None, token=None):
-            return (True, 0)
-
-        def refund(self, _uid, n=1, idem_key=None, content=None, token=None):
-            return 0
-
-    monkeypatch.setattr("app.api.chat.get_quota_service", lambda: FakeQuota())
+    # （2026-09-06 额度系统移除：原 FakeQuota patch 随配额机制下线）
     monkeypatch.setattr("app.api.chat._latest_kb_id", lambda db: KB_ID)
 
     with TestClient(app) as c:

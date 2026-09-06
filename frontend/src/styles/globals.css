@@ -106,12 +106,6 @@ body {
 .landing__feature:nth-child(3) { animation-delay: 160ms; }
 
 /* Profile 卡片入场 */
-.profile > .ant-card {
-  animation: card-in var(--dur-page) var(--ease-out) both;
-}
-.profile > .ant-card:nth-child(1) { animation-delay: 0ms; }
-.profile > .ant-card:nth-child(2) { animation-delay: 60ms; }
-.profile > .ant-card:nth-child(3) { animation-delay: 120ms; }
 
 /* FAQ 条目 hover 微交互增强 */
 .faq-item {
@@ -2712,197 +2706,18 @@ body > textarea[style*="visibility:hidden"] {
 
 /* Profile 个人中心移动端响应式 */
 @media (max-width: 768px) {
-  .profile {
-    padding: 16px;
-    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  }
-  .profile__hero {
-    flex-direction: column;
-    text-align: center;
-    gap: 16px;
-  }
-  .profile__hero-meta {
-    justify-content: center;
-    flex-wrap: wrap;
-  }
-  .profile__quota-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-  }
-  .profile__timeline-item {
-    gap: 10px;
-  }
 }
 
 /* ========== Profile 个人中心 ========== */
-.profile {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 32px 24px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.profile-loading {
-  display: block;
-  margin: 80px auto;
-}
 
 /* Hero 卡片（大头像 + 信息） */
-.profile__hero-card {
-  background: linear-gradient(135deg, rgba(83, 159, 216, 0.04) 0%, rgba(150, 200, 232, 0.08) 100%);
-  border: 1px solid var(--glass-border);
-  backdrop-filter: var(--glass-blur);
-}
-.profile__hero {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
-.profile__avatar {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #539FD8, #3E7CB1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 28px;
-  color: #fff;
-  flex-shrink: 0;
-  box-shadow: 0 4px 12px rgba(83, 159, 216, 0.25);
-}
-.profile__avatar-initial {
-  position: absolute;
-  bottom: -4px;
-  right: -4px;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: #4DA07F;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #fff;
-}
-.profile__hero-info {
-  flex: 1;
-  min-width: 0;
-}
-.profile__name {
-  margin: 0 0 8px 0 !important;
-  font-size: 22px !important;
-  font-weight: 600 !important;
-  color: var(--text-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.profile__hero-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--text-3);
-}
-.profile__hero-sep {
-  color: var(--border);
-}
-.profile__hero-quota-label {
-  color: var(--text-3);
-}
-.profile__hero-quota {
-  font-weight: 600;
-  /* a11y：额度数字承载信息，brand on 近白 hero 卡 2.7 不达 AA → brand-dark */
-  color: var(--color-brand-dark);
-}
-.profile__hero-quota-total {
-  color: var(--text-4);
-}
 
 /* 额度进度条卡片 */
-.profile__quota-card {
-  background: #fff;
-  border: 1px solid var(--glass-border);
-}
-.profile__quota-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  margin-bottom: 12px;
-}
 
 /* 时间线卡片 */
-.profile__timeline-card {
-  background: #fff;
-  border: 1px solid var(--glass-border);
-}
-.profile__timeline {
-  display: flex;
-  flex-direction: column;
-}
-.profile__timeline-item {
-  display: flex;
-  gap: 12px;
-  padding: 8px 0;
-}
-.profile__timeline-rail {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 12px;
-  flex-shrink: 0;
-}
-.profile__timeline-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--color-brand);
-  flex-shrink: 0;
-  margin-top: 6px;
-}
-.profile__timeline-line {
-  width: 2px;
-  flex: 1;
-  background: var(--glass-border);
-  margin-top: 4px;
-}
-.profile__timeline-content {
-  flex: 1;
-  min-width: 0;
-}
-.profile__timeline-title {
-  font-size: 15px;
-  color: var(--text-1);
-  font-weight: 500;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.profile__timeline-time {
-  font-size: 13px;
-  color: var(--text-3);
-  margin-top: 4px;
-}
 
 /* 响应式 */
 @media (max-width: 768px) {
-  .profile {
-    padding: 16px;
-  }
-  .profile__hero {
-    flex-direction: column;
-    text-align: center;
-  }
-  .profile__hero-meta {
-    flex-wrap: wrap;
-    justify-content: center;
-  }
 }
 
 /* P1：运营趋势折线图（自绘 SVG，零依赖） */

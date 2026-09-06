@@ -1,7 +1,7 @@
 """模型单测（BU-01 DoD + 规划书红线⑨）：全表含 tenant_id。
 
-注：Quota ORM 模型已于 L5 移除（配额改为 Redis 原子闸门实现，
-见 services/quota.py 与 test_quota.py），故下表集合为 10 张。
+注：Quota ORM 模型已于 L5 移除（配额改 Redis 原子闸门）；2026-09-06 额度系统
+整体移除后 Redis 闸门亦下线，从未有 quotas 表。故下表集合为 10 张。
 """
 from __future__ import annotations
 

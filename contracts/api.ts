@@ -12,7 +12,8 @@
 //   C. 前端私有状态 —— 仅存在于前端 store/组件（如 ChatStage、ChatStreamState），不落契约。
 //
 // 变更流程：改本文件 → 同步后端 Pydantic → 重新生成 api-schema.json → 跑 scripts/check_contracts.py 校验。
-// 版本：v0.3 契约收敛版（R2：新增 ChatStreamReq.client_msg_id 幂等键 + SSE done.user_message_id 消息 id 对齐；
+// 版本：v0.3 契约收敛版（R2：SSE done.user_message_id 消息 id 对齐；提问幂等键
+//   随 2026-09-06 额度系统移除；
 //       回填 Tickets/Customers/Notifications/KnowledgeSearch/FAQ/Roles/AdminSettings/AuditLog/StatsTrend 等全部类型）
 
 export const API_PREFIX = '/api/v1';
@@ -47,8 +48,6 @@ export interface MeResp {
   email?: string;
   phone?: string;
   role: Role;
-  quota_left: number;
-  quota_total: number; // 每日配额上限（2026-08-20 后端补齐，此前恒 undefined）
 }
 
 // ---------- Sessions ----------
@@ -228,7 +227,6 @@ export interface ChatStreamReq {
   session_id: string;
   content: string;
   stream: true;
-  client_msg_id?: string; // R2：客户端提问幂等键（前端生成、重试复用，配额幂等扣费）
   image_paths?: string[]; // v1.3 图片理解：前端上传后的图片路径列表（后端 default_factory=list，缺省空）
 }
 
@@ -337,14 +335,6 @@ export interface OkResp {
   ok: boolean;
 }
 
-// ---------- Quota ----------
-export interface QuotaResp {
-  date: string;
-  used: number;
-  limit: number;
-  left: number;
-}
-
 // ---------- Admin ----------
 export interface HotGap {
   question: string;
@@ -422,15 +412,11 @@ export interface AdminSettingsRag {
 export interface AdminSettingsRateLimit {
   enabled: boolean;
 }
-export interface AdminSettingsQuota {
-  daily_limit: number;
-}
 export interface AdminSettings {
   env: string;
   model: AdminSettingsModel;
   rag: AdminSettingsRag;
   rate_limit: AdminSettingsRateLimit;
-  quota: AdminSettingsQuota;
 }
 
 // ---------- Admin · Audit Logs（Phase4） ----------

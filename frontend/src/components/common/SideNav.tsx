@@ -13,7 +13,6 @@ import {
   SafetyOutlined,
   SettingOutlined,
   TeamOutlined,
-  UserOutlined,
 } from '@ant-design/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -29,7 +28,6 @@ type MenuItem = Required<MenuProps>['items'][number];
  */
 const ICON_MAP: Record<string, React.ReactNode> = {
   '/chat': <MessageOutlined />,
-  '/profile': <UserOutlined />,
   '/feedback': <DislikeOutlined />,
   '/tickets': <FileTextOutlined />,
   '/faq': <BookOutlined />,
@@ -100,9 +98,9 @@ const FALLBACK_MENUS: Record<Role, string[]> = {
     '/agent/customers',
     '/agent/kb-search',
   ],
-  // 死功能修复（2026-09-06）：/profile、/feedback 补入 user 菜单（与后端 ROLE_DEFS 同步），
-  // 复活两个孤儿页面；低20：/help 已重定向 /faq，不再单列
-  user: ['/chat', '/tickets', '/faq', '/profile', '/feedback'],
+  // 2026-09-06：/feedback 补入 user 菜单（与后端 ROLE_DEFS 同步，admin 反馈页上游入口）；
+  // /profile 随额度系统移除；低20：/help 已重定向 /faq，不再单列
+  user: ['/chat', '/tickets', '/faq', '/feedback'],
 };
 
 /**

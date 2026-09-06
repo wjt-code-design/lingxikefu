@@ -49,7 +49,7 @@ vi.mock('@/api/tickets', () => ({
 function Wrapper({ children }: { children: React.ReactNode }) {
   useAuthStore.setState({
     token: 't', refreshToken: 't', role: 'agent',
-    user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+    user: { user_id: 'u', role: 'agent' },
   });
   return (
     <ConfigProvider>
@@ -112,7 +112,7 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
   it('切换会话（→另一会话 / →无参）→ AI 建议卡片重置，旧会话建议不残留', async () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'agent',
-      user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'agent' },
     });
     // 渲染树内挂两个站内导航链接：点击即改 searchParams，模拟客服在会话间切换
     // （rerender 换 initialEntries 不会生效——MemoryRouter 位置仅在首挂载初始化）
@@ -155,7 +155,7 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
   it('在途请求竞态：点推荐后立刻切会话，旧请求返回不落入新会话（卡片不出现）', async () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'agent',
-      user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'agent' },
     });
     // 受控 promise：点「AI 推荐」时挂起，等切换到新会话后才放行，模拟在途请求晚归
     let resolveSuggest!: (v: { text: string; sources: unknown[] }) => void;
@@ -192,7 +192,7 @@ describe('坐席辅助 AI 推荐（批次A）', () => {
   it('「重新生成」绕过结果缓存：请求携带 refresh=true；「AI 推荐」不携带（大扫查修复）', async () => {
     useAuthStore.setState({
       token: 't', refreshToken: 't', role: 'agent',
-      user: { user_id: 'u', role: 'agent', quota_left: 10, quota_total: 200 },
+      user: { user_id: 'u', role: 'agent' },
     });
     render(
       <ConfigProvider>

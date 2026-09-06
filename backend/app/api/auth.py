@@ -24,7 +24,6 @@ from app.schemas.auth import (
 from app.schemas.knowledge import OkResp
 from app.schemas.roles import RoleListResp
 from app.services.auth import AuthError, AuthService
-from app.services.quota import get_quota_service
 from app.services.user_profile_service import reset_profile
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -114,16 +113,11 @@ def me(
     user = svc.repo.get_by_id(UUID(payload["sub"]))
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "user not found")
-    quota_svc = get_quota_service()
-    quota_total = quota_svc.daily_limit()
-    quota_left = max(0, quota_total - quota_svc.used_today(str(user.id)))
     return MeResp(
         user_id=str(user.id),
         email=user.email,
         phone=user.phone,
         role=user.role,
-        quota_left=quota_left,
-        quota_total=quota_total,
     )
 
 

@@ -26,13 +26,14 @@ def client():
 
 
 def test_admin_settings_structure(client):
-    """admin：200 + 分组字段（env/model/rag/rate_limit/quota）与 settings 真源一致。"""
+    """admin：200 + 分组字段（env/model/rag/rate_limit）与 settings 真源一致。"""
     r = client.get(f"{API}/admin/settings", headers=_h(ADMIN, "admin"))
     assert r.status_code == 200
     data = r.json()
     # 顶层分组齐全
-    for group in ("env", "model", "rag", "rate_limit", "quota"):
+    for group in ("env", "model", "rag", "rate_limit"):
         assert group in data
+    assert "quota" not in data  # 额度系统已移除（2026-09-06）
     assert data["env"] == settings.ENV
     # model 分组（2026-08-27 收敛：仅 LongCat，无备用模型）
     assert data["model"]["provider"] == settings.CHAT_PROVIDER
@@ -49,9 +50,8 @@ def test_admin_settings_structure(client):
     assert data["rag"]["answer_cache_enabled"] == settings.ANSWER_CACHE_ENABLED
     assert data["rag"]["answer_cache_threshold"] == settings.ANSWER_CACHE_THRESHOLD
     assert data["rag"]["max_upload_mb"] == settings.MAX_UPLOAD_MB
-    # rate_limit / quota 分组
+    # rate_limit 分组
     assert data["rate_limit"]["enabled"] == settings.RATE_LIMIT_ENABLED
-    assert data["quota"]["daily_limit"] == settings.DAILY_QUOTA_LIMIT
 
 
 def test_admin_settings_forbidden_for_user(client):
