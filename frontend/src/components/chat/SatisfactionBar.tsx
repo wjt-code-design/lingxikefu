@@ -13,13 +13,13 @@ type Rating = (typeof OPTIONS)[number]['value'];
  * P2-2：会话级满意度评价（对话 ≥2 轮后内联出现，不弹窗打扰）。
  * - 与 ThumbsBar 互补：ThumbsBar=逐条回答质量；此处=整段会话体验
  * - 点击即落库（幂等覆盖），评分后消失
+ * 死代码清理（2026-09-06）：旧 busy prop 唯一调用点从不传入（恒 undefined → disabled 恒假），
+ * 防重复提交已由乐观 setRated 承担，故移除。
  */
 export function SatisfactionBar({
   onRate,
-  busy,
 }: {
   onRate: (rating: Rating) => void;
-  busy?: boolean;
 }) {
   const [rated, setRated] = useState(false);
 
@@ -35,7 +35,6 @@ export function SatisfactionBar({
             <Button
               key={o.value}
               size="small"
-              disabled={busy}
               onClick={() => {
                 setRated(true); // 乐观隐藏，防重复提交
                 onRate(o.value);

@@ -1438,12 +1438,6 @@ main h1.ant-typography {
   border-color: var(--color-brand);
   box-shadow: 0 0 0 3px var(--color-brand-soft), var(--shadow-card);
 }
-/* W5：客服视角下输入框居中显示（水平居中于中间列；宽度与气泡列对齐，2026-08-22） */
-.chat-composer--centered {
-  max-width: 860px;
-  margin: 0 auto;
-  width: 100%;
-}
 .chat-composer .ant-input-textarea {
   flex: 1;
 }
@@ -1767,26 +1761,6 @@ body > textarea[style*="visibility:hidden"] {
   text-overflow: ellipsis;
   flex-shrink: 0;
 }
-/* 知识库条目 */
-.wb-kb {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
-  transition: background var(--dur-fast) var(--ease-out);
-}
-.wb-kb:hover {
-  background: rgba(150, 200, 232, 0.12);
-}
-.wb-kb__name {
-  font-size: 13px;
-  color: var(--text-2);
-}
-.wb-kb__meta {
-  font-size: 11px;
-  color: var(--text-4);
-}
 /* 右栏：溯源 */
 .wb-source {
   padding: 6px 8px;
@@ -1832,26 +1806,27 @@ body > textarea[style*="visibility:hidden"] {
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
-/* 右栏：快捷话术 */
-.wb-replies {
+/* P1-3 方案 A（2026-09-06）：快捷话术移到输入框上方（原右栏 .wb-replies 纵向列表已废弃）。
+   横向 chips 换行排布，紧贴 Composer，点击填入输入框。 */
+.chat-quick-replies {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 6px;
+  margin-bottom: 8px;
 }
-.wb-reply {
-  padding: 6px 10px;
+.chat-quick-replies__chip {
+  padding: 4px 12px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--text-2);
   font-size: 12.5px;
-  text-align: left;
   cursor: pointer;
   transition:
     border-color var(--dur-fast) var(--ease-out),
     color var(--dur-fast) var(--ease-out);
 }
-.wb-reply:hover {
+.chat-quick-replies__chip:hover {
   border-color: var(--color-brand);
   color: var(--color-brand-dark);
 }
@@ -1953,13 +1928,6 @@ body > textarea[style*="visibility:hidden"] {
   background: rgba(150, 200, 232, 0.12);
 }
 
-/* P1-3：快捷话术提示 */
-.wb-replies-hint {
-  display: block;
-  margin-top: 6px;
-  font-size: 11px;
-}
-
 /* ---------- V5：品牌化欢迎块（替代 Empty 空态感） ---------- */
 .chat-container__empty-wrap {
   display: flex;
@@ -2046,7 +2014,7 @@ body > textarea[style*="visibility:hidden"] {
 
 /* ---------- I4：自定义按钮统一可见焦点环（键盘可达性） ---------- */
 .wb-session:focus-visible,
-.wb-reply:focus-visible,
+.chat-quick-replies__chip:focus-visible,
 .wb-new:focus-visible,
 .chat-container__hot-btn:focus-visible,
 .chat-source__toggle:focus-visible,

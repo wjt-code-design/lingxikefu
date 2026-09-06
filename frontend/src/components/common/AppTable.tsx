@@ -72,19 +72,15 @@ export function AppTable<T extends object>(props: TableProps<T>) {
   );
 }
 
-/** 通用状态语义色（设计规范 §3.4：状态 Tag 一色一义）。可按需扩展映射。 */
+/** 通用状态语义色（设计规范 §3.4：状态 Tag 一色一义）。可按需扩展映射。
+ *  死代码清理（2026-09-06）：旧含 handoff/pending/ready/failed 四映射——StatusTag
+ *  全部调用点只传工单四态，文档状态走 KnowledgePage 自己的 STATUS_META，均已删除。 */
 export const STATUS_COLOR: Record<string, string> = {
   // 工单状态机（T1）
   open: 'blue', // 待处理
   processing: 'gold', // 处理中
   resolved: 'green', // 已解决
   closed: 'default', // 已关闭
-  // 意图
-  handoff: 'orange', // 转人工（稀缺强调色）
-  // 文档导入
-  pending: 'gold',
-  ready: 'green',
-  failed: 'red',
 };
 
 /** 工单状态中文文案（单一真源：工单页 / 聊天页角标共用；未知状态回退原值）。 */

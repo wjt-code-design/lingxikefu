@@ -8,7 +8,7 @@ import { SourcePanel } from './SourcePanel';
 
 /**
  * 三栏工作台（海盐蓝）：
- *   左 = 历史对话 + 知识库分类 | 中 = 对话窗口 | 右 = RAG 溯源 + 快捷话术
+ *   左 = 历史对话 | 中 = 对话窗口（输入框上方含快捷话术）| 右 = RAG 溯源
  * 桌面：CSS grid 三栏常驻；移动端（<768px）：左右栏折叠为顶部切换（抽屉），对话单栏。
  */
 export function WorkbenchLayout() {
@@ -37,16 +37,8 @@ export function WorkbenchLayout() {
   }, []);
   // A+：历史/溯源默认收起，由对话工具栏图标触发抽屉（桌面/移动统一）；panel 取代原 mobilePanel
   const [panel, setPanel] = useState<'history' | 'source' | null>(null);
-  // P1-3：Composer 的"填入输入框"能力注册到这里，快捷话术点击时调用；
-  // 返回注销函数（P4：Composer 卸载时清空，避免点击写入已卸载实例）
-  const [fillReply, setFillReply] = useState<((t: string) => void) | null>(null);
-  const onRegisterFill = useCallback(
-    (fill: (t: string) => void): (() => void) => {
-      setFillReply(() => fill);
-      return () => setFillReply(null);
-    },
-    [],
-  );
+  // P1-3 方案 A（2026-09-06）：快捷话术已移到输入框上方（ChatContainer 内渲染，
+  // 直接用本地 fillRef 填入）；此处不再持有"填入能力"镜像，右栏抽屉回归纯溯源。
 
   return (
     <div className="wb">
@@ -65,7 +57,7 @@ export function WorkbenchLayout() {
           <ChatContainer
             onSourcesChange={onSourcesChange}
             onAnswerSourceChange={onAnswerSourceChange}
-            onRegisterFill={onRegisterFill}
+            showQuickReplies
             selectedMsgId={selectedMsgId}
             onSelectMessage={onSelectMessage}
           />
@@ -91,12 +83,7 @@ export function WorkbenchLayout() {
         styles={{ body: { padding: 0 } }}
         destroyOnClose
       >
-        <SourcePanel
-          sources={sources}
-          answerSource={answerSource}
-          onUseReply={fillReply ?? undefined}
-          selectedMsgId={selectedMsgId}
-        />
+        <SourcePanel sources={sources} answerSource={answerSource} selectedMsgId={selectedMsgId} />
       </Drawer>
     </div>
   );

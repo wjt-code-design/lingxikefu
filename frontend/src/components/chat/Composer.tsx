@@ -10,17 +10,15 @@ interface ComposerProps {
   retry?: { text: string; onRetry: () => void } | null;
   /** P0-4：主动转人工（会话已创建且非转人工进行中时可用） */
   onEscalate?: () => void;
-  /** P1-3：快捷话术点击 → 填入输入框（callback 而非 ref，WorkbenchLayout 透传给 SourcePanel）。
-   *  返回注销函数：Composer 卸载时父组件不再持有指向已卸载实例的回调。 */
+  /** P1-3：向父级注册"填入输入框"能力（ChatContainer 持有 fillRef，供快捷话术 chips 与
+   *  AI 建议卡「填入」共用）。返回注销函数：Composer 卸载时父组件不再持有指向已卸载实例的回调。 */
   onRegisterFill?: (fill: (text: string) => void) => (() => void) | undefined;
   /** P0-4：停止生成（流式响应中可用） */
   onStop?: () => void;
-  /** W5：客服视角下输入框居中显示（收窄并水平居中于中间列） */
-  centered?: boolean;
 }
 
 /** 输入区：多行文本框 + 发送（流式中禁用；Enter 发送 / Shift+Enter 换行）。 */
-export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, onStop, centered }: ComposerProps) {
+export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, onStop }: ComposerProps) {
   const [text, setText] = useState('');
   const MAX_LEN = 4000;
   const nearLimit = text.length >= MAX_LEN * 0.8;
@@ -43,7 +41,7 @@ export function Composer({ disabled, onSend, retry, onEscalate, onRegisterFill, 
   };
 
   return (
-    <div className={`chat-composer${centered ? ' chat-composer--centered' : ''}`}>
+    <div className="chat-composer">
       <div className="chat-composer__field">
         <Input.TextArea
           value={text}

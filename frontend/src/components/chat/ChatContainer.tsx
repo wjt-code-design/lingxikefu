@@ -139,6 +139,15 @@ function toChatMessage(m: Message): ChatMessage {
   };
 }
 
+/** P1-3 快捷话术（2026-09-06 方案 A：从右栏 SourcePanel 移到输入框上方——
+ *  话术本质是输入辅助，紧邻输入框动线最短；右栏抽屉回归纯「RAG 溯源」。 */
+const QUICK_REPLIES = [
+  '我想转人工客服',
+  '帮我查一下订单物流',
+  '我要申请退款',
+  '积分怎么使用？',
+];
+
 /**
  * 对话挂件容器（FE-03 核心）：
  * - 会话懒创建：首次发问时 POST /sessions 拿 session_id；
@@ -149,7 +158,7 @@ function toChatMessage(m: Message): ChatMessage {
 export function ChatContainer({
   onSourcesChange,
   onAnswerSourceChange,
-  onRegisterFill,
+  showQuickReplies,
   selectedMsgId,
   onSelectMessage,
 }: {
@@ -157,8 +166,9 @@ export function ChatContainer({
   onSourcesChange?: (s: MessageSource[]) => void;
   /** 快捷话术回答标记推送（done.answer_source，每轮 finalize 覆盖；SourcePanel 区分空态用） */
   onAnswerSourceChange?: (v: string | undefined) => void;
-  /** P1-3：快捷话术 → 填入输入框能力注册（WorkbenchLayout 透传给 SourcePanel）返回注销函数 */
-  onRegisterFill?: (fill: (text: string) => void) => (() => void) | undefined;
+  /** P1-3（方案 A 2026-09-06）：是否在输入框上方渲染快捷话术 chips（三栏工作台开启）。
+   *  点击话术直接走本地 fillRef 填入输入框，无需再向父级透传填入能力。 */
+  showQuickReplies?: boolean;
   /** 溯源选中（2026-08-25）：当前被右栏面板查看的 AI 回复 id（来自 WorkbenchLayout，气泡高亮用） */
   selectedMsgId?: string | null;
   /** 点击 AI 回复 → 右栏溯源面板切换（点哪条看哪条；answerSource 透出选中消息的快捷话术标记） */
@@ -214,7 +224,7 @@ export function ChatContainer({
   const [handoffSummary, setHandoffSummary] = useState<SessionDetail['handoff_summary']>(undefined);
   // 批次A：坐席辅助 AI 推荐（observe 视角；手动触发、fail-open 静默）
   const [aiSuggest, setAiSuggest] = useState<{ text: string; sources: MessageSource[]; loading: boolean } | null>(null);
-  // 本地持有 Composer 的填入能力（建议卡片「填入输入框」用）；透传给父级 WorkbenchLayout（SourcePanel 快捷话术）
+  // 本地持有 Composer 的填入能力（建议卡片「填入输入框」+ 快捷话术 chips 共用）
   const fillRef = useRef<((t: string) => void) | null>(null);
   // Phase-2 任务2：建议卡「填入」的一次性标记——填入意图是"代发回复给顾客"，紧随其后的
   // 发送必须走坐席通道（sendAgentMessage，落库 role='agent'），不得当作顾客问题喂 AI 流
@@ -228,20 +238,23 @@ export function ChatContainer({
   const registerFill = useCallback(
     (f: (t: string) => void): (() => void) => {
       fillRef.current = f;
-      const unregister = onRegisterFill?.(f);
-      // P4：返回注销函数——Composer 卸载后清空本地引用与父组件回调，避免残留
+      // P4：返回注销函数——Composer 卸载后清空本地引用，避免残留指向已卸载实例的回调
       return () => {
         fillRef.current = null;
-        unregister?.();
       };
     },
-    [onRegisterFill],
+    [],
   );
 
   // 三栏工作台：sources 变化时同步给右栏溯源面板（引用稳定，避免重复渲染）
+  // 时序修复（2026-09-06）：reset() 把 sources 清零会触发本 effect 推 [] → 右栏被反向清空成
+  // 「暂无引用来源」。但 done/error 后 reset 属正常收尾（右栏应由 finalize 的「自动选中」接管，
+  // 见下方 finalize effect），故 stage=idle 且 sources 空时不推送，避免清空刚完成回答的溯源。
+  // 新提问 stream() 把 stage 置 retrieving（非 idle），空数组仍照常推送清空上一轮，行为不变。
   useEffect(() => {
+    if (sources.length === 0 && stage === 'idle') return;
     onSourcesChange?.(sources);
-  }, [sources, onSourcesChange]);
+  }, [sources, stage, onSourcesChange]);
 
   const streaming = stage === 'retrieving' || stage === 'generating';
 
@@ -268,11 +281,15 @@ export function ChatContainer({
         setManualTicket(null);
         setAiSuggest(null); // 批次A：切会话重置 AI 建议卡片（防旧会话建议残留/填入新会话输入框）
         suggestFillPendingRef.current = false; // Phase-2 任务2：切会话同步清「填入待发」标记
+        // 时序修复配套：同步 effect 现会拦截 reset 的空推送（防 finalize 后右栏被清空），
+        // 故切会话须显式清右栏，否则上一会话溯源残留在新会话面板里。
+        onSourcesChange?.([]);
         reset(); // C1：切到新会话 → abort 旧流
       }
       return;
     }
     if (sessionParam === sessionId) return;
+    onSourcesChange?.([]); // 同上：切会话显式清右栏（历史加载完成后由自动选中重新填充）
     reset(); // C1：切换到另一会话 → abort 旧流
     setIntervened(false); // W5：切会话重置介入视角
     setTicketCreated(null);
@@ -307,7 +324,7 @@ export function ChatContainer({
       .catch(() => {
         // 加载失败保留空态，不阻断页面
       });
-  }, [sessionParam, sessionId, reset]);
+  }, [sessionParam, sessionId, reset, onSourcesChange]);
 
   // Branch 3：顾客端实时接收人工客服消息——3s 轮询 getSessionDetail，
   // 仅追加 role==='agent' 的新消息（按 id 去重；顾客自己的消息由发送/SSE 维护，不参与合并，
@@ -421,6 +438,13 @@ export function ChatContainer({
     if (stage === 'done') setTurnCount((n) => n + 1);
     // 快捷话术标记推送：每轮 finalize 覆盖（done 带 answer_source=quick；普通轮 undefined 清除）
     onAnswerSourceChange?.(stage === 'done' ? answerSource : undefined);
+    // 时序修复（2026-09-06）：done 后自动选中刚完成的回答 → 右栏溯源跟随最新回复。
+    // 与历史加载路径（默认选中最后一条 AI 回复）语义对齐；reset() 清空流内 sources 前
+    // 先把该轮 sources 交给右栏（onSelectMessage 在 onAnswerSourceChange 之后调用，
+    // 同批 setState 后者覆盖前者的 selectedMsgId=null，选中态不被冲掉）。
+    if (stage === 'done') {
+      onSelectMessageRef.current?.(assistant.id, sources, answerSource);
+    }
     reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- messages 不参与依赖（防 done 后点赞等触发重复 finalize）
   }, [stage, tokens, sources, messageId, userMessageId, ticketId, tool, answerSource, error, reset, sessionId, onAnswerSourceChange]);
@@ -801,6 +825,23 @@ export function ChatContainer({
             {createError}
           </div>
         )}
+        {/* P1-3 方案 A（2026-09-06）：快捷话术移到输入框上方——点击即填入（单一真源 fillRef），
+            与「建议卡填入」共用同一填入能力；不再绕道右栏 SourcePanel。 */}
+        {showQuickReplies && (
+          <div className="chat-quick-replies" role="group" aria-label="快捷话术">
+            {QUICK_REPLIES.map((r) => (
+              <button
+                key={r}
+                type="button"
+                className="chat-quick-replies__chip"
+                title="点击填入输入框"
+                onClick={() => fillRef.current?.(r)}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        )}
         {/* W5：客服视角（observe）下保留输入框，并把"转人工 / 建单"按钮移到输入框左侧同一行 */}
         {observeMode ? (
           <div className="chat-observe-row">
@@ -838,7 +879,6 @@ export function ChatContainer({
                 onEscalate={undefined}
                 onRegisterFill={registerFill}
                 onStop={stop}
-                centered={false}
               />
             </div>
           </div>
@@ -850,7 +890,6 @@ export function ChatContainer({
             onEscalate={sessionId && !manualTicket?.loading ? onEscalate : undefined}
             onRegisterFill={registerFill}
             onStop={stop}
-            centered={false}
           />
         )}
       </div>

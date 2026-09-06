@@ -2,32 +2,22 @@ import { Typography } from 'antd';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { ANSWER_SOURCE_QUICK, type MessageSource } from '@/contracts/api';
 
-/** 快捷话术：点击填入输入框（onUse），供用户在 Composer 修改后发送。 */
-const QUICK_REPLIES = [
-  '我想转人工客服',
-  '帮我查一下订单物流',
-  '我要申请退款',
-  '积分怎么使用？',
-];
-
 /**
- * 三栏工作台 · 右栏：RAG 溯源 + 快捷话术（海盐蓝）。
+ * 三栏工作台 · 右栏：RAG 溯源（海盐蓝）。
  * - 溯源：ChatContainer 经 onSourcesChange 推送的最新 sources（doc_title + 相似度 + 片段）
  * - 空态区分（2026-08-25）：answerSource=quick（快捷话术短路，不检索）→ 明示「预置话术无引用」，
  *   避免与「暂无引用」混同被当成故障；普通空态维持原提示。
- * - 快捷话术（P1-3）：点击填入输入框（callback，非 ref；WorkbenchLayout 注册）
+ * - 快捷话术（P1-3 · 方案 A 2026-09-06）：已移到输入框上方（ChatContainer 内渲染），
+ *   本面板回归纯溯源，与工具栏「溯源来源」按钮的入口语义一致。
  */
 export function SourcePanel({
   sources,
   answerSource,
-  onUseReply,
   selectedMsgId,
 }: {
   sources: MessageSource[];
   /** 最近一轮完成的回答来源标记：quick = 快捷话术预置答案（无知识库引用） */
   answerSource?: string;
-  /** P1-3：点击话术 → 填入输入框（WorkbenchLayout 透传的 fill） */
-  onUseReply?: (text: string) => void;
   /** 溯源选中（2026-08-25）：非空表示面板正跟随某条选中的 AI 回复 */
   selectedMsgId?: string | null;
 }) {
@@ -71,26 +61,6 @@ export function SourcePanel({
             ))
           )}
         </div>
-      </div>
-
-      <div className="wb-section">
-        <Typography.Text className="wb-section__title">快捷话术</Typography.Text>
-        <div className="wb-replies">
-          {QUICK_REPLIES.map((r) => (
-            <button
-              key={r}
-              type="button"
-              className="wb-reply"
-              onClick={() => onUseReply?.(r)}
-              title="点击填入输入框"
-            >
-              {r}
-            </button>
-          ))}
-        </div>
-        <Typography.Text type="secondary" className="wb-replies-hint">
-          点击话术填入输入框，可修改后发送
-        </Typography.Text>
       </div>
     </aside>
   );
