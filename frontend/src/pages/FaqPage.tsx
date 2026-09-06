@@ -16,6 +16,7 @@ import {
 import { Link } from 'react-router-dom';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { getFaqDocContent, getPublicFaq } from '@/api/faq';
+import { useAuthStore } from '@/store/authStore';
 import type { DocStatus, FaqKBItem } from '@/contracts/api';
 import './FaqPage.css';
 
@@ -234,6 +235,9 @@ export function FaqPage() {
   const [query, setQuery] = useState('');
   const [activeCat, setActiveCat] = useState('all');
   const [openId, setOpenId] = useState<string | null>(null);
+  // 快速开始卡仅对匿名访客渲染（登录引导 + /login 就地入口）；
+  // 已登录用户看"① 登录账号"属逻辑瑕疵（2026-09-06）
+  const role = useAuthStore((s) => s.role);
 
   // Phase4：真实知识库 → FAQ（有数据展示真实，无数据静态兜底）
   const { data: faqData } = useQuery({
@@ -290,34 +294,36 @@ export function FaqPage() {
   return (
     <div className="faq">
       <div className="faq__inner">
-        {/* 快速开始引导（原 HelpPage 内容合并） */}
-        <section className="faq__quick-start">
-          <div className="faq__quick-start-head">
-            <RocketOutlined className="faq__quick-start-icon" />
-            {/* a11y：level 2（视觉字号由 .faq__quick-start-title pin）——避免 h4 早于 h1 且跳级 */}
-            <Typography.Title level={2} className="faq__quick-start-title">快速开始</Typography.Title>
-          </div>
-          <div className="faq__quick-start-steps">
-            <div className="faq__quick-step">
-              <span className="faq__quick-num">1</span>
-              <strong>登录账号</strong>
-              <span>邮箱或手机号注册后即可使用</span>
+        {/* 快速开始引导（原 HelpPage 内容合并）：仅匿名访客可见 */}
+        {!role && (
+          <section className="faq__quick-start">
+            <div className="faq__quick-start-head">
+              <RocketOutlined className="faq__quick-start-icon" />
+              {/* a11y：level 2（视觉字号由 .faq__quick-start-title pin）——避免 h4 早于 h1 且跳级 */}
+              <Typography.Title level={2} className="faq__quick-start-title">快速开始</Typography.Title>
             </div>
-            <div className="faq__quick-step">
-              <span className="faq__quick-num">2</span>
-              <strong>发起对话</strong>
-              <span>直接输入问题或点击快捷卡片</span>
+            <div className="faq__quick-start-steps">
+              <div className="faq__quick-step">
+                <span className="faq__quick-num">1</span>
+                <strong>登录账号</strong>
+                <span>邮箱或手机号注册后即可使用</span>
+              </div>
+              <div className="faq__quick-step">
+                <span className="faq__quick-num">2</span>
+                <strong>发起对话</strong>
+                <span>直接输入问题或点击快捷卡片</span>
+              </div>
+              <div className="faq__quick-step">
+                <span className="faq__quick-num">3</span>
+                <strong>转人工</strong>
+                <span>问题未解决可一键创建工单</span>
+              </div>
             </div>
-            <div className="faq__quick-step">
-              <span className="faq__quick-num">3</span>
-              <strong>转人工</strong>
-              <span>问题未解决可一键创建工单</span>
-            </div>
-          </div>
-          <Link to="/login">
-            <Button type="primary" size="small">立即体验</Button>
-          </Link>
-        </section>
+            <Link to="/login">
+              <Button type="primary" size="small">立即体验</Button>
+            </Link>
+          </section>
+        )}
 
         {/* 顶部说明条（诚实标注内容来源与页面定位） */}
         <div className="faq__notice" role="note">
