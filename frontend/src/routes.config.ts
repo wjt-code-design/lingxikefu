@@ -26,6 +26,8 @@ export const ROUTE_META: Record<string, RouteMeta> = {
   '/faq': { title: '帮助中心', group: 'user', breadcrumb: ['服务', '帮助中心'] },
   // UI 审查低20：/help 已重定向到 /faq，不再作为独立菜单/展示项（避免普通用户出现两个"帮助中心"）
   '/profile': { title: '个人中心', group: 'user', breadcrumb: ['账户', '个人中心'] },
+  // 死功能修复（2026-09-06）：/feedback 补入菜单后补齐路由元信息（此前孤儿页无派生元）
+  '/feedback': { title: '意见反馈', group: 'user', breadcrumb: ['账户', '意见反馈'] },
 
   // —— 客服工作台（/agent/*）——
   '/agent/dashboard': { title: '工作台首页', group: 'agent', breadcrumb: ['客服工作台', '工作台首页'] },

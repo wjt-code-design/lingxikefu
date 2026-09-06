@@ -11,12 +11,22 @@ import './LogsPage.css';
 
 const { RangePicker } = DatePicker;
 
-/** 动作类型（Select 筛选选项 + 表格 Tag 语义色共用） */
+/** 动作类型（Select 筛选选项 + 表格 Tag 语义色共用）。
+ *  死功能修复（2026-09-06）：旧映射用下划线名（kb_create 等）与后端实际写入的
+ *  点号动作名（audit_log action="kb.create" 等，见 backend/app/api/*.py）完全不符——
+ *  后端 SQL 精确匹配（audit_logs.py）→ 任何动作筛选必空、中文标签永不命中；
+ *  config_change 更是后端不存在写入方的幽灵动作。现对齐真实动作全集。 */
 const ACTION_META: Record<string, { label: string; color: string }> = {
-  kb_create: { label: '知识库新增', color: 'green' },
-  kb_delete: { label: '知识库删除', color: 'red' },
-  role_change: { label: '角色变更', color: 'gold' },
-  config_change: { label: '配置变更', color: 'blue' },
+  'kb.create': { label: '知识库新增', color: 'green' },
+  'kb.delete': { label: '知识库删除', color: 'red' },
+  'doc.upload': { label: '文档上传', color: 'cyan' },
+  'doc.delete': { label: '文档删除', color: 'volcano' },
+  'kb.batch.publish': { label: '批量发布', color: 'geekblue' },
+  'kb.batch.rollback': { label: '批量回滚', color: 'purple' },
+  'user.role': { label: '角色变更', color: 'gold' },
+  'session.delete': { label: '会话删除', color: 'orange' },
+  'ticket.create': { label: '工单创建', color: 'blue' },
+  'ticket.update': { label: '工单更新', color: 'lime' },
 };
 const ACTION_OPTIONS = Object.entries(ACTION_META).map(([value, m]) => ({
   value,
@@ -58,8 +68,11 @@ export function LogsPage() {
       action: action || undefined,
       resource: resource.trim() || undefined,
       actor: actor.trim() || undefined,
-      start: dateRange?.[0] ? dateRange[0].toISOString() : undefined,
-      end: dateRange?.[1] ? dateRange[1].toISOString() : undefined,
+      // 死功能修复（2026-09-06）：后端 start/end 是 date 类型（YYYY-MM-DD，见
+      // audit_logs.py），旧发 toISOString() 完整 datetime → 选日期查询必 422。
+      // 按天粒度格式化（RangePicker 同步去掉 showTime）。
+      start: dateRange?.[0] ? dateRange[0].format('YYYY-MM-DD') : undefined,
+      end: dateRange?.[1] ? dateRange[1].format('YYYY-MM-DD') : undefined,
     });
   };
 
@@ -129,7 +142,7 @@ export function LogsPage() {
             操作审计日志
           </Typography.Title>
           <Typography.Text className="logs-page__subtitle">
-            知识库增删 / 角色变更 / 系统配置变更记录查询
+            知识库 / 文档 / 工单 / 会话 / 角色变更等操作记录查询
           </Typography.Text>
         </div>
       </div>

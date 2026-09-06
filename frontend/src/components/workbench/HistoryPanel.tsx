@@ -3,7 +3,6 @@ import { Spin, Typography, Input, Drawer, Button } from 'antd';
 import { SearchOutlined } from '@ant-design/icons';
 import { BrandEmpty } from '@/components/common/BrandEmpty';
 import { useNavigate } from 'react-router-dom';
-import { listKnowledgeBases } from '@/api/knowledge';
 import { listSessions } from '@/api/sessions';
 import { useAuthStore } from '@/store/authStore';
 import { useState, useMemo } from 'react';
@@ -24,9 +23,11 @@ type DateGroup = {
 };
 
 /**
- * 三栏工作台 · 左栏：历史对话 + 知识库分类（海盐蓝）。
+ * 三栏工作台 · 左栏：历史对话（海盐蓝）。
  * - 历史会话：listSessions（当前用户，按 updated_at 倒序）→ 点击跳 /chat?session=id 加载
- * - 知识库分类：listKnowledgeBases → 只读展示文档数（运营侧标签）
+ * - 知识库分类面板（2026-09-06 移除）：GET /knowledge-bases 是 admin-only，
+ *   客服/agent 打开恒 403 → 面板永远渲染「暂无知识库」假空态，且错误被静默吞掉；
+ *   库管理归 /admin/knowledge，客服检索归「知识快搜」。
  * - 匿名态（/widget 未登录）：不发请求，显示空态（避免 401 噪音）
  * 空态/加载态：antd Empty / Spin（轻量，不做骨架屏）。
  */
@@ -118,12 +119,6 @@ export function HistoryPanel() {
     queryFn: () => listSessions({ page: 1, size: 20 }),
     enabled: authed,
   });
-  const { data: kbs, isLoading: kbsLoading } = useQuery({
-    queryKey: ['workbench-kbs'],
-    queryFn: listKnowledgeBases,
-    enabled: authed,
-  });
-
   const fmtTime = (iso: string) => {
     const d = new Date(iso);
     const now = Date.now();
@@ -221,41 +216,33 @@ export function HistoryPanel() {
             <button
               type="button"
               onClick={() => setShowAll(true)}
-              aria-label={`查看全部 ${filteredSessions.length} 条历史对话`}
-              title="查看全部历史对话"
+              aria-label={`查看已加载的 ${filteredSessions.length} 条历史对话`}
+              title="查看已加载的历史对话"
             >
-              查看全部 ({filteredSessions.length})
+              查看更多 ({filteredSessions.length})
             </button>
           </div>
         )}
       </div>
 
-      <div className="wb-section">
-        <Typography.Text className="wb-section__title">知识库分类</Typography.Text>
-        <div className="wb-kbs">
-          {kbsLoading ? (
-            <Spin size="small" className="wb-spin" />
-          ) : !kbs?.items.length ? (
-            <BrandEmpty title="暂无知识库" hint="创建知识库后，这里会显示分类" />
-          ) : (
-            kbs.items.map((kb) => (
-              <div key={kb.kb_id} className="wb-kb">
-                <span className="wb-kb__name">{kb.name}</span>
-                <span className="wb-kb__meta">{kb.doc_count} 文档</span>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-
       <Drawer
-        title="全部历史对话"
+        title="历史对话"
         open={showAll}
         onClose={() => setShowAll(false)}
         placement="left"
         width={360}
         styles={{ body: { padding: '16px 12px' } }}
       >
+        {/* 口径诚实（2026-09-06）：本面板只拉最近 20 条（listSessions size=20），
+            旧文案「全部历史对话 / 查看全部」是夸大承诺——超出的会话此处不可见，
+            完整记录在「会话列表」页（agent）或后台审计页（admin）。搜索同样是本地过滤，
+            仅作用于这 20 条。 */}
+        {(sessions?.total ?? 0) > (sessions?.items?.length ?? 0) && (
+          <Typography.Text type="secondary" style={{ display: 'block', fontSize: 11, marginBottom: 8 }}>
+            仅加载最近 {sessions?.items?.length ?? 0} 条（共 {sessions?.total} 条），
+            完整记录请见「会话列表」
+          </Typography.Text>
+        )}
         {sessionsError ? (
           <div className="wb-sessions__error" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '12px 0' }}>
             <Typography.Text type="danger">历史对话加载失败</Typography.Text>

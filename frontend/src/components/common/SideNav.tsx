@@ -100,7 +100,9 @@ const FALLBACK_MENUS: Record<Role, string[]> = {
     '/agent/customers',
     '/agent/kb-search',
   ],
-  user: ['/chat', '/tickets', '/faq'], // 低20：/help 已重定向 /faq，不再单列
+  // 死功能修复（2026-09-06）：/profile、/feedback 补入 user 菜单（与后端 ROLE_DEFS 同步），
+  // 复活两个孤儿页面；低20：/help 已重定向 /faq，不再单列
+  user: ['/chat', '/tickets', '/faq', '/profile', '/feedback'],
 };
 
 /**

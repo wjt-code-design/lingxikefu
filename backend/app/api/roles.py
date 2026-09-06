@@ -38,7 +38,10 @@ ROLE_DEFS: list[RoleDef] = [
         role="user",
         name="用户",
         # UI 审查低20：/help 已重定向 /faq，菜单不再单列（避免出现两个"帮助中心"）
-        menus=["/chat", "/tickets", "/faq"],
+        # 死功能修复（2026-09-06）：/profile、/feedback 两页此前有路由有组件有测试，
+        # 却不在任何角色菜单里 → 普通用户只能手敲 URL 才可达，admin 反馈页承诺的
+        # 「用户提交的建议」上游入口是死的。现补入 user 菜单，复活两页。
+        menus=["/chat", "/tickets", "/faq", "/profile", "/feedback"],
         scope="user_self",
     ),
 ]

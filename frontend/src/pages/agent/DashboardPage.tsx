@@ -21,7 +21,8 @@ const STATUS_TEXT: Record<TicketStatus, string> = {
 
 /**
  * 客服工作台首页（Phase3）：今日待办工单 + 实时会话 + 个人接待统计。
- * - 统计：listTickets 全量拉一次分状态计数（open/processing/resolved）
+ * - 统计：listTickets 拉最近 100 条（updated_at desc；后端 size 上限 le=100，
+ *   死功能修复 2026-09-06：旧传 size=200 必 422 → 查询恒失败、KPI 恒零且静默）分状态计数
  * - 待办工单：open/processing 优先展示，工单号前 8 位 + StatusTag + 关联会话跳转
  * - 最近会话：listSessions，点击进入 /chat?session=id
  * 数据统一 @tanstack/react-query，空态用 BrandEmpty。
@@ -29,11 +30,21 @@ const STATUS_TEXT: Record<TicketStatus, string> = {
 export function DashboardPage() {
   const navigate = useNavigate();
 
-  const { data: ticketsData, isLoading: ticketsLoading } = useQuery({
+  const {
+    data: ticketsData,
+    isLoading: ticketsLoading,
+    isError: ticketsError,
+    refetch: refetchTickets,
+  } = useQuery({
     queryKey: ['agent-dashboard-tickets'],
-    queryFn: () => listTickets(undefined, 1, 200),
+    queryFn: () => listTickets(undefined, 1, 100),
   });
-  const { data: sessionsData, isLoading: sessionsLoading } = useQuery({
+  const {
+    data: sessionsData,
+    isLoading: sessionsLoading,
+    isError: sessionsError,
+    refetch: refetchSessions,
+  } = useQuery({
     queryKey: ['agent-dashboard-sessions'],
     queryFn: () => listSessions({ page: 1, size: 50 }),
   });
@@ -179,13 +190,24 @@ export function DashboardPage() {
         <>
           <div className="dash-kpis">
             {/* UI 审查中8：KPI 副文案去中英混杂、口径说明化 */}
-            <KpiCard label="待办工单" value={stats.todo} caption="待处理 + 处理中" accent="warning" />
-            <KpiCard label="处理中" value={stats.processing} accent="brand" />
-            <KpiCard label="已解决" value={stats.resolved} accent="success" />
+            {/* 死功能修复（2026-09-06）：工单/会话查询失败不再静默显示 0——
+                KPI 显「—」，下方列表区给出错误态与重试入口 */}
+            <KpiCard
+              label="待办工单"
+              value={ticketsError ? '—' : stats.todo}
+              caption="待处理 + 处理中"
+              accent="warning"
+            />
+            <KpiCard label="处理中" value={ticketsError ? '—' : stats.processing} accent="brand" />
+            <KpiCard label="已解决" value={ticketsError ? '—' : stats.resolved} accent="success" />
             <KpiCard
               label="今日会话"
-              value={todaySessions}
-              caption={`统计自最近 ${sessions.length} 条会话`}
+              value={sessionsError ? '—' : todaySessions}
+              caption={
+                sessionsError
+                  ? '会话数据加载失败'
+                  : `统计自最近 ${sessions.length} 条会话`
+              }
               accent="brand"
             />
           </div>
@@ -199,7 +221,12 @@ export function DashboardPage() {
                 <span className="dash-card__count">{todoTickets.length}</span>
               </header>
               <div className="dash-card__body">
-                {todoTickets.length === 0 ? (
+                {ticketsError ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '12px 0' }}>
+                    <Typography.Text type="danger">工单数据加载失败</Typography.Text>
+                    <Button size="small" type="link" onClick={() => refetchTickets()}>重试</Button>
+                  </div>
+                ) : todoTickets.length === 0 ? (
                   <BrandEmpty title="暂无待办工单" hint="新工单出现后会在这里提醒你" />
                 ) : (
                   <AppTable<TicketItem>
@@ -221,7 +248,12 @@ export function DashboardPage() {
                 <span className="dash-card__count">{sessions.length}</span>
               </header>
               <div className="dash-card__body">
-                {sessions.length === 0 ? (
+                {sessionsError ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, padding: '12px 0' }}>
+                    <Typography.Text type="danger">会话数据加载失败</Typography.Text>
+                    <Button size="small" type="link" onClick={() => refetchSessions()}>重试</Button>
+                  </div>
+                ) : sessions.length === 0 ? (
                   <BrandEmpty title="暂无会话" hint="用户发起对话后会出现在这里" />
                 ) : (
                   <AppTable<Session>

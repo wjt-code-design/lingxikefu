@@ -1,6 +1,11 @@
 """Knowledge 路由（BU-04 填充）：KB CRUD + 文档上传/列表/删除。
 
-- 全部端点要求 admin（管理后台 / 知识库写操作），非 admin 403。
+- 写端点要求 admin（管理后台 / 知识库写操作），非 admin 403。
+- GET /knowledge-bases 列表对 agent 开放（死功能修复 2026-09-06）：agent 工作台
+  「知识快搜」（KbSearchPage）需要先选库再检索，而 POST /knowledge/search 本就
+  require_roles("agent","admin")——旧守卫把选库必需的只读列表也锁 admin，快搜链路
+  对 agent 整体不可用（恒 403 → 假空态）。列表仅暴露 kb_id/name/计数，单租户过滤，
+  无敏感内容，与 search 端点权限口径对齐。
 - 上传：multipart 单文件；sha256 同 KB 去重（幂等返回已有文档）；解析失败（不支持类型/扫描件）
   直接 400 拒绝，不落库（failed 仅留给导入流程中 embedding/Qdrant 失败）。
 - 导入调度：优先 Celery 异步（``.delay``），broker 不可达时**后台线程**异步执行
@@ -18,7 +23,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.api.deps import require_admin
+from app.api.deps import require_admin, require_roles
 from app.core.config import settings
 from app.core.database import SessionLocal, get_db
 from app.models.knowledge import DocumentStatus
@@ -87,7 +92,8 @@ def _doc_item(doc) -> DocItem:
 
 @router.get("", response_model=KBListResp)
 def list_knowledge_bases(
-    payload: dict = Depends(require_admin),
+    # 只读列表对 agent 开放（见模块 docstring 死功能修复说明）；写端点仍 admin-only
+    payload: dict = Depends(require_roles("agent", "admin")),
     db: Session = Depends(get_db),
 ) -> KBListResp:
     repo = KnowledgeBaseRepository(db)

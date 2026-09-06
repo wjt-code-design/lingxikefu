@@ -70,6 +70,18 @@ def test_non_admin_forbidden(client):
     assert r.status_code == 403
 
 
+def test_agent_can_list_kbs_but_not_write(client):
+    """死功能修复回归（2026-09-06）：agent 可读 KB 列表（知识快搜选库链路），
+    但写端点（创建/删除）仍 admin-only。"""
+    # agent 读列表 → 200
+    r = client.get(f"{API}/knowledge-bases", headers=_headers("agent"))
+    assert r.status_code == 200
+    assert "items" in r.json()
+    # agent 创建 KB → 403
+    r = client.post(f"{API}/knowledge-bases", json={"name": "x"}, headers=_headers("agent"))
+    assert r.status_code == 403
+
+
 def test_unauthenticated_401(client):
     assert client.get(f"{API}/knowledge-bases").status_code == 401
 
