@@ -3,11 +3,15 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
+
 
 class KnowledgeSearchReq(BaseModel):
     query: str = Field(min_length=1, max_length=1000)
     kb_id: str | None = None
-    top_k: int = Field(default=8, ge=1, le=20)
+    # B3-1：省略 top_k 时跟随配置真源 RETRIEVAL_TOP_K（旧写死 8 与检索口径漂移）；
+    # 显式传参（前端 KbSearchPage=10）不受影响。
+    top_k: int = Field(default=settings.RETRIEVAL_TOP_K, ge=1, le=20)
 
 
 class KnowledgeSearchHit(BaseModel):

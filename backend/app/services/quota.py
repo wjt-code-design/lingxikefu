@@ -7,7 +7,8 @@
   同一请求重试（断连/超时后重发）命中幂等标记 → 不重复扣费；
   调用方在失败路径（断连/知识库为空/系统异常）调 ``refund`` 回滚已扣配额，解决断连白扣。
 - Redis 不可用时 ``try_consume`` **fail-closed 拒绝**（而非放行），保证配额保护不失效；
-  ``left_today``/``used_today`` 仅供 /quota 展示，Redis 不可达时优雅返回 0/满额（不 5xx）；
+  ``used_today`` 仅供 /quota 展示（left 由路由用 limit-used 现算），Redis 不可达时
+  优雅返回 0（不 5xx）；
   ``refund`` fail-open（回滚失败不阻塞主流程，重试重新扣费兜底）。
 - 上限动态化（架构一期 6）：``daily_limit()`` 优先读 ``app_settings`` KV 覆盖
   （admin PUT /admin/settings/quota 写入），60s 进程内 TTL 缓存，KV 读失败回退
@@ -165,9 +166,6 @@ class QuotaService:
             return int(self.redis.get(self._key(user_id, day)) or 0)
         except Exception:  # Redis 不可达 → 视为 0 已用（仅展示用）
             return 0
-
-    def left_today(self, user_id: str) -> int:
-        return max(0, self.daily_limit() - self.used_today(user_id))
 
     def try_consume(self, user_id: str, n: int = 1, idem_key: str | None = None, content: str | None = None, token: str | None = None) -> tuple[bool, int]:
         """原子扣减闸门（P1-①）：幂等抢占 SET NX 原子化 + INCR/expire MULTI pipeline。

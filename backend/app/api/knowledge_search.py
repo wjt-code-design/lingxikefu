@@ -13,7 +13,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import require_roles
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.knowledge import Document, KnowledgeBase
@@ -31,7 +31,10 @@ router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 @router.post("/search", response_model=KnowledgeSearchResp)
 async def search_knowledge(
     req: KnowledgeSearchReq,
-    payload: dict = Depends(get_current_user),
+    # B3-5：收紧为 staff 守卫（agent/admin）——本模块 docstring 本就声明「agent 客服用」，
+    # 旧实现仅 get_current_user（任意登录角色可检索），与意图漂移；前端唯一调用方是
+    # agent 工作台页（KbSearchPage），普通 user 角色从不触达，收紧零回归面。
+    payload: dict = Depends(require_roles("agent", "admin")),
     db: Session = Depends(get_db),
 ) -> KnowledgeSearchResp:
     """按 KB 检索知识切片（agent 客服工作台）。kb_id 必填，query 非空。"""

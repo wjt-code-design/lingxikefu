@@ -132,3 +132,55 @@ def test_search_retrieval_error_503(client, monkeypatch):
 def test_search_requires_auth(client):
     r = client.post(f"{API}/knowledge/search", json={"query": "退货", "kb_id": str(KB_ID)})
     assert r.status_code == 401
+
+
+def test_search_default_top_k_follows_config(client, monkeypatch):
+    """B3-1：省略 top_k → 检索收到 settings.RETRIEVAL_TOP_K（单一真源，旧写死 8 漂移）。"""
+    from app.core.config import settings
+
+    seen: dict = {}
+
+    def spy(query, kb_id, top_k):
+        seen["top_k"] = top_k
+        return []
+
+    monkeypatch.setattr("app.api.knowledge_search.search_kb", spy)
+    r = _post(client, query="退货", kb_id=str(KB_ID))
+    assert r.status_code == 200
+    assert seen["top_k"] == settings.RETRIEVAL_TOP_K
+
+
+def test_search_explicit_top_k_unaffected(client, monkeypatch):
+    """B3-1 边界：显式传参（前端 KbSearchPage=10）不随配置变化。"""
+    seen: dict = {}
+
+    def spy(query, kb_id, top_k):
+        seen["top_k"] = top_k
+        return []
+
+    monkeypatch.setattr("app.api.knowledge_search.search_kb", spy)
+    r = _post(client, query="退货", kb_id=str(KB_ID), top_k=10)
+    assert r.status_code == 200
+    assert seen["top_k"] == 10
+
+
+def test_search_rejects_plain_user_role(client, monkeypatch):
+    """B3-5：user 角色 → 403（端点定位 agent 工作台，收紧 staff 守卫）。"""
+    monkeypatch.setattr(
+        "app.api.knowledge_search.search_kb", lambda query, kb_id, top_k: []
+    )
+    r = client.post(
+        f"{API}/knowledge/search",
+        json={"query": "退货", "kb_id": str(KB_ID)},
+        headers={"Authorization": f"Bearer {create_access_token('u1', 'user')}"},
+    )
+    assert r.status_code == 403
+
+
+def test_search_allows_agent_role(client, monkeypatch):
+    """B3-5：agent 角色 → 200（收紧不误伤主调用方）。"""
+    monkeypatch.setattr(
+        "app.api.knowledge_search.search_kb", lambda query, kb_id, top_k: []
+    )
+    r = _post(client, query="退货", kb_id=str(KB_ID))
+    assert r.status_code == 200

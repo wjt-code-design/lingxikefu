@@ -4355,7 +4355,7 @@
             "maximum": 20.0,
             "minimum": 1.0,
             "title": "Top K",
-            "default": 8
+            "default": 5
           }
         },
         "type": "object",

@@ -234,6 +234,9 @@ def get_session(
         raise HTTPException(status_code=404, detail="session not found")
     # M3 + R-1：越权读防护 —— 仅会话所有者可访问；
     # agent/admin 可读任意用户会话（客服查看用户历史对话场景，M8）。
+    # B3-4（约定文档化）：本读路径越权=403，与 chat 写路径（session 校验失败=404）
+    # 的差异是有意的——读用 403 便于前端区分「不存在」与「无权限」给不同提示；
+    # 写用 404 防探测（session_id 是 UUID 不可枚举，收益本就低，维持现状不翻转）。
     role = payload.get("role")
     if s.user_id != user_id and role not in ("admin", "agent"):
         raise HTTPException(status_code=403, detail="forbidden")
