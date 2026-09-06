@@ -387,6 +387,9 @@ def _to_sources(chunks: list[RetrievedChunk]) -> list[dict]:
             "chunk_id": c.chunk_id,
             "doc_id": c.doc_id,
             "score": round(c.score, 4),
+            # A 修复（2026-09-06）：dense 原始余弦（绝对相似度语义）与 RRF 排序分并列
+            # 透传——溯源面板「相似度」消费此字段（纯 dense 检索下与 score 相同）。
+            "dense_score": round(c.dense_score, 4),
             # 字段名对齐前端契约 MessageSource.snippet（SSE 契约 §1.4）；
             # UI 审查高2：清洗 markdown + 句界截断，避免来源面板渲染源码
             "snippet": clean_snippet(c.text),

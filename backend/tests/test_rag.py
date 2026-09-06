@@ -12,6 +12,7 @@ from app.prompts.qa_prompt import build_qa_messages
 from app.services.rag_service import (
     RagResult,
     _no_llm_reply,
+    _to_sources,
     classify_intent,
     fix_citations,
     run_pipeline,
@@ -399,6 +400,24 @@ async def test_stream_answer_retrieval_error_no_qdrant_url_leak(patch, monkeypat
     for event_type, data in events:
         payload = str(data)
         assert settings.QDRANT_URL not in payload, f"{event_type} 泄漏内部 URL"
+
+
+# --- A 修复：溯源透传 dense_score（真实余弦相似度）----------------------------
+
+
+def test_to_sources_carries_dense_score():
+    """_to_sources 必须同时带 score（RRF 融合分，排序位语义）与 dense_score
+    （dense 原始余弦，绝对相似度语义）——SourcePanel「相似度」标签消费后者。
+    旧实现只透传 score → hybrid 下 RRF 分（≈0.03-0.05）被当相似度显示成 5%。"""
+    chunks = [
+        RetrievedChunk(
+            chunk_id="c1", doc_id="d1", kb_id="kb1", idx=0,
+            text="保修条款内容", score=0.049, dense_score=0.87,
+        )
+    ]
+    srcs = _to_sources(chunks)
+    assert srcs[0]["score"] == 0.049  # 排序分保留（历史字段语义不变）
+    assert srcs[0]["dense_score"] == 0.87  # 真实相似度补上
 
 
 # --- B2-1 singleflight（stream_answer 接线）----------------------------------

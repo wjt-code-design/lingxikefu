@@ -5139,6 +5139,17 @@
           "score": {
             "type": "number",
             "title": "Score"
+          },
+          "dense_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dense Score"
           }
         },
         "type": "object",

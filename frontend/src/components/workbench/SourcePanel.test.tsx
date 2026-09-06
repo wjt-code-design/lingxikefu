@@ -33,6 +33,20 @@ describe('SourcePanel 溯源空态区分（answer_source）', () => {
     expect(screen.getByText('售后政策')).toBeInTheDocument();
     expect(screen.getByText(/相似度 90%/)).toBeInTheDocument();
   });
+
+  // A 修复：hybrid 检索下 score 是 RRF 融合分（≈0.03-0.05，无绝对语义），
+  // 「相似度」必须显示 dense_score（dense 原始余弦）；旧数据无 dense_score 才回退 score。
+  it('相似度显示 dense_score（真实余弦），非 RRF 排序分', () => {
+    const hybrid: MessageSource = { ...SRC, score: 0.049, dense_score: 0.87 };
+    render(<SourcePanel sources={[hybrid]} />);
+    expect(screen.getByText(/相似度 87%/)).toBeInTheDocument();
+    expect(screen.queryByText(/相似度 5%/)).not.toBeInTheDocument();
+  });
+
+  it('旧数据无 dense_score → 回退 score 口径（不显示 NaN）', () => {
+    render(<SourcePanel sources={[SRC]} />);
+    expect(screen.getByText(/相似度 90%/)).toBeInTheDocument();
+  });
 });
 describe('SourcePanel 溯源选中提示（2026-08-25 点哪条看哪条）', () => {
   it('有 sources + selectedMsgId → 提示"正在查看选中回复的溯源"并正常渲染引用', () => {

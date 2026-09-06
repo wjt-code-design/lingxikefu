@@ -161,6 +161,9 @@ export interface MessageSource {
   doc_title: string;
   snippet: string;
   score: number;
+  /** dense 原始余弦相似度（绝对语义，「相似度」显示消费此字段）；
+   *  score 在 hybrid 检索下是 RRF 融合分（仅排名语义）。存量数据可缺省 → 回退 score。 */
+  dense_score?: number;
 }
 
 // ---------- Tickets（T1 工单闭环） ----------

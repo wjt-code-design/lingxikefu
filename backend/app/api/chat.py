@@ -163,6 +163,9 @@ async def _persist_answer(
                     doc_title=src.get("doc_title", ""),
                     snippet=src.get("snippet", "")[:500],
                     score=src.get("score", 0.0),
+                    # A 修复：dense 余弦相似度落库（缓存命中条目等无此字段时 NULL，
+                    # 前端回退 score 口径）
+                    dense_score=src.get("dense_score"),
                 )
             )
         db.commit()

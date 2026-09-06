@@ -73,3 +73,7 @@ class MessageSource(Base):
     doc_title: Mapped[str] = mapped_column(sa.String(255), nullable=False)
     snippet: Mapped[str] = mapped_column(sa.Text(), nullable=False)
     score: Mapped[float] = mapped_column(sa.Float(), nullable=False)
+    # A 修复（2026-09-06）：dense 原始余弦相似度（绝对语义）——hybrid 下 score 是
+    # RRF 融合分（排名加权，无绝对语义），溯源面板「相似度」必须显示此字段。
+    # 可空：存量行无此数据（NULL → 前端回退 score 口径），新落库必填。
+    dense_score: Mapped[float | None] = mapped_column(sa.Float(), nullable=True)

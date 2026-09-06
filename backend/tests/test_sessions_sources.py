@@ -62,11 +62,14 @@ def client():
         db.add(MessageSource(
             id=uuid.uuid4(), message_id=MSG, chunk_id=uuid.uuid4(), doc_id=uuid.uuid4(),
             doc_title="退换货政策.md", snippet="七天无理由退货需签收后7天内申请", score=0.92,
+            # dense_score 与 score 刻意取不同值：证明 API 透传的是独立字段而非 score 复读
+            dense_score=0.87,
             tenant_id="default",
         ))
         db.add(MessageSource(
             id=uuid.uuid4(), message_id=MSG, chunk_id=uuid.uuid4(), doc_id=uuid.uuid4(),
             doc_title="运费说明.md", snippet="退货运费由买家承担", score=0.61,
+            dense_score=0.61,
             tenant_id="default",
         ))
         db.commit()
@@ -108,3 +111,14 @@ def test_get_session_no_sources_for_non_kb_msgs(client):
     # 该会话只有这一条 assistant 消息；断言字段存在性契约：sources 恒为数组
     for m in r.json()["messages"]:
         assert "sources" in m
+
+
+def test_get_session_sources_carry_dense_score(client):
+    """A 修复：历史 sources 必须带 dense_score（真实余弦相似度）——SourcePanel
+    「相似度」标签消费此字段；与 score（RRF 排序分）独立透传，非复读。"""
+    r = client.get(f"{API}/sessions/{SID}", headers=_h(UID, "user"))
+    assistant_msgs = [m for m in r.json()["messages"] if m["role"] == "assistant"]
+    srcs = assistant_msgs[0]["sources"]
+    assert all("dense_score" in s for s in srcs)
+    policy = next(s for s in srcs if s["doc_title"] == "退换货政策.md")
+    assert policy["dense_score"] == 0.87  # ≠ score 0.92 → 独立字段坐实

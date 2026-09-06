@@ -70,6 +70,9 @@ class SessionMessageSource(BaseModel):
     doc_title: str
     snippet: str
     score: float
+    # A 修复（2026-09-06）：dense 原始余弦相似度（绝对语义，「相似度」标签消费）；
+    # 存量行无此数据 → None（前端回退 score 口径）。
+    dense_score: float | None = None
 
 
 class SessionMessage(BaseModel):
@@ -267,6 +270,7 @@ def get_session(
                     "doc_title": src.doc_title,
                     "snippet": src.snippet,
                     "score": float(src.score),
+                    "dense_score": float(src.dense_score) if src.dense_score is not None else None,
                 }
             )
     # 2026-08-22 Phase D：客服侧展示画像——仅 agent/admin 返回（读会话 owner 画像；
@@ -561,6 +565,7 @@ async def suggest_reply(
                 doc_title=titles.get(c.doc_id, ""),
                 snippet=clean_snippet(c.text),
                 score=round(c.score, 4),
+                dense_score=round(c.dense_score, 4),
             )
             for c in draft.chunks
         ]

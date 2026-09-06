@@ -61,7 +61,11 @@ export function SourcePanel({
                   <span className="wb-source__doc">{s.doc_title}</span>
                   <span className="wb-source__tag">已引用</span>
                 </div>
-                <div className="wb-source__score">相似度 {Math.round(s.score * 100)}%</div>
+                {/* A 修复：相似度=dense 原始余弦（绝对语义）；hybrid 下 score 是 RRF
+                    融合分（≈0.03-0.05）无相似度语义，仅作缺省回退（存量旧数据） */}
+                <div className="wb-source__score">
+                  相似度 {Math.round((s.dense_score ?? s.score) * 100)}%
+                </div>
                 <div className="wb-source__snippet">{s.snippet}</div>
               </div>
             ))
