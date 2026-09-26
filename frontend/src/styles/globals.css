@@ -1782,7 +1782,7 @@ body > textarea[style*="visibility:hidden"] {
   line-height: 18px;
   padding: 0 8px;
   border-radius: 8px;
-  color: #4da07f;  /* A3：加深绿（浅绿 #73C9A8 对比不足） */
+  color: var(--color-accent-text);  /* D13：原 #4da07f 压在本卡双层染色底上仅 2.80:1 */
   background: rgba(115, 201, 168, 0.16);
   flex-shrink: 0;
 }

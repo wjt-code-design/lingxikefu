@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { settle, signIn } from './fixtures';
+import { AUTH_KEY, settle, signIn } from './fixtures';
 
 /**
  * 真·双标签页会话守卫（D18，钉住 D16 的跨标签同步与 D15 的 401 兜底）。
@@ -23,8 +23,6 @@ import { settle, signIn } from './fixtures';
  *
  * 顺带补上 §14 记的那块覆盖面：这是全仓第一条**客户端导航**路径的 e2e（其余登录态用例都是整页 goto）。
  */
-
-const AUTH_KEY = 'lingxi-auth';
 
 test.skip(({ isMobile }) => isMobile, '双标签页时序只在桌面视口验证');
 

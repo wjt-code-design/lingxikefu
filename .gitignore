@@ -24,3 +24,6 @@ coverage.xml
 
 # eval 运行日志不入库（2026-09-02 清理 8 个历史日志后的防回填；json 入库存档策略不变）
 eval-and-samples/results/*.log
+
+# 审计/派单中间产物（多 agent 工作记忆，不入库；真源报告在 .workbuddy/ 同样不入库）
+.planning/

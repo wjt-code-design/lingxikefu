@@ -17,7 +17,8 @@ import { useAuthStore } from '@/store/authStore';
  * - 只覆盖匿名可达页 + 单组件态；登录态整页归 e2e 版。
  * - 布局依赖规则 jsdom 判不了 → 关 color-contrast。对比度由 `check:a11y`（前景×底色矩阵，
  *   已进 CI frontend job）静态算色守；触摸目标由 e2e 守（axe `target-size` + 尺寸实测）。
- *   ⚠️ 两把都不覆盖 D13 那个 `--color-accent` 自染 chip（未闭环，见报告台账）。
+ *   D13 那批自染 chip（含 `.settings-bool--on` / `.wb-source__tag`）现由 `check:a11y` 按
+ *   alpha 合成底守；`.page-atmo` 伪元素底 axe 判 incomplete 会漏，同样只由这把静态尺兜。
  * - 假阳性教训（首版就踩）：落地页 axe 报 empty-heading ×1，实为
  *   `.ant-skeleton-title`——antd 骨架屏占位自身的标记，真浏览器 axe 报 0 违规。
  *   故断言前先等骨架退场，审"稳定态"而不是加载态（e2e 的 `settle()` 同一手法）。

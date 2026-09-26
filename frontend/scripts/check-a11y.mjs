@@ -44,6 +44,29 @@ function extractVars() {
   return vars;
 }
 
+/** 读出 --atmo-gradient 里的 rgba 停止点（.page-atmo::before 的唯一来源）。
+ *  不写死数值：渐变改深/改色时这把尺子自动跟着重算，避免"尺子与样式各说各话"。 */
+function extractAtmoStops() {
+  const css = readFileSync(resolve(root, 'src/styles/tokens.css'), 'utf-8');
+  const grad = css.match(/--atmo-gradient:\s*([^;]+);/);
+  if (!grad) throw new Error('tokens.css 找不到 --atmo-gradient');
+  const stops = [...grad[1].matchAll(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/g)];
+  if (!stops.length) throw new Error('--atmo-gradient 里没有 rgba() 停止点，读不到合成底');
+  return stops.map((m) => ({
+    hex: '#' + [1, 2, 3].map((i) => (+m[i]).toString(16).padStart(2, '0')).join(''),
+    alpha: +m[4],
+  }));
+}
+
+/** 氛围渐变压在最深色停那一档 = 挂 .page-atmo 的页面上半部**实际**底。
+ *  axe 在真 Chromium 里解析不了伪元素底 → color-contrast 判 incomplete → 被
+ *  `resultTypes: ['violations']` 丢弃 ⇒ 14 个 .page-atmo 页面（覆盖 19 次路由审计中的 13 次）
+ *  的对比度回归只有这把静态尺兜得住。 */
+function atmoSurface(base, stops) {
+  const worst = stops.reduce((a, b) => (b.alpha > a.alpha ? b : a));
+  return tint(worst.hex, base, worst.alpha);
+}
+
 // 前景 × 它真实会落的底色。旧版四项全拿 color-surface（纯白卡）算，于是
 // "辅助文字 5.03 ✓"恒成立；而同一支 text-3 落在 --bg-page-deep 上只有 4.39、
 // 落在自己染色出的 chip 底上只有 4.44 —— 2026-09-26 登录态 axe 复扫就是这么抓到漏网的。
@@ -57,22 +80,40 @@ const FG_BODY = [
   // a11y D 批：项目约定「文字/链接前景一律 brand-dark，brand 仅作背景/装饰/大色块」
   // —— 旧检查拿 brand（2.87:1）当文字色校验属口径错误（rg 审计 2026-09-04）。
   ['color-brand-dark', '品牌链接/强调文字'],
+  // D13：accent 本体是 colorSuccess 配对真源不能改，小字号语义文字改走深档 → 深档必须全底达标
+  ['color-accent-text', '成功/在线语义小字'],
 ];
 const SURFACES = [
   ['color-surface', '白卡'],
   ['bg-page', '冷灰画布'],
   ['bg-page-deep', '深画布'],
 ];
-// 自染色 chip 底（color-mix(Fg p%, transparent) 落在白卡上）：字色自己当背景源，
-// 比值必然比纯色面低一档，是本轮 4.44 那一类的机制源。
+// 自染色 / 多压一层的 chip 底：先按 alpha 合成进它真实所在的卡底，再算比值。
+// 只按纯色面算会漏掉这种派生底（历史上就是这么漏的），漏一档就是一个静默不达标的状态标签。
 const SELF_TINT = [
-  ['text-3', 0.1, '辅助文字 @10% 自染 chip 底'], // .faq-item__meta
+  ['text-3', (s) => tint(s['text-3'], s['color-surface'], 0.1), '辅助文字 @10% 自染 chip 底'], // .faq-item__meta
+  // D13 ①：SettingsPage `.settings-bool--on`（底 = .settings-card 纯白卡 + accent 14% 自染）
+  [
+    'color-accent-text',
+    (s) => tint(s['color-accent'], s['color-surface'], 0.14),
+    '成功语义小字 @14% accent 自染 chip 底',
+  ],
+  // D13 ②：globals.css `.wb-source__tag` —— tag 的 rgba(115,201,168,.16) 还压在
+  // .wb-source 的 rgba(150,200,232,.04) 上，两层都得合成完才是真底（#73c9a8 是 globals 字面量，无 token）
+  [
+    'color-accent-text',
+    (s) => tint('#73c9a8', tint(s['color-brand-pale'], s['color-surface'], 0.04), 0.16),
+    '成功语义小字 @溯源卡双层染底',
+  ],
 ];
 // 只达大文本档的色（不得用于 ≤12px 正文）：锁 3:1 下限
-const LARGE_ONLY = [['text-4', 0.12, '禁用/占位 @12% 自染 chip 底']];
+const LARGE_ONLY = [
+  ['text-4', (s) => tint(s['text-4'], s['color-surface'], 0.12), '禁用/占位 @12% 自染 chip 底'],
+];
 
 let fails = 0;
 const v = extractVars();
+const atmoStops = extractAtmoStops();
 const report = (ok, label, fg, bg, ratio, min) => {
   if (!ok) fails++;
   console.log(
@@ -80,22 +121,31 @@ const report = (ok, label, fg, bg, ratio, min) => {
   );
 };
 
+// 白卡 / 两种冷灰画布 + 氛围渐变在两种画布上合成出的实际底（伪元素底 axe 判不出，见 atmoSurface）
+const BG = SURFACES.map(([key, label]) => [label, v[key]]);
+for (const [key, label] of [
+  ['bg-page', '冷灰画布'],
+  ['bg-page-deep', '深画布'],
+]) {
+  BG.push([`${label}+氛围渐变`, atmoSurface(v[key], atmoStops)]);
+}
+
 console.log('\n[light] 前景 × 实际底色矩阵');
 for (const [fgVar, label] of FG_BODY) {
-  for (const [bgVar, bgLabel] of SURFACES) {
-    const ratio = contrast(v[fgVar], v[bgVar]);
-    report(ratio >= MIN_BODY, `${label} @${bgLabel}`, v[fgVar], v[bgVar], ratio, MIN_BODY);
+  for (const [bgLabel, bgHex] of BG) {
+    const ratio = contrast(v[fgVar], bgHex);
+    report(ratio >= MIN_BODY, `${label} @${bgLabel}`, v[fgVar], bgHex, ratio, MIN_BODY);
   }
 }
 
-for (const [fgVar, p, label] of SELF_TINT) {
-  const bg = tint(v[fgVar], v['color-surface'], p);
+for (const [fgVar, bgOf, label] of SELF_TINT) {
+  const bg = bgOf(v);
   const ratio = contrast(v[fgVar], bg);
   report(ratio >= MIN_BODY, label, v[fgVar], bg, ratio, MIN_BODY);
 }
 
-for (const [fgVar, p, label] of LARGE_ONLY) {
-  const bg = tint(v[fgVar], v['color-surface'], p);
+for (const [fgVar, bgOf, label] of LARGE_ONLY) {
+  const bg = bgOf(v);
   const ratio = contrast(v[fgVar], bg);
   report(ratio >= MIN_LARGE, label, v[fgVar], bg, ratio, MIN_LARGE);
 }

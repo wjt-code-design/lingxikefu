@@ -31,7 +31,6 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   '/feedback': <DislikeOutlined />,
   '/tickets': <FileTextOutlined />,
   '/faq': <BookOutlined />,
-  '/help': <BookOutlined />,
   '/agent/dashboard': <CustomerServiceOutlined />,
   '/agent/sessions': <MessageOutlined />,
   '/agent/tickets': <FileTextOutlined />,

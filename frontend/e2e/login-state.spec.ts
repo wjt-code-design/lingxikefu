@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { ROUTES, signIn, auditRoute, formatViolations, type E2ERole } from './fixtures';
 
 /**
- * 登录态全路由 axe 扫描（D9 的固化：2026-09-26 那轮手工取证 19 条路由 → 从此进 CI 变成会红的断言）。
+ * 登录态全路由 axe 扫描（D9 的固化：2026-09-26 那轮手工取证 19 次逐路由审计 → 从此进 CI 变成会红的断言）。
  *
  * 为什么值得单独一条 e2e 而不是全靠 vitest：
  * `src/tests/a11y-axe.test.tsx` 跑在 jsdom，布局依赖规则一律判不了——`color-contrast` 必须显式关掉，
@@ -18,9 +18,8 @@ import { ROUTES, signIn, auditRoute, formatViolations, type E2ERole } from './fi
 
 for (const [role, routes] of Object.entries(ROUTES) as [E2ERole, string[]][]) {
   test.describe(`登录态 axe：${role}`, () => {
-    // 跳过必须写在 describe 内部：写在文件顶层时 describe 里的用例不受影响
-    // （首版就踩了——mobile project 照跑，三角色 × 两 project = 6 次登录，
-    //   第 6 次撞 `auth.py:32` 的 5 次/分钟 IP 限流，卡在 /login 报"登录失败"）。
+    // 管理端在 375px 下是抽屉导航，不是同一条页的另一状态，故移动 project 不审登录态整页；
+    // 条件 skip 拦不住 `beforeAll`（见下面那道自挡），移动 project 才会白跑真登录撞限流。
     test.skip(({ isMobile }) => isMobile, '登录态整页只在桌面视口审；移动视口见 touch-targets.spec.ts');
     test.describe.configure({ mode: 'serial' });
 

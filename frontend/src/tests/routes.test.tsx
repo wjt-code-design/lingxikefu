@@ -71,4 +71,15 @@ describe('路由可达与 RequireAuth 守卫', () => {
     expect(await screen.findByRole('heading', { name: '我的工单' }, { timeout: 3_000 })).toBeInTheDocument();
     expect(screen.queryByText(/页面不存在/)).not.toBeInTheDocument();
   });
+
+  // D17：jsdom 下取不到会话，走的正是空态那条 early-return——h1 若还挂在表格容器里，
+  // 这一屏就没有页面标题（CI 的空库同理）。必须同时断空态文案，否则分不清走了哪条分支。
+  it('agent 访问 /agent/sessions 且无会话 → 空态下仍渲染「会话列表」h1', async () => {
+    loginAs('agent');
+    renderApp('/agent/sessions');
+    expect(await screen.findByText('暂无会话', {}, { timeout: 3_000 })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: '会话列表' }, { timeout: 3_000 })
+    ).toBeInTheDocument();
+  });
 });

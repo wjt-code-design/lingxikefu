@@ -29,7 +29,12 @@
   --color-brand-whisper: rgba(83, 159, 216, 0.04); /* 极淡品牌色（氛围光晕） */
 
   /* ---- 语义色 ---- */
-  --color-accent: #4da07f; /* 成功/在线 */
+  --color-accent: #4da07f; /* 成功/在线（= theme.ts colorSuccess，check:tokens 钉着，勿单改） */
+  /* a11y D13：accent 本体当 ≤13px 文字压在自己 14% 自染底上实测 2.75:1（AA 需 4.5）→
+     另立深档专供小字号文字。#27714f 在白卡染色底有 5.14，但落在氛围渐变合成底上只剩
+     4.89（余量 0.39，同款翻车先例见 --color-brand-dark）→ 再深一档到 #256e4d：
+     全表面族最低 5.10 / 染色 chip 底 5.35–5.46。 */
+  --color-accent-text: #256e4d;
   --color-amber: #e0a86a; /* 警告/处理中 */
   --color-orange: #e0a86a; /* 转人工强调 */
   --color-danger: #d97a7a; /* 错误/删除 */

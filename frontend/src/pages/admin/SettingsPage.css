@@ -132,12 +132,13 @@
   line-height: 18px;
 }
 .settings-bool--on {
-  color: var(--color-accent);
+  /* D13：--color-accent 压在自己 14% 自染底上 2.75:1 → 12px 文字换深档文字专用 token */
+  color: var(--color-accent-text);
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 .settings-bool--off {
   /* text-4 只达大文本 3:1（此处 12px 自染底实测 3.34）→ 提到 text-3（4.90 达 AA）。
-     同 .faq__section-count 的修法；--on 的 --color-accent 2.75 仍未达标，另案挂账。 */
+     同 .faq__section-count 的修法。 */
   color: var(--text-3);
   background: color-mix(in srgb, var(--text-4) 12%, transparent);
 }

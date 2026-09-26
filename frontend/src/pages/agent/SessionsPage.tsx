@@ -39,8 +39,17 @@ export function SessionsPage() {
       });
   };
 
+  // D17：h1 得排在 early-return 之前——空库（CI 首跑）走的就是空态那条分支，
+  // 挂在表格容器里等于空库时整页没有页面标题（axe `page-has-heading-one`）。
+  const heading = <Typography.Title level={1}>会话列表</Typography.Title>;
+
   if (!isLoading && items.length === 0) {
-    return <BrandEmpty title="暂无会话" hint="用户发起对话后会出现在这里" />;
+    return (
+      <>
+        {heading}
+        <BrandEmpty title="暂无会话" hint="用户发起对话后会出现在这里" />
+      </>
+    );
   }
 
   const satisfactionLabel: Record<string, string> = {
@@ -96,7 +105,7 @@ export function SessionsPage() {
 
   return (
     <div className="agent-sessions page-atmo">
-      <Typography.Title level={1}>会话列表</Typography.Title>
+      {heading}
       <AppTable<Session>
         rowKey="id"
         loading={isLoading}
