@@ -158,16 +158,24 @@ export function SideNav() {
   }, [location.pathname]);
 
   return (
-    <Menu
-      className="side-nav"
-      mode="inline"
-      selectedKeys={[location.pathname]}
-      openKeys={openKeys}
-      onOpenChange={setOpenKeys}
-      items={items}
-      onClick={({ key }) => navigate(key)}
-      style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
-    />
+    // navigation 地标：antd Menu 的根是 <ul role="menu">，不构成 WCAG 2.4.1 的
+    // 导航地标（全站此前 grep "<nav" 零命中）。flex 权重移到 nav 上以保持
+    // 侧栏撑满 + 菜单内部滚动的原布局。
+    <nav
+      aria-label="主导航"
+      style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+    >
+      <Menu
+        className="side-nav"
+        mode="inline"
+        selectedKeys={[location.pathname]}
+        openKeys={openKeys}
+        onOpenChange={setOpenKeys}
+        items={items}
+        onClick={({ key }) => navigate(key)}
+        style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}
+      />
+    </nav>
   );
 }
 

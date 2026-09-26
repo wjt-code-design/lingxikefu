@@ -24,6 +24,8 @@ export function AppTable<T extends object>(props: TableProps<T>) {
   // 降级为 presentation 并移出无障碍树（仅 aria-hidden 不够，表格算法仍见 th）。
   // 数据到达 / 列宽测量会使 rc-table 重建表头节点，故用 MutationObserver 重放，
   // 仅观察 childList（自身属性变更不触发，避免回环）。
+  // 依赖不能省：无数组=每次 render 都重建 observer 并读一轮布局（scrollWidth/clientWidth
+  // 强制回流）。节点数不变的列宽变化由下面两个标量兜住，节点增删由 observer 兜住。
   useEffect(() => {
     const root = scopeRef.current;
     if (!root) return;
@@ -42,7 +44,7 @@ export function AppTable<T extends object>(props: TableProps<T>) {
     const mo = new MutationObserver(apply);
     mo.observe(root, { childList: true, subtree: true });
     return () => mo.disconnect();
-  });
+  }, [colCount, isLoading]);
 
   return (
     <div ref={scopeRef}>

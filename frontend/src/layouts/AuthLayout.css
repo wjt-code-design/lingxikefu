@@ -159,6 +159,11 @@
 .auth-card__terms .auth-card__link {
   padding: 0;
   height: auto;
+  /* 触摸目标：实测 23px 高，低于 WCAG 2.5.8 的 24px 下限（条款/隐私入口是注册页唯一
+     法律文档入口，指尖误触即 miss）。用 min-height + 居中保持原视觉行高。 */
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
   font-size: inherit;
   line-height: inherit;
   color: var(--color-brand-dark);

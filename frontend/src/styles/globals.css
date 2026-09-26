@@ -600,6 +600,8 @@ main h1.ant-typography {
   color: inherit;
   display: inline-flex;
   align-items: center;
+  /* 桌面态实测 28×22，高度低于 WCAG 2.5.8 的 24px 下限；窄屏另有 min-height:44px 规则覆盖 */
+  min-height: 24px;
 }
 .widget-shell__brand:hover {
   color: var(--color-brand-dark);
