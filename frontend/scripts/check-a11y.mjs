@@ -3,7 +3,7 @@
  * 用法：node scripts/check-a11y.mjs（package.json: check:a11y）
  * 标准：正文/辅助文字 ≥ 4.5:1；大字号/图形 ≥ 3:1
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -98,6 +98,65 @@ for (const [fgVar, p, label] of LARGE_ONLY) {
   const bg = tint(v[fgVar], v['color-surface'], p);
   const ratio = contrast(v[fgVar], bg);
   report(ratio >= MIN_LARGE, label, v[fgVar], bg, ratio, MIN_LARGE);
+}
+
+/* antd v5 预设 Tag：字色 = palette[7]、底色 = palette[0]（cyan/green/lime 等档已与浏览器
+   getComputedStyle 逐字节核对一致）。仓库在 globals.css 用 `.ant-tag.ant-tag-X` 覆盖字色，
+   这里把覆盖值读回来比对：覆盖被删/被改浅 → 回落到不达标的 palette[7] → 本项即红。
+   为什么不能只靠 axe：表格单元格里的标签 axe 常判 `incomplete`（背景含伪元素判不出）→
+   不计违规、静默漏（2026-09-26 实测「已解决」绿标签 3.37:1 被 axe 放过）。
+   在用色名从 *.tsx 里扫出来，不写死清单——上一版手写表就漏了 lime（2.48:1）。 */
+const PRESET_TAG = {
+  pink: ['#fff0f6', '#c41d7f'],
+  red: ['#fff1f0', '#cf1322'],
+  orange: ['#fff7e6', '#d46b08'],
+  yellow: ['#feffe6', '#ae8700'],
+  gold: ['#fffbe6', '#d48806'],
+  lime: ['#fcffe6', '#7cb305'],
+  green: ['#f6ffed', '#389e0d'],
+  cyan: ['#e6fffb', '#08979c'],
+  blue: ['#e6f4ff', '#0958d9'],
+  purple: ['#f9f0ff', '#531dab'],
+  violet: ['#f9f0ff', '#722ed1'],
+  geekblue: ['#f0f5ff', '#1d39c4'],
+  volcano: ['#fff2e8', '#d4380d'],
+  magenta: ['#fff0f6', '#c41d7f'],
+};
+
+function extractTagOverrides() {
+  const css = readFileSync(resolve(root, 'src/styles/globals.css'), 'utf-8');
+  const out = {};
+  for (const m of css.matchAll(/\.ant-tag\.ant-tag-([a-z]+)\s*\{[^}]*?color:\s*(#[0-9a-fA-F]{6})/g)) {
+    out[m[1]] = m[2];
+  }
+  return out;
+}
+
+/** 扫 tsx 找出「作为字符串出现的预设色名」= 可能被传给 Tag/Badge 的 color prop。
+ *  宁可宽（多查几档）不可漏：漏一档就是一个静默不达标的状态标签。 */
+function extractUsedPresets() {
+  const names = new Set();
+  const files = readdirSync(resolve(root, 'src'), { recursive: true })
+    .map((f) => String(f))
+    .filter((f) => /\.tsx?$/.test(f) && !f.includes('node_modules'));
+  for (const rel of files) {
+    const txt = readFileSync(resolve(root, 'src', rel), 'utf-8');
+    for (const m of txt.matchAll(/['"]([a-z]+)['"]/g)) {
+      if (m[1] in PRESET_TAG) names.add(m[1]);
+    }
+  }
+  return [...names].sort();
+}
+
+console.log('\n[light] antd 预设 Tag 字色（在用色名由 tsx 扫出，覆盖值读自 globals.css）');
+const tagOv = extractTagOverrides();
+const usedPresets = extractUsedPresets();
+console.log(`  在用预设色名：${usedPresets.join(', ')}`);
+for (const name of usedPresets) {
+  const [bg, def] = PRESET_TAG[name];
+  const fg = tagOv[name] || def;
+  const ratio = contrast(fg, bg);
+  report(ratio >= MIN_BODY, `Tag ${name}（${tagOv[name] ? '覆盖' : 'antd 默认'}）`, fg, bg, ratio, MIN_BODY);
 }
 
 if (fails > 0) {

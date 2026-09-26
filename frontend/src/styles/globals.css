@@ -2149,10 +2149,36 @@ body > textarea[style*="visibility:hidden"] {
   margin: 0 !important;
   font-weight: 500 !important;
 }
-/* a11y：antd gold Tag 前景 #d48806 on #fffbe6 仅 2.75:1 → 加深至 6:1（背景不动，保持金色系视觉）。
-   注意：antd cssinjs 运行时注入同名 .ant-tag-gold 且晚于本表 → 需双类特异性压过（复扫实测单类被压） */
+/* a11y：antd 预设 Tag 的字色取 palette[7]、底取 palette[0]，其中几档在 11–12px 上不达 AA 4.5:1
+   （大文本豁免要 ≥18.66px 粗体或 ≥24px，标签都不满足）。统一压到 palette[8]/[9]，背景不动、
+   保持同色相视觉。注意：antd cssinjs 运行时注入同名 .ant-tag-X 且晚于本表 → 需双类特异性压过
+   （gold 那条 2026-09 复扫实测单类被压）。blue #0958d9=5.50 / red #cf1322=5.07 /
+   geekblue #1d39c4=7.89 三档本就达标，不覆盖。
+   ⚠️ 这支不能只靠 axe 兜：表格单元格里的标签 axe 多判 `incomplete`（"背景含伪元素判不出"）
+   → 不计违规、静默漏。比值由 scripts/check-a11y.mjs 的 PRESET_TAG 表按算式钉住。 */
 .ant-tag.ant-tag-gold {
-  color: #874d00;
+  /* #d48806 → 2.76:1 */
+  color: #874d00; /* 6.53:1 */
+}
+.ant-tag.ant-tag-cyan {
+  /* #08979c → 3.39:1（工单/日志/客服角色标签共用） */
+  color: #006666; /* 6.49:1 */
+}
+.ant-tag.ant-tag-green {
+  /* #389e0d → 3.37:1（工单「已解决」、日志「知识库新增」、反馈角色） */
+  color: #237804; /* 5.44:1 */
+}
+.ant-tag.ant-tag-orange {
+  /* #d46b08 → 3.34:1（日志「会话删除」） */
+  color: #ad4e00; /* 5.09:1 */
+}
+.ant-tag.ant-tag-volcano {
+  /* #d4380d → 4.37:1（日志「文档删除」） */
+  color: #ad2b0a; /* 6.11:1 */
+}
+.ant-tag.ant-tag-lime {
+  /* #7cb305 → 2.48:1，全站预设标签里最浅的一档（日志「工单更新」） */
+  color: #3f6600; /* 6.62:1 */
 }
 /* a11y：旧 text-3 在 #ecf0f4 仅 4.39:1 → 面包屑用 text-2（复扫新记录；token 已另行加深） */
 .route-chrome .ant-breadcrumb a,
@@ -2212,12 +2238,6 @@ body > textarea[style*="visibility:hidden"] {
   margin-inline-end: 0 !important;
   font-size: 11px;
   line-height: 18px;
-}
-/* a11y：antd 预设 cyan 标签字色 #08979c 在其浅底 #e6fffb 上实测仅 3.39:1（11px 不享
-   大文本豁免）→ 压深到 #0b6b6f（5.99:1）。选择器带 .ant-tag 两个类，靠特异性稳赢
-   antd 运行时的 .ant-tag.ant-tag-cyan，不用 !important。blue/gold 两档 axe 实测达标，不动。 */
-.user-menu__tag.ant-tag.ant-tag-cyan {
-  color: #0b6b6f;
 }
 .user-menu__name {
   max-width: 120px;
