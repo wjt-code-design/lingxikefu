@@ -21,6 +21,15 @@ function contrast(a, b) {
   return (hi + 0.05) / (lo + 0.05);
 }
 
+/** 前景按 p 比例染到背景上（CSS color-mix(in srgb, Fg p%, transparent) 的等效算法）。
+ *  仓库里 `.faq-item__meta` 这类 chip 的底就是 `color-mix(… var(--text-3) 10% …)`，
+ *  即"字色自己染色当底"——只按纯色面算会漏掉这种派生底（历史上就是这么漏的）。 */
+function tint(fg, bg, p) {
+  const f = fg.replace('#', '').match(/../g).map((x) => parseInt(x, 16));
+  const b = bg.replace('#', '').match(/../g).map((x) => parseInt(x, 16));
+  return '#' + f.map((v, i) => Math.round(p * v + (1 - p) * b[i]).toString(16).padStart(2, '0')).join('');
+}
+
 // 仅浅色：深色/跟随系统主题已于 a7825b3 移除（index.html 恒 data-theme=light），
 // 不再校验 dark 块——旧脚本对已删除的 dark 块强依赖导致直接抛错崩溃（预存腐烂）。
 function extractVars() {
@@ -35,30 +44,64 @@ function extractVars() {
   return vars;
 }
 
-const CHECKS = [
-  // [textVar, bgVar, label, minRatio]
-  ['text-1', 'color-surface', '标题', 4.5],
-  ['text-2', 'color-surface', '正文', 4.5],
-  ['text-3', 'color-surface', '辅助文字', 4.5],
-  // a11y D 批：项目约定「文字/链接前景一律 brand-dark（4.95:1 AA），brand 仅作
-  // 背景/装饰/大色块」——旧检查拿 brand（2.87:1）当文字色校验属口径错误，
-  // 改为校验实际用于前景的 brand-dark；brand 的 3:1 图形场景（选中态等）
-  // 已全部切到 brand-dark，无残留前景用途（rg 审计 2026-09-04）。
-  ['color-brand-dark', 'color-surface', '品牌链接/强调文字', 4.5],
+// 前景 × 它真实会落的底色。旧版四项全拿 color-surface（纯白卡）算，于是
+// "辅助文字 5.03 ✓"恒成立；而同一支 text-3 落在 --bg-page-deep 上只有 4.39、
+// 落在自己染色出的 chip 底上只有 4.44 —— 2026-09-26 登录态 axe 复扫就是这么抓到漏网的。
+const MIN_BODY = 4.5; // 正文/辅助文字（WCAG AA 普通文本）
+const MIN_LARGE = 3.0; // 大文本/图形件
+
+const FG_BODY = [
+  ['text-1', '标题'],
+  ['text-2', '正文'],
+  ['text-3', '辅助文字'],
+  // a11y D 批：项目约定「文字/链接前景一律 brand-dark，brand 仅作背景/装饰/大色块」
+  // —— 旧检查拿 brand（2.87:1）当文字色校验属口径错误（rg 审计 2026-09-04）。
+  ['color-brand-dark', '品牌链接/强调文字'],
 ];
+const SURFACES = [
+  ['color-surface', '白卡'],
+  ['bg-page', '冷灰画布'],
+  ['bg-page-deep', '深画布'],
+];
+// 自染色 chip 底（color-mix(Fg p%, transparent) 落在白卡上）：字色自己当背景源，
+// 比值必然比纯色面低一档，是本轮 4.44 那一类的机制源。
+const SELF_TINT = [
+  ['text-3', 0.1, '辅助文字 @10% 自染 chip 底'], // .faq-item__meta
+];
+// 只达大文本档的色（不得用于 ≤12px 正文）：锁 3:1 下限
+const LARGE_ONLY = [['text-4', 0.12, '禁用/占位 @12% 自染 chip 底']];
 
 let fails = 0;
 const v = extractVars();
-console.log('\n[light]');
-for (const [tv, bg, label, min] of CHECKS) {
-  const ratio = contrast(v[tv], v[bg]);
-  const ok = ratio >= min;
+const report = (ok, label, fg, bg, ratio, min) => {
   if (!ok) fails++;
-  console.log(`${ok ? '✓' : '✗'} ${label}: ${v[tv]} on ${v[bg]} = ${ratio.toFixed(2)}:1 (需 ≥${min})`);
+  console.log(
+    `${ok ? '✓' : '✗'} ${label}: ${fg} on ${bg} = ${ratio.toFixed(2)}:1 (需 ≥${min})`
+  );
+};
+
+console.log('\n[light] 前景 × 实际底色矩阵');
+for (const [fgVar, label] of FG_BODY) {
+  for (const [bgVar, bgLabel] of SURFACES) {
+    const ratio = contrast(v[fgVar], v[bgVar]);
+    report(ratio >= MIN_BODY, `${label} @${bgLabel}`, v[fgVar], v[bgVar], ratio, MIN_BODY);
+  }
+}
+
+for (const [fgVar, p, label] of SELF_TINT) {
+  const bg = tint(v[fgVar], v['color-surface'], p);
+  const ratio = contrast(v[fgVar], bg);
+  report(ratio >= MIN_BODY, label, v[fgVar], bg, ratio, MIN_BODY);
+}
+
+for (const [fgVar, p, label] of LARGE_ONLY) {
+  const bg = tint(v[fgVar], v['color-surface'], p);
+  const ratio = contrast(v[fgVar], bg);
+  report(ratio >= MIN_LARGE, label, v[fgVar], bg, ratio, MIN_LARGE);
 }
 
 if (fails > 0) {
   console.error(`\ncheck-a11y: ${fails} 处未达 AA，请调整 tokens.css 色值`);
   process.exit(1);
 }
-console.log('\ncheck-a11y: OK（关键色对均达 WCAG AA）');
+console.log('\ncheck-a11y: OK（前景×底色矩阵全达 WCAG AA）');

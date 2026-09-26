@@ -136,7 +136,9 @@
   background: color-mix(in srgb, var(--color-accent) 14%, transparent);
 }
 .settings-bool--off {
-  color: var(--text-4);
+  /* text-4 只达大文本 3:1（此处 12px 自染底实测 3.34）→ 提到 text-3（4.90 达 AA）。
+     同 .faq__section-count 的修法；--on 的 --color-accent 2.75 仍未达标，另案挂账。 */
+  color: var(--text-3);
   background: color-mix(in srgb, var(--text-4) 12%, transparent);
 }
 

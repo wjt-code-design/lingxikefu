@@ -310,14 +310,14 @@ body {
 .kpi-card__suffix {
   font-size: 14px;
   font-weight: 400;
-  /* a11y：text-3 在卡底 4.39:1 未达 AA → text-2（axe 实测同 caption） */
+  /* a11y：旧 text-3(#5e7185) 在卡底仅 4.39:1 → 用 text-2（现 text-3 已加深，此处不回改） */
   color: var(--text-2);
   margin-left: 4px;
   -webkit-text-fill-color: var(--text-2);
 }
 .kpi-card__caption {
   font-size: 12px;
-  /* a11y：text-3(#5e7185) 在 #ecf0f4 卡底仅 4.39:1 → text-2 达标（axe 实测） */
+  /* a11y：旧 text-3(#5e7185) 在 #ecf0f4 仅 4.39:1 → text-2；2026-09-26 起 text-3=#566a7d 该底 4.89 */
   color: var(--text-2);
   /* UI 审查中3：允许换行，窄卡下不再省略号截断（"近 14 天 140 …"） */
   white-space: normal;
@@ -1160,7 +1160,7 @@ main h1.ant-typography {
   margin: 0;
   line-height: 1.45;
 }
-/* 列表 marker 品牌色（brand-dark #3874a6 白底 4.95:1 安全强调色） */
+/* 列表 marker 品牌色（brand-dark 为白底 5.66:1 的安全强调色，深画布 4.94:1） */
 .chat-msg__text li::marker {
   color: var(--color-brand-dark);
 }
@@ -2154,7 +2154,7 @@ body > textarea[style*="visibility:hidden"] {
 .ant-tag.ant-tag-gold {
   color: #874d00;
 }
-/* a11y：面包屑首项 text-3 在 #ecf0f4 仅 4.39:1 → text-2 达标（复扫新记录） */
+/* a11y：旧 text-3 在 #ecf0f4 仅 4.39:1 → 面包屑用 text-2（复扫新记录；token 已另行加深） */
 .route-chrome .ant-breadcrumb a,
 .route-chrome .ant-breadcrumb-link {
   color: var(--text-2);
@@ -2212,6 +2212,12 @@ body > textarea[style*="visibility:hidden"] {
   margin-inline-end: 0 !important;
   font-size: 11px;
   line-height: 18px;
+}
+/* a11y：antd 预设 cyan 标签字色 #08979c 在其浅底 #e6fffb 上实测仅 3.39:1（11px 不享
+   大文本豁免）→ 压深到 #0b6b6f（5.99:1）。选择器带 .ant-tag 两个类，靠特异性稳赢
+   antd 运行时的 .ant-tag.ant-tag-cyan，不用 !important。blue/gold 两档 axe 实测达标，不动。 */
+.user-menu__tag.ant-tag.ant-tag-cyan {
+  color: #0b6b6f;
 }
 .user-menu__name {
   max-width: 120px;
@@ -2350,7 +2356,7 @@ body > textarea[style*="visibility:hidden"] {
   background: var(--color-brand-deep);
   border-color: var(--color-brand-deep);
 }
-/* a11y C批：用户侧意见反馈页——次要文案/字数统计 2.33:1 → text-3（4.77:1 AA），主按钮同族 */
+/* a11y C批：用户侧意见反馈页——次要文案/字数统计 2.33:1 → text-3（现 #566a7d：白 5.59/深画布 4.89），主按钮同族 */
 .user-feedback-page .ant-typography-secondary,
 .user-feedback-page .ant-input-data-count {
   color: var(--text-3) !important;
