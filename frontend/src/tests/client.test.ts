@@ -1,7 +1,7 @@
 import { AxiosError } from 'axios';
 import type { AxiosHeaderValue, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { http } from '@/api/client';
+import { http, refreshAccessToken } from '@/api/client';
 import { useAuthStore } from '@/store/authStore';
 
 describe('client 401 自动刷新拦截器', () => {
@@ -14,6 +14,7 @@ describe('client 401 自动刷新拦截器', () => {
   afterEach(() => {
     http.defaults.adapter = originalAdapter;
     useAuthStore.setState({ token: null, refreshToken: null, user: null, role: null });
+    localStorage.removeItem('lingxi-auth');
   });
 
   type MockResponse = { status: number; data: unknown };
@@ -113,5 +114,58 @@ describe('client 401 自动刷新拦截器', () => {
     expect(err).not.toBeNull();
     expect((err as AxiosError).code).toBe('500'); // H1 契约：无结构化 code 时回退到 HTTP 状态码
     expect(useAuthStore.getState().token).toBe('old');
+  });
+
+  describe('多标签页 refreshToken 轮换（R-4 旧票即吊销，persist 不跨标签同步）', () => {
+    // zustand persist 在 setState 时写盘，故覆盖 localStorage 必须放在 setState 之后
+    function seedOtherTabWrote(newerRt: string) {
+      localStorage.setItem(
+        'lingxi-auth',
+        JSON.stringify({ state: { refreshToken: newerRt, user: null, role: 'user' }, version: 0 })
+      );
+    }
+    const postedRt = () => {
+      const seen: string[] = [];
+      mockAdapter((config) => {
+        if (config.url !== '/auth/refresh') return { status: 404, data: {} };
+        const sent = JSON.parse(String(config.data)) as { refresh_token: string };
+        seen.push(sent.refresh_token);
+        return sent.refresh_token === 'rt-new'
+          ? { status: 200, data: { access_token: 'new', refresh_token: 'rt-newer' } }
+          : { status: 401, data: {} };
+      });
+      return seen;
+    };
+
+    it('本标签页持废票、另一标签页已换新值 → 重读 localStorage 后成功，不清会话', async () => {
+      const seen = postedRt();
+      seedOtherTabWrote('rt-new');
+
+      const token = await refreshAccessToken();
+      expect(token).toBe('new');
+      expect(seen).toEqual(['rt', 'rt-new']); // 第一次用内存旧票，第二次用盘上新票
+      expect(useAuthStore.getState().refreshToken).toBe('rt-newer');
+      expect(useAuthStore.getState().token).toBe('new');
+    });
+
+    it('两边同值（真·会话过期）→ 只发一次 refresh 即登出，不无限重试', async () => {
+      window.history.replaceState(null, '', '/login');
+      const seen = postedRt(); // 任何票都回 401
+      seedOtherTabWrote('rt'); // 与内存同值
+
+      const token = await refreshAccessToken();
+      expect(token).toBeNull();
+      expect(seen).toEqual(['rt']);
+      expect(useAuthStore.getState().refreshToken).toBeNull();
+    });
+
+    it('localStorage 不可读（坏 JSON）→ 退回原登出路径，不抛异常', async () => {
+      window.history.replaceState(null, '', '/login');
+      const seen = postedRt();
+      localStorage.setItem('lingxi-auth', '{not json');
+
+      await expect(refreshAccessToken()).resolves.toBeNull();
+      expect(seen).toEqual(['rt']);
+    });
   });
 });

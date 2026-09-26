@@ -24,9 +24,38 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
 /** 并发 401 共享的刷新 Promise，避免同时发多个 refresh 请求 */
 let refreshing: Promise<string | null> | null = null;
 
+const AUTH_STORAGE_KEY = 'lingxi-auth';
+
 function redirectToLogin() {
   if (window.location.pathname !== '/login') {
     window.location.href = '/login';
+  }
+}
+
+/** 只读 localStorage 里的 refreshToken（另一标签页可能已把它轮换掉，本标签页内存是旧值）。
+ *  只读不写：access token 按 BUG-15 仍不落盘。坏 JSON/隐私模式一律当"读不到"，走原登出路径。 */
+function readStoredRefreshToken(): string | null {
+  try {
+    const raw = localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { state?: { refreshToken?: string | null } };
+    return parsed.state?.refreshToken ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function postRefresh(refreshToken: string): Promise<string | null> {
+  try {
+    const r = await http.post<RefreshResp>('/auth/refresh', { refresh_token: refreshToken });
+    // R-4：轮换后同步覆盖存储新 refresh token（旧 token 已吊销）
+    useAuthStore.setState({
+      token: r.data.access_token,
+      ...(r.data.refresh_token ? { refreshToken: r.data.refresh_token } : {}),
+    });
+    return r.data.access_token;
+  } catch {
+    return null;
   }
 }
 
@@ -34,30 +63,42 @@ function redirectToLogin() {
  * B2：共享刷新入口（axios 401 拦截器与 SSE fetch 共用）。
  * 并发调用复用同一次 /auth/refresh；刷新成功返回新 access token，
  * 失败时清空会话并返回 null（由调用方决定跳转登录）。
+ *
+ * 多标签页：R-4 是"轮换即吊销旧 jti"，而 refreshToken 存在跨标签页共享的 localStorage、
+ * zustand persist 不做跨标签同步 ⇒ 后启动的标签页续期后，先启动的标签页内存里那张已成废票，
+ * 它下次续期必然 401 并被 clear() 踢下线（本机两标签页脚本已复现）。故失败后**重读
+ * localStorage 再试一次**；若两边同值（真·会话过期）则给并发赢家一次落盘窗口后有界重试，
+ * 最多两次 POST，不做静默轮询。
  */
 export function refreshAccessToken(): Promise<string | null> {
-  const { refreshToken, clear } = useAuthStore.getState();
-  if (!refreshToken) return Promise.resolve(null);
   if (!refreshing) {
-    refreshing = http
-      .post<RefreshResp>('/auth/refresh', { refresh_token: refreshToken })
-      .then((r) => {
-        // R-4：轮换后同步覆盖存储新 refresh token（旧 token 已吊销）
-        useAuthStore.setState({
-          token: r.data.access_token,
-          ...(r.data.refresh_token ? { refreshToken: r.data.refresh_token } : {}),
-        });
-        return r.data.access_token;
-      })
-      .catch(() => {
-        clear();
-        return null;
-      })
-      .finally(() => {
-        refreshing = null;
-      });
+    refreshing = doRefresh().finally(() => {
+      refreshing = null;
+    });
   }
   return refreshing;
+}
+
+async function doRefresh(): Promise<string | null> {
+  const stale = useAuthStore.getState().refreshToken;
+  if (!stale) return null;
+
+  const first = await postRefresh(stale);
+  if (first) return first;
+
+  let next = readStoredRefreshToken();
+  if (!next || next === stale) {
+    await new Promise((r) => setTimeout(r, 300));
+    next = readStoredRefreshToken();
+  }
+  if (!next || next === stale) {
+    useAuthStore.getState().clear();
+    return null;
+  }
+
+  const second = await postRefresh(next);
+  if (!second) useAuthStore.getState().clear();
+  return second;
 }
 
 function toApiError(error: unknown): ApiError {
