@@ -65,7 +65,7 @@ body {
   }
 }
 
-/* 卡片入场：淡入 + 向上位移（Landing/Profile/Help 等页面卡片） */
+/* 卡片入场：淡入 + 向上位移（仅 .landing__feature 使用） */
 @keyframes card-in {
   from {
     opacity: 0;
@@ -104,8 +104,6 @@ body {
 .landing__feature:nth-child(1) { animation-delay: 0ms; }
 .landing__feature:nth-child(2) { animation-delay: 80ms; }
 .landing__feature:nth-child(3) { animation-delay: 160ms; }
-
-/* Profile 卡片入场 */
 
 /* FAQ 条目 hover 微交互增强 */
 .faq-item {

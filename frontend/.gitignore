@@ -6,3 +6,6 @@ playwright-report/
 test-results/
 playwright/.cache/
 e2e/screenshots/
+
+# 验证重定向日志不入库（2026-09-26 清 5 个 vitest/tsc 残留后防回填，对齐根 .gitignore 的 eval 日志策略）
+*.log
