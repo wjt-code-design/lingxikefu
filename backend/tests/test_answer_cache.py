@@ -247,6 +247,8 @@ def test_wait_for_exact_returns_backfilled_payload(monkeypatch):
     monkeypatch.setattr(answer_cache, "settings", _SETTINGS_ON)
     r = _NxFakeRedis()
     monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: _FakeQdrant())
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type("E", (), {"dim": 768, "embed": lambda *a: [[0.1] * 768]})())
     monkeypatch.setattr(answer_cache, "_SF_WAIT_INTERVAL", 0.01)
     monkeypatch.setattr(answer_cache, "_SF_WAIT_TIMEOUT", 0.2)
 
