@@ -14,7 +14,14 @@ interface AuthState {
 }
 
 /**
- * 认证状态，持久化到 localStorage（key: lingxi-auth）。
+ * zustand persist 在 localStorage 的键（单一真源）。
+ * `api/client.ts` 的多标签页兜底要直接读盘（内存里可能是已轮换掉的旧票），
+ * 测试也要按同一形状构造/校验样本——三处各写一遍字面量迟早漂一个。
+ */
+export const AUTH_STORAGE_KEY = 'lingxi-auth';
+
+/**
+ * 认证状态，持久化到 localStorage（key: AUTH_STORAGE_KEY）。
  * BUG-15：access token 仅存内存，不持久化（降 XSS 泄露面）；
  * 仅持久化 refreshToken/user/role，刷新页面后由 api/auth.bootstrapAuth 静默续期恢复会话。
  * 路由守卫 RequireAuth 读取 token/role 做访问控制。
@@ -37,7 +44,7 @@ export const useAuthStore = create<AuthState>()(
       clear: () => set({ token: null, refreshToken: null, user: null, role: null }),
     }),
     {
-      name: 'lingxi-auth',
+      name: AUTH_STORAGE_KEY,
       // BUG-15：token（access token）不落 localStorage；refreshToken/user/role 持久化以支持静默续期
       partialize: (s) => ({
         refreshToken: s.refreshToken,

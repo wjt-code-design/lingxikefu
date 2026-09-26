@@ -2,7 +2,7 @@ import { AxiosError } from 'axios';
 import type { AxiosHeaderValue, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { http, refreshAccessToken } from '@/api/client';
-import { useAuthStore } from '@/store/authStore';
+import { AUTH_STORAGE_KEY, useAuthStore } from '@/store/authStore';
 
 describe('client 401 自动刷新拦截器', () => {
   const originalAdapter = http.defaults.adapter;
@@ -14,7 +14,7 @@ describe('client 401 自动刷新拦截器', () => {
   afterEach(() => {
     http.defaults.adapter = originalAdapter;
     useAuthStore.setState({ token: null, refreshToken: null, user: null, role: null });
-    localStorage.removeItem('lingxi-auth');
+    localStorage.removeItem(AUTH_STORAGE_KEY);
   });
 
   type MockResponse = { status: number; data: unknown };
@@ -117,10 +117,25 @@ describe('client 401 自动刷新拦截器', () => {
   });
 
   describe('多标签页 refreshToken 轮换（R-4 旧票即吊销，persist 不跨标签同步）', () => {
+    /**
+     * 前提守卫：下面三条用例要手工伪造 localStorage（真·多标签页在单 jsdom 里造不出来——
+     * persist 每次 setState 都写盘，无法让"内存持旧票 / 盘上持新票"两边同时成立，只能绕过 store 写盘）。
+     * 伪造样本一旦与 persist 真写出的形状漂移，那三条用例就会在**修复已失效**的代码上继续全绿。
+     * 所以先断言：走应用自己的 persist，盘上确实有 `state.refreshToken`——
+     * 谁把 `authStore.ts` 的 `partialize` 里这项删掉，这条就红。
+     */
+    it('persist 真写出的信封确实带 state.refreshToken（手工伪造样本的前提）', () => {
+      useAuthStore.setState({ refreshToken: 'rt-from-persist' });
+      const env = JSON.parse(String(localStorage.getItem(AUTH_STORAGE_KEY))) as {
+        state?: { refreshToken?: string };
+      };
+      expect(env.state?.refreshToken).toBe('rt-from-persist');
+    });
+
     // zustand persist 在 setState 时写盘，故覆盖 localStorage 必须放在 setState 之后
     function seedOtherTabWrote(newerRt: string) {
       localStorage.setItem(
-        'lingxi-auth',
+        AUTH_STORAGE_KEY,
         JSON.stringify({ state: { refreshToken: newerRt, user: null, role: 'user' }, version: 0 })
       );
     }
@@ -162,7 +177,7 @@ describe('client 401 自动刷新拦截器', () => {
     it('localStorage 不可读（坏 JSON）→ 退回原登出路径，不抛异常', async () => {
       window.history.replaceState(null, '', '/login');
       const seen = postedRt();
-      localStorage.setItem('lingxi-auth', '{not json');
+      localStorage.setItem(AUTH_STORAGE_KEY, '{not json');
 
       await expect(refreshAccessToken()).resolves.toBeNull();
       expect(seen).toEqual(['rt']);

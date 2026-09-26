@@ -1,6 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { API_PREFIX, type ApiError, type RefreshResp } from '@/contracts/api';
-import { useAuthStore } from '@/store/authStore';
+import { AUTH_STORAGE_KEY, useAuthStore } from '@/store/authStore';
 
 /**
  * 统一 axios 实例。
@@ -23,8 +23,6 @@ interface RetriableConfig extends InternalAxiosRequestConfig {
 
 /** 并发 401 共享的刷新 Promise，避免同时发多个 refresh 请求 */
 let refreshing: Promise<string | null> | null = null;
-
-const AUTH_STORAGE_KEY = 'lingxi-auth';
 
 function redirectToLogin() {
   if (window.location.pathname !== '/login') {

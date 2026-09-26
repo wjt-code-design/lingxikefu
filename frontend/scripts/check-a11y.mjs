@@ -142,7 +142,9 @@ function extractUsedPresets() {
   for (const rel of files) {
     const txt = readFileSync(resolve(root, 'src', rel), 'utf-8');
     for (const m of txt.matchAll(/['"]([a-z]+)['"]/g)) {
-      if (m[1] in PRESET_TAG) names.add(m[1]);
+      // 必须 hasOwn 而非 `in`：`'constructor' in PRESET_TAG` 为 true，
+      // 裸词扫到任何 Object.prototype 键就会凭空造一个"在用预设色"，把尺子带崩。
+      if (Object.hasOwn(PRESET_TAG, m[1])) names.add(m[1]);
     }
   }
   return [...names].sort();
@@ -154,9 +156,11 @@ const usedPresets = extractUsedPresets();
 console.log(`  在用预设色名：${usedPresets.join(', ')}`);
 for (const name of usedPresets) {
   const [bg, def] = PRESET_TAG[name];
-  const fg = tagOv[name] || def;
+  // 同样按 hasOwn 取覆盖值：tagOv 是普通对象，`tagOv['toString']` 会拿到 Function 并算出 NaN
+  const ov = Object.hasOwn(tagOv, name) ? tagOv[name] : null;
+  const fg = ov || def;
   const ratio = contrast(fg, bg);
-  report(ratio >= MIN_BODY, `Tag ${name}（${tagOv[name] ? '覆盖' : 'antd 默认'}）`, fg, bg, ratio, MIN_BODY);
+  report(ratio >= MIN_BODY, `Tag ${name}（${ov ? '覆盖' : 'antd 默认'}）`, fg, bg, ratio, MIN_BODY);
 }
 
 if (fails > 0) {

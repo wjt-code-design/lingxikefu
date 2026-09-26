@@ -31,8 +31,9 @@ for (const [role, routes] of Object.entries(ROUTES) as [E2ERole, string[]][]) {
       // 运行时求值顺序：worker 钩子先于 skip 判定）。所以登录这一步自己也要挡一层，
       // 否则移动 project 会白跑一次真登录——既慢，又占掉 `auth.py:32` 的 5 次/分钟额度。
       if (testInfo.project.use.isMobile) return;
-      // 一个 context 登录一次：access token 只在内存（BUG-15），跨路由靠 401 拦截器自续期，
-      // 与真人点侧栏导航的路径一致；每路由新开 context 反而会各触发一次 bootstrap 轮换令牌。
+      // 一个 context 只登一次（省掉 19 次真登录，也省掉 `auth.py:32` 的 5 次/分钟额度风险）。
+      // 注意后续 `auditRoute` 用 page.goto 整页重载，所以每条路由仍会各跑一次 bootstrapAuth
+      // 静默续期——审的是"冷启动登录态"，不是客户端导航路径（详见 fixtures.ts 头部）。
       page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
       await signIn(page, role);
     });

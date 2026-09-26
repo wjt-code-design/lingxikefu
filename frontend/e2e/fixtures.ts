@@ -6,11 +6,15 @@ import { fileURLToPath } from 'node:url';
  * e2e 登录态与 axe 取证公共件（2026-09-26 那轮一次性探针脚本的固化版）。
  *
  * 与原探针的差别（为什么现在能进 CI）：
- * - 原脚本靠 `scripts/lingxi_mint_tokens.py` 手工签 refreshToken 再 `addInitScript` 注入，
- *   且**每条路由都要一枚未用过的令牌**——`/auth/refresh` 是轮换制（旧 jti 立即进 Redis 吊销表），
- *   同令牌复用第二个页面必然 401 被踢回 /login，axe 于是审的是登录页（首轮就踩，19/19 假绿）。
- * - 现在改走 UI 真登录：`scripts/seed_e2e_accounts.py` 灌三个角色号，
- *   一个 context 登录一次、后续路由靠内存 access token + 拦截器自续期，与真实用户路径一致。
+ * - 原脚本靠手工签 refreshToken 再 `addInitScript` 注入，且**每条路由要吃一枚未用过的票**——
+ *   `/auth/refresh` 是 R-4 轮换制（旧 jti 立即进 Redis 吊销表），同令牌复用第二个页面必然 401
+ *   被踢回 /login。首轮就踩：19 条里 16 条其实停在 /login，axe 对着登录页照报 0 违规＝假绿。
+ * - 现在走 UI 真登录：`scripts/seed_e2e_accounts.py` 灌三个角色号，一个 context 只登一次。
+ *
+ * ⚠️ 如实标注执行路径：`auditRoute` 每条路由 `page.goto()` = **整页重载**，内存 access token
+ * 随之作废（BUG-15 不落盘），所以每条路由都会重跑一次 `bootstrapAuth`（refresh + me）。
+ * 这审的是"冷启动登录态"（与 D9 探针同形），**不是**真人点侧栏的客户端导航路径；
+ * D15 那条修复（同页 401 后重读 localStorage）由 `src/tests/client.test.ts` 单测钉着，e2e 不覆盖。
  *
  * 口令与种子步骤必须同值：CI 的 `E2E_PASSWORD` 就取这里的常量（一次性库里的号，出库即无意义；
  * 写成常量而不是环境变量，是为了让 `npx playwright test` 本地零配置可跑）。
@@ -110,11 +114,18 @@ declare global {
 }
 
 /**
+ * 正文最少字数：只为排除"壳渲染了、正文一个字都没有"的空壳态（配 `>=` 用）。
+ * 别把它调高——空库下 `/agent/sessions` 这类页的真实正文就是面包屑 + 空状态
+ * （实测 31 字），阈值定到 40 会把正常页判死。
+ */
+const MIN_CONTENT_CHARS = 8;
+
+/**
  * 停进"稳定态"再取证。两段等待，顺序不能反：
  *
- * ① 先等**正文自己出来**（`#main-content` 有文字）。不能只等"骨架消失"——`goto('load')`
+ * ① 先等**正文自己出来**（`#main-content` 有字）。不能只等"骨架消失"——`goto('load')`
  *    返回时 React 往往还没挂懒加载 chunk，那一刻 `.route-fallback` 根本不存在，
- *     absence 判断会在空 DOM 上秒过（首版就这么拿到过 body 只有 7 个字符的 /tickets，
+ *    absence 判断会在空 DOM 上秒过（首版就这么拿到过 body 只有 7 个字符的 /tickets，
  *    axe 对着空壳报 0 违规 = 纯假绿）。两种布局都有 `#main-content`（AdminLayout 的
  *    Layout.Content / WidgetShell 的 `<main class="widget-shell__body">`），故取它当公共锚。
  * ② 再等**加载态退场**（懒加载骨架 + 数据 Spin/Skeleton）。
@@ -122,13 +133,6 @@ declare global {
  * 不用 `networkidle`：vite dev 的 HMR 是长连接，networkidle 永不触发（见 `login.spec.ts` 注释）。
  * 数据加载态也不静默放过——空库下这些页本就秒出，还卡在 Skeleton/Spin 就是真问题。
  */
-/**
- * 正文最少字数：只为排除"壳渲染了、正文一个字都没有"的空壳态。
- * 别把它调高——空库下 `/agent/sessions` 这类页的真实正文就是面包屑 + 空状态
- * （实测 31 字），阈值定到 40 会把正常页判死。
- */
-const MIN_CONTENT_CHARS = 8;
-
 export async function settle(page: Page, route: string): Promise<void> {
   const content = page.locator('#main-content');
   await expect
@@ -137,7 +141,7 @@ export async function settle(page: Page, route: string): Promise<void> {
       timeout: 30_000,
       intervals: [300],
     })
-    .toBeGreaterThan(MIN_CONTENT_CHARS);
+    .toBeGreaterThanOrEqual(MIN_CONTENT_CHARS);
 
   await page.waitForFunction(
     () =>

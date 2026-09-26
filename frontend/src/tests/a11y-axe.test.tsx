@@ -8,18 +8,19 @@ import { useAuthStore } from '@/store/authStore';
 /**
  * axe 结构规则守卫（把"axe 清零不回退"从人肉承诺变成会红的断言）。
  *
- * 为什么跑在 jsdom 而不是 Playwright：CI 的 frontend job 只有 `tsc + vitest`
- * （.github/workflows/ci.yml:257-276，不跑 check:a11y / check:tokens），
- * 装浏览器要给每次 push 加分钟级下载；jsdom 版零基建，且覆盖我们真正会漂移的结构类规则：
- * 角色、可访问名、合法 ARIA、**nested-interactive**。
+ * 与 e2e 版的分工（别把两边当一个）：真浏览器那层是 `frontend/e2e/login-state.spec.ts`，
+ * 已随 CI 的 `E2E (Playwright + axe)` job 每次 push 跑，但它要起 PG/Redis/Qdrant + 下载
+ * Chromium（实测 3m24s）。jsdom 版零基建、秒级，守的是**结构类**规则：角色、可访问名、
+ * 合法 ARIA、nested-interactive——这些不需要布局就能判，也没必要为它付浏览器的钱。
  *
  * 边界（如实标注，别把它当完整 a11y 通过）：
- * - 只覆盖匿名可达页 + 单组件态；登录态整页（chat / 工作台 / admin）需后端。
- * - 布局依赖规则 jsdom 判不了 → 关 color-contrast；对比度由 `check:a11y` 静态算色守，
- *   触摸目标由 Playwright 探针量（本轮实测：auth-card__link 23→24px 等）。
+ * - 只覆盖匿名可达页 + 单组件态；登录态整页归 e2e 版。
+ * - 布局依赖规则 jsdom 判不了 → 关 color-contrast。对比度由 `check:a11y`（前景×底色矩阵，
+ *   已进 CI frontend job）静态算色守；触摸目标由 e2e 守（axe `target-size` + 尺寸实测）。
+ *   ⚠️ 两把都不覆盖 D13 那个 `--color-accent` 自染 chip（未闭环，见报告台账）。
  * - 假阳性教训（首版就踩）：落地页 axe 报 empty-heading ×1，实为
  *   `.ant-skeleton-title`——antd 骨架屏占位自身的标记，真浏览器 axe 报 0 违规。
- *   故断言前先等骨架退场，审"稳定态"而不是加载态。
+ *   故断言前先等骨架退场，审"稳定态"而不是加载态（e2e 的 `settle()` 同一手法）。
  */
 
 const JSDOM_UNEVALUABLE = { 'color-contrast': { enabled: false } as const };
