@@ -13,8 +13,13 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 放仓库根 scripts/ 而不是 backend/scripts/：`backend/**` 在付费评测的触发面里
+# （.github/workflows/eval.yml 的 paths-filter），测试基建改动落在那儿每次 push 都要
+# 白跑一次 LongCat 抽样。与 check_contracts.py / check_baseline_hashes.py 同一层。
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "backend"))
 
 from app.core.database import SessionLocal  # noqa: E402
 from app.core.security import hash_password  # noqa: E402

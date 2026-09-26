@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
  * - 原脚本靠 `scripts/lingxi_mint_tokens.py` 手工签 refreshToken 再 `addInitScript` 注入，
  *   且**每条路由都要一枚未用过的令牌**——`/auth/refresh` 是轮换制（旧 jti 立即进 Redis 吊销表），
  *   同令牌复用第二个页面必然 401 被踢回 /login，axe 于是审的是登录页（首轮就踩，19/19 假绿）。
- * - 现在改走 UI 真登录：`backend/scripts/seed_e2e_accounts.py` 灌三个角色号，
+ * - 现在改走 UI 真登录：`scripts/seed_e2e_accounts.py` 灌三个角色号，
  *   一个 context 登录一次、后续路由靠内存 access token + 拦截器自续期，与真实用户路径一致。
  *
  * 口令与种子步骤必须同值：CI 的 `E2E_PASSWORD` 就取这里的常量（一次性库里的号，出库即无意义；
@@ -67,7 +67,7 @@ export async function signIn(page: Page, role: E2ERole): Promise<void> {
   await page.getByPlaceholder('密码').fill(E2E_PASSWORD);
   // antd Button 对「两个汉字」的文案自动插空格（实际 accessible name 是「登 录」），故用 \s* 匹配
   await page.getByRole('button', { name: /登\s*录/ }).click();
-  // 停在 /login 的两种常见原因：种子号没灌（`backend/scripts/seed_e2e_accounts.py`），
+  // 停在 /login 的两种常见原因：种子号没灌（`scripts/seed_e2e_accounts.py`），
   // 或撞了登录限流（`auth.py:32` 每 IP 每分钟 5 次 → 429，页面弹"登录过于频繁"）。
   await expect(
     page,

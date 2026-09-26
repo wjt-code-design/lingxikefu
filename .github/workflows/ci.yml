@@ -329,9 +329,10 @@ jobs:
         working-directory: backend
         run: alembic upgrade head
       # 种子账号口令与 `frontend/e2e/fixtures.ts` 的 E2E_PASSWORD 常量同值（一次性库，出库即无意义）。
-      # 脚本对缺 env 直接 exit 2，防止误往开发库灌号。
+      # 脚本对缺 env 直接 exit 2，防止误往开发库灌号。放仓库根 scripts/ 而非 backend/scripts/：
+      # 后者在付费评测的触发面（backend/**）里，测试基建改动不该每次 push 烧一次抽样。
       - name: Seed e2e accounts
-        working-directory: backend
+        working-directory: .
         run: E2E_PASSWORD='e2e-not-a-secret-2026' python scripts/seed_e2e_accounts.py
       - name: Start API (background)
         working-directory: backend
