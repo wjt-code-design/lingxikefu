@@ -44,10 +44,16 @@ def list_customers(
     tenant = settings.TENANT_DEFAULT
 
     # 未处理工单计数（按 user 聚合）：join sessions 拿 user_id
+    # C3（红线⑨）：子查询自身也带租户条件——今天靠外层 User.tenant_id 兜住不泄漏，
+    # 但聚合口径必须与主查询同租户，否则多租户下 open_tickets 会把别家工单计进来。
     open_ticket_cnt = (
         select(Session.user_id, func.count(Ticket.id).label("n"))
         .join(Ticket, Ticket.session_id == Session.id)
-        .where(Ticket.status.in_([TicketStatus.open, TicketStatus.processing]))
+        .where(
+            Ticket.status.in_([TicketStatus.open, TicketStatus.processing]),
+            Ticket.tenant_id == tenant,
+            Session.tenant_id == tenant,
+        )
         .group_by(Session.user_id)
         .subquery()
     )

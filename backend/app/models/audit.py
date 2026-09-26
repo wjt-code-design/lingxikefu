@@ -3,7 +3,8 @@
 - actor：操作人（id / email / role）；action + resource 描述操作类型与对象；
 - resource_id / detail / ip 补充定位信息；
 - created_at 采用 base.py / ticket.py 一致的 ``server_default=func.now()`` 风格；
-- 按红线⑨ / ADR-2 全表含 tenant_id（id 之后），审计记录随租户隔离；业务上不强制按 tenant 过滤。
+- 按红线⑨ / ADR-2 全表含 tenant_id（id 之后），审计记录随租户隔离：读路径**必须**显式
+  按 tenant 过滤（app/api/audit_logs.py），由 scripts/check_tenant_filters.py 静态把关。
 """
 from __future__ import annotations
 

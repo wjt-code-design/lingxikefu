@@ -2,7 +2,7 @@
 
 依据决策（2026-08-20）：订单 demo 数据已灌入 demo KB（scripts/demo_data/ 新增 2 份订单文档）。
 - 断言用 **检索召回**（chunks 命中正确业务键），不依赖 LLM 语义 → 确定性、零 LLM 成本；
-- 前置：目标 KB 需已导入订单 demo 文档；否则 `pytest.skip`（提示先 seed），不炸无关环境；
+- 前置：目标 KB 需已导入订单 demo 文档；**未导入即 fail**（见 A4 说明），不静默少跑；
 - 走真实 Qdrant + 本地 embedding（测试环境有依赖；CI 需先 seed demo 数据）。
 
 seed：docker compose exec api python scripts/seed_demo_data.py <kb_id>（幂等）。
@@ -29,23 +29,42 @@ CASES = {
     ),
 }
 
+#: A4（审计 M4 2026-09-27）：只有「拿不到可用 DB 会话」才允许 skip。旧实现 `except Exception`
+#: 把一切兜成 skip 且文案写「依赖未就绪」——本机真因其实是服务器在监听、口令被拒。
+#: 凭据类失败同样归入 skip（无凭据的开发机/容器首启本就跑不了真库），但文案必须说真因；
+#: 表缺失（ProgrammingError）与 seed 数据缺失必须 fail——CI 裸 `pytest` 不报 skip，
+#: 兜成 skip 等于 seed 步骤坏了还静默少跑 5 条、job 照绿。
+_UNREACHABLE_MARKERS = (
+    "connection refused",
+    "connection failed",
+    "could not connect",
+    "no connection could be made",
+    "getaddrinfo failed",
+    "timed out",
+    "timeout expired",
+    "server closed the connection unexpectedly",
+    "authentication failed",  # 含 password/peer 两类：服务器可达但我方无有效凭据
+)
+
+
+def _db_unreachable(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return any(m in text for m in _UNREACHABLE_MARKERS)
+
 
 @pytest.fixture(scope="module")
 def demo_kb_id() -> str:
-    """定位最新 demo KB；若库中无任何订单 demo 文档则跳过整组。"""
+    """定位最新 demo KB；连不上 DB 才 skip（文案含真因），无 KB/无订单文档一律 fail。"""
+    db = SessionLocal()
     try:
-        db = SessionLocal()
-        try:
-            kb = db.scalar(
-                sa.select(KnowledgeBase)
-                .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
-                .order_by(KnowledgeBase.created_at.desc())
-                .limit(1)
-            )
-            if kb is None:
-                pytest.skip("知识库为空，请先创建并导入 demo 数据")
-            # 确认订单类 demo 文档已导入（改地址/综合案例标题特征）
-            has_order_doc = db.scalar(
+        kb = db.scalar(
+            sa.select(KnowledgeBase)
+            .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
+            .order_by(KnowledgeBase.created_at.desc())
+            .limit(1)
+        )
+        has_order_doc = (
+            db.scalar(
                 sa.select(Document.id)
                 .where(
                     Document.kb_id == kb.id,
@@ -54,13 +73,21 @@ def demo_kb_id() -> str:
                 )
                 .limit(1)
             )
-            if not has_order_doc:
-                pytest.skip("未导入订单 demo 数据，请先执行 seed_demo_data.py 后重跑")
-            return str(kb.id)
-        finally:
-            db.close()
+            if kb
+            else None
+        )
     except Exception as exc:
-        pytest.skip(f"demo KB 不可用（数据库/Qdrant 依赖未就绪）: {exc}")
+        if _db_unreachable(exc):
+            pytest.skip(f"PG 会话不可用（非 seed 问题，真因如下）: {exc}")
+        raise
+    finally:
+        db.close()
+
+    if kb is None:
+        pytest.fail("租户内无任何知识库 —— seed 步骤坏掉了，请执行 scripts/seed_demo_data.py")
+    if not has_order_doc:
+        pytest.fail(f"KB {kb.id} 未导入订单 demo 文档（标题需含「改地址」）—— seed 步骤坏掉了")
+    return str(kb.id)
 
 
 @pytest.mark.parametrize("label,spec", list(CASES.items()), ids=list(CASES.keys()))

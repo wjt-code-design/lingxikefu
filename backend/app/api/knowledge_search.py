@@ -67,9 +67,15 @@ async def search_knowledge(
     doc_ids = {uuid.UUID(c.doc_id) for c in chunks}
 
     def _fetch_meta() -> tuple[dict[str, str], str]:
+        # C4（红线⑨）：标题查询与下方 KB 查询同租户口径（KB 那条本就带条件）
         doc_titles = {
             str(d.id): d.name
-            for d in db.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
+            for d in db.scalars(
+                select(Document).where(
+                    Document.id.in_(doc_ids),
+                    Document.tenant_id == settings.TENANT_DEFAULT,
+                )
+            ).all()
         }
         kb = db.scalar(
             select(KnowledgeBase).where(

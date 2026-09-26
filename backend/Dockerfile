@@ -37,7 +37,8 @@ COPY --from=builder /install /usr/local
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini .
-COPY .env.example .
+# .env.example 不再 COPY 进运行镜像（D9，审计 2026-09-27）：app/core/config.py 读的是环境变量，
+# 运行期用不到这个模板；CI 的 secret-scan 读的是工作区文件，与镜像无关。
 # pytest 配置（asyncio_mode=auto 等；2026-08-20 补：容器内跑测试需要）
 COPY pyproject.toml .
 # 测试与工具脚本进镜像（2026-08-20：容器内可直接 pytest / 重新生成 OpenAPI schema，
@@ -51,10 +52,15 @@ EXPOSE 8000
 
 # fail-closed：启动前由 settings.validate() 校验配置（缺/占位即退出）
 #
-# 多 worker（uvicorn --workers N）安全性依据：
-# - 所有跨实例可变状态一律外部化：限流=Redis、答案缓存=Redis+Qdrant、导入任务=Celery(broker=Redis)、
-#   业务数据=PostgreSQL；通知/人工客服消息走"轮询"而非 server push → 无进程内共享可变状态，
-#   多 worker 下不会事件丢失/重复，可按需加 --workers N 横向扩容。
-# - 注意：代理后面如需真实客户端 IP，须配 TRUSTED_PROXIES（见 .env.example）；--workers 需配合
-#   挂多个进程各自持有 Redis/Qdrant 连接池（无共享），无需额外锁。
+# 并发形态：**本镜像按单 worker 前提运行**（下方 CMD 故意不带 --workers），原因不是"不敢加"，
+# 而是进程内确实有共享可变状态——通知中心是 SSE 长连接（app/api/notifications.py
+# /notifications/stream），订阅表 app/services/notification_service.py 的 `_subscribers`
+# 是模块级 dict + threading.Lock，广播只 loop.call_soon_threadsafe 投递给**本进程**的连接。
+# 因此加 --workers N 后，约 (N-1)/N 的在线坐席收不到实时推送，而列表和角标仍由 DB 兜底 ⇒
+# 静默降级、无人报错（B6，审计 2026-09-27）。
+# 要横向扩容必须先做的一步：把通知订阅表挪到 Redis pub/sub（跨进程广播），
+# 另两处同源进程内状态（app/api/sessions.py 的 _suggest_cache、app/api/telemetry.py 的
+# 降级 _recent）只影响命中率/单进程防护，可随后评估。
+# 其余跨实例可变状态早已外部化：限流=Redis、答案缓存=Redis+Qdrant、导入任务=Celery(broker=Redis)、
+# 业务数据=PostgreSQL。代理后面如需真实客户端 IP，须配 TRUSTED_PROXIES（填法见仓库 backend/.env.example）。
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

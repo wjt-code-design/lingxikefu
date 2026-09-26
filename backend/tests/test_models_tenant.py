@@ -2,8 +2,16 @@
 
 注：Quota ORM 模型已于 L5 移除（配额改 Redis 原子闸门）；2026-09-06 额度系统
 整体移除后 Redis 闸门亦下线，从未有 quotas 表。故下表集合为 10 张。
+
+A6（审计 M4 2026-09-27）：本文件前三条只验 **schema 形状**，不验任何一条查询——于是
+eval.py / audit_logs.py 整文件零 tenant 时这里照样全绿。末尾那条把根目录的查询级尺子
+scripts/check_tenant_filters.py 接进 pytest，让红线⑨ 在「列存在」和「查询真过滤」两层
+都有东西守着（CI 未接该脚本前，这里就是它的执行点）。
 """
 from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
 
 from app.models import Base
 
@@ -46,3 +54,20 @@ def test_expected_table_set_present() -> None:
         "feedback",
         "tickets",
     } <= tables
+
+
+def test_tenant_query_ruler_passes() -> None:
+    """红线⑨ 查询级尺子必须为绿（A6）：所有对带 tenant 模型的 select() 都显式过滤或有登记豁免。
+
+    尺子本体在仓库根 scripts/check_tenant_filters.py（纯标准库 AST，与
+    check_baseline_hashes.py 同族）。这里跑它的 main() 而非 subprocess：脚本内的 ROOT 由
+    自身 __file__ 推导，与测试 cwd 无关。被守住的失效形态：任何人新增/改动一条漏 tenant
+    的读查询，或把豁免条目对应的函数改名（→ 失配也算红）。
+    """
+    script = Path(__file__).resolve().parents[2] / "scripts" / "check_tenant_filters.py"
+    assert script.is_file(), f"红线⑨ 查询级尺子缺失：{script}"
+    spec = importlib.util.spec_from_file_location("check_tenant_filters", script)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main() == 0, "check_tenant_filters.py 判定失败（详见上方 [FAIL] 明细）"

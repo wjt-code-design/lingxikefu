@@ -305,11 +305,14 @@ async def stream_answer(
 
     sf_key: str | None = None
     if not user_profile:
-        sf_key = generation_key(result.rewritten_query, str(kb_id))
+        # B8（审计 M4）：kb_id 为 None 时传 None 而非 str(None)="None"——否则锁键与
+        # cache_check/put 侧的键分叉（waiter 永远轮询不到 winner 的回填）。
+        kb_seg = str(kb_id) if kb_id else None
+        sf_key = generation_key(result.rewritten_query, kb_seg)
         won = await run_in_threadpool(try_begin_generation, sf_key)
         if not won:
             hit = await run_in_threadpool(
-                wait_for_exact, result.rewritten_query, kb_version, str(kb_id)
+                wait_for_exact, result.rewritten_query, kb_version, kb_seg
             )
             if hit:
                 # winner 回填已到 → 与 from_cache 分支同形态复用（省一次检索+LLM）；

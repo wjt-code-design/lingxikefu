@@ -66,10 +66,19 @@ def get_latest_kb_id(db: OrmSession) -> uuid.UUID | None:
 
 
 def doc_titles(db: OrmSession, doc_ids: set[uuid.UUID]) -> dict[str, str]:
-    """批量查文档标题（消息来源唯一真源；空集返回空 dict）。"""
+    """批量查文档标题（消息来源唯一真源；空集返回空 dict）。
+
+    C4（红线⑨）：按 id 取回也要滤租户——doc_ids 来自 Qdrant 检索结果，检索侧滤了
+    tenant，但标题这一层是本模块的独立查询，缺条件即成跨租户读点。
+    """
     if not doc_ids:
         return {}
-    rows = db.scalars(select(Document).where(Document.id.in_(doc_ids))).all()
+    rows = db.scalars(
+        select(Document).where(
+            Document.id.in_(doc_ids),
+            Document.tenant_id == settings.TENANT_DEFAULT,
+        )
+    ).all()
     return {str(d.id): d.name for d in rows}
 
 

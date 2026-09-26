@@ -31,6 +31,10 @@ _TEST_ENV: dict[str, str] = {
     "no_proxy": "localhost,127.0.0.1",
     # 测试环境关闭登录/注册限流：TestClient 共享同一 IP，用例间累计会误伤
     "RATE_LIMIT_ENABLED": "false",
+    # 测试环境关闭启动钩子（embedding 预热 + 两个 DB 恢复钩子）：TestClient 每用例起 app，
+    # 连真实 PG / 加载 bge 模型会把测试拖到分钟级。B2（审计 2026-09-27）起这是独立开关，
+    # 不再搭 RATE_LIMIT_ENABLED 的车（生产关限流曾连带静默停掉这三件事）。
+    "STARTUP_DB_HOOKS_ENABLED": "false",
     # 测试环境关闭答案缓存：避免单测触发真实 Qdrant 建集合 + 本地 embedding 加载
     "ANSWER_CACHE_ENABLED": "false",
     # 架构二期 3：关闭意图影子采样——全量测试中未打桩的 /chat/stream 用例若被采样，

@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 
+from cachetools import TTLCache
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 
@@ -26,8 +28,12 @@ router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 _RATE_LIMIT_WINDOW = 60
 _RATE_LIMIT_MAX = 10
 _RATE_LIMIT_KEY_PREFIX = "telemetry:rl:"
-#: 降级路径：内存滑动窗口（单 worker 防护）
-_recent: dict[str, deque[float]] = defaultdict(deque)
+#: 降级路径：内存滑动窗口（单 worker 防护）。
+#: B7（审计 2026-09-27，对齐 P3-⑩）：容器换成有界 TTLCache——原 defaultdict(deque) 只
+#: popleft 不删 key，每个见过的 IP（本端点匿名可访问）永久留一条记录 ⇒ 无界增长。
+_recent: TTLCache = TTLCache(maxsize=1024, ttl=_RATE_LIMIT_WINDOW)
+#: TTLCache 非线程安全且本端点跑在线程池里（同步 def），与 P3-⑩ 的 _suggest_cache 同款显式加锁
+_recent_lock = threading.Lock()
 
 
 class FrontendErrorReq(BaseModel):
@@ -41,13 +47,16 @@ class FrontendErrorReq(BaseModel):
 def _limited_memory(client_ip: str) -> bool:
     """进程内滑动窗口降级限流：窗口外旧记录清理后判断。"""
     now = time.monotonic()
-    dq = _recent[client_ip]
-    while dq and now - dq[0] > _RATE_LIMIT_WINDOW:
-        dq.popleft()
-    if len(dq) >= _RATE_LIMIT_MAX:
-        return True
-    dq.append(now)
-    return False
+    with _recent_lock:
+        dq = _recent.get(client_ip, deque())
+        while dq and now - dq[0] > _RATE_LIMIT_WINDOW:
+            dq.popleft()
+        limited = len(dq) >= _RATE_LIMIT_MAX
+        if not limited:
+            dq.append(now)
+        # 写回即重置该 IP 的 TTL：活跃者保持计数，闲置满一个窗口后整条被淘汰（B7 的有界性来源）
+        _recent[client_ip] = dq
+        return limited
 
 
 def _limited(client_ip: str) -> bool:
@@ -55,10 +64,15 @@ def _limited(client_ip: str) -> bool:
     try:
         r = get_redis()
         key = _RATE_LIMIT_KEY_PREFIX + client_ip
-        count = r.incr(key)
-        if count == 1:
-            r.expire(key, _RATE_LIMIT_WINDOW)
-        return count > _RATE_LIMIT_MAX
+        # B4（审计 2026-09-27，同款手法见 rate_limit.py 的 P3-⑪ / B3）：建键带 TTL 与计数并入
+        # 同一 MULTI pipeline 原子提交。此前是 incr + 条件 expire 两条独立命令，中间进程被杀就
+        # 留下永不过期的计数键 ⇒ 该 IP 从此上报不上（响应恒 204，前端无感、无人报错）。
+        # SET NX 只在窗口开启（键不存在）那次落 TTL，故被拒请求不会把窗口顶回满值。
+        pipe = r.pipeline()
+        pipe.set(key, 0, nx=True, ex=_RATE_LIMIT_WINDOW)
+        pipe.incr(key)
+        results = pipe.execute()
+        return int(results[1]) > _RATE_LIMIT_MAX
     except Exception:  # noqa: BLE001 - Redis 不可用：降级内存滑动窗口
         logger.warning("telemetry 限流: redis 不可用，降级内存窗口")
         return _limited_memory(client_ip)

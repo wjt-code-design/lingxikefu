@@ -102,6 +102,12 @@ class Settings(BaseSettings):
     # --- 安全（M1：登录/注册防爆破限流；测试/内部环境可关闭，prod 必须开启） ---
     RATE_LIMIT_ENABLED: bool = True
 
+    #: 启动期 DB 恢复钩子（B2，审计 2026-09-27）：embedding 预热 / 滞留导入恢复 / 孤儿评测批次恢复。
+    #: 与 RATE_LIMIT_ENABLED 语义无关，**不得**再借限流开关当它的总闸——生产把限流关掉（内部部署、
+    #: 网关层做限流都是合理动机）会连带静默停掉这三件事：首请求退回冷加载、parsing/embedding
+    #: 文档永久卡中间态、evaluating 批次永久卡「评测中」。测试环境显式设 false（不连真实 PG）。
+    STARTUP_DB_HOOKS_ENABLED: bool = True
+
     # --- 答案缓存（T10：省 token + 提速；可一键降级） ---
     ANSWER_CACHE_ENABLED: bool = True
     # 语义命中余弦阈值：实测 0.95 过高——同义改写句（"如何申请七天无理由退货" vs

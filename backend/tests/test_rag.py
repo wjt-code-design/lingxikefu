@@ -612,3 +612,26 @@ async def test_stream_answer_does_not_force_explicit_model(patch, monkeypatch):
     passed_model = patch.calls[0][1]
     # 关键断言：不把任何模型名硬塞给 client（client 自选 _default_model）
     assert passed_model is None, f"stream_answer 把模型名 {passed_model!r} 硬塞给 client，应由 client 自选"
+
+
+async def test_stream_answer_singleflight_key_none_kb(patch, monkeypatch):
+    """B8（审计 M4）：kb_id=None 时 singleflight 锁键不得掺入字面串 "None"。
+
+    锁键与 cache_check/put 侧的精确层键必须同源，否则 waiter 轮询的键永远不是
+    winner 回填的那个键（`answer_cache_gen:None:<sha>` vs `...:<sha>`）→ 防击穿静默失效。
+    """
+    from app.services import answer_cache
+
+    calls: list = []
+    monkeypatch.setattr(
+        "app.services.answer_cache.try_begin_generation",
+        lambda k: calls.append(k) or True,
+    )
+    monkeypatch.setattr("app.services.answer_cache.end_generation", lambda k: None)
+
+    events = [e async for e in stream_answer("保修多久", None)]
+    assert events, "生成流应正常走完"
+    assert calls == [answer_cache.generation_key("保修多久", None)], (
+        f"锁键必须与 kb_id=None 的同源键一致，实际 {calls}"
+    )
+    assert "None" not in calls[0], f"锁键掺入了字面串 None：{calls[0]}"

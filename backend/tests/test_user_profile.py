@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import uuid
 
+import app.services.user_profile_service as ups
 import pytest
 from app.core.config import settings
 from app.models.base import Base
@@ -129,6 +130,45 @@ def test_merge_profile_idempotent_by_idem_key(db, monkeypatch):
     merge_profile(db, UID, "订单 SO2026080118 退款", idem_key=key)
     p = get_profile(db, UID)
     assert p["topics"]["退款"] == 1  # 不翻倍
+
+
+def test_mark_processed_is_atomic_gate():
+    """B5（审计 2026-09-27）：幂等闸门是 SET NX —— 同一 key 只有第一次能抢到计数权。
+
+    改前写法 `set(key, "1", ex=…)` 无 nx=True，谁写都成功 ⇒ 双标签页对同一条消息各点一次
+    「踩」会双双通过上游查重、满意度计两次（同 R-4 修过的 consume_token 同构缺陷）。
+    去掉 nx=True 这条断言即红。
+    """
+    key = f"msg-{uuid.uuid4()}"
+    assert ups._mark_processed(key) is True  # 首次占位成功
+    assert ups._mark_processed(key) is False  # 已被占 → 抢不到，调用方不得再计
+
+
+def test_merge_profile_idempotency_gate_is_one_set_no_precheck(db, monkeypatch):
+    """B5：查重与占位合并为进合并前的一次 SET NX，不再存在「先 exists 再干活」两步。
+
+    数 Redis 调用：一次 set、零次 exists。回退成 check-then-act（exists + 末尾 set）即红。
+    """
+    monkeypatch.setattr(settings, "USER_PROFILE_ENABLED", True)
+    real = ups.get_redis()  # conftest 注入的 session 级 fakeredis
+    calls = {"set": 0, "exists": 0}
+
+    class _CountingRedis:
+        def set(self, *args, **kwargs):
+            calls["set"] += 1
+            return real.set(*args, **kwargs)
+
+        def exists(self, *args, **kwargs):
+            calls["exists"] += 1
+            return real.exists(*args, **kwargs)
+
+    monkeypatch.setattr(ups, "get_redis", lambda: _CountingRedis())
+    key = f"msg-{uuid.uuid4()}"
+
+    assert merge_profile(db, UID, "订单 SO2026080118 退款", idem_key=key) is True
+    assert calls == {"set": 1, "exists": 0}
+    assert get_profile(db, UID)["topics"]["退款"] == 1
+
 
 
 def test_merge_profile_disabled_skips(db, monkeypatch):

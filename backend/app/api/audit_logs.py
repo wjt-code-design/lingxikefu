@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.deps import require_admin
+from app.core.config import settings
 from app.core.database import get_db
 from app.models.audit import AuditLog
 from app.schemas.audit import AuditLogItem, AuditLogListResp
@@ -45,7 +46,9 @@ def list_audit_logs(
 
     start/end 为 ISO 日期（YYYY-MM-DD），闭区间过滤（含首尾整天）。
     """
-    cond = []
+    # 红线⑨（C2）：租户条件是恒定前置条件，不是可选过滤器——放 cond 首位，
+    # 下面 count 与分页两条查询共用同一 cond，删掉这行两处同时失守（尺子会红）。
+    cond = [AuditLog.tenant_id == settings.TENANT_DEFAULT]
     if action:
         cond.append(AuditLog.action == action)
     if resource:

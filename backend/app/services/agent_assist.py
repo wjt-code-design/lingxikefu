@@ -26,8 +26,9 @@ from app.services.kb_lookup import get_latest_kb_id as _default_kb_lookup
 from app.services.retrieval_service import RetrievedChunk
 from app.services.retrieval_service import search_kb as _default_search_kb
 
-#: P2-⑤：坐席辅助 LLM 短超时（25s < 前端 35s 请求阈值；跨端契约由
-#: test_sessions_suggest::test_suggest_frontend_timeout_above_backend_max 锁定）
+#: P2-⑤：坐席辅助 LLM 短超时（25s < 前端 35s 请求阈值；后端侧由
+#: test_sessions_suggest::test_suggest_passes_short_timeout_to_llm 锁定，前端侧由
+#: frontend/src/api/sessions.contract.test.ts 锁 35_000）
 ASSIST_TIMEOUT = 25
 #: 检索条数（与 suggest 端点一致：top3）
 ASSIST_TOP_K = 3

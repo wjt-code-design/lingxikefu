@@ -208,3 +208,35 @@ class TestFullPipelineWithRealNodes:
         assert d["retrieved_chunks"] == 1
         assert d["intent"] == "qa"
         assert d["errors"] == []
+
+
+# ---------------------------------------------------------------------------
+# B8（审计 M4 2026-09-27）：kb_id=None 的传参形状
+# ---------------------------------------------------------------------------
+
+
+def test_check_cache_passes_none_kb_id_not_the_string_none(monkeypatch):
+    """无 KB 时缓存层必须「不过滤」，而不是拿字面串 "None" 当库号。
+
+    旧实现 `kb_id=str(pipeline.kb_id)` 在 None 时产出 "None" → 精确层键写成
+    `answer_cache_exact:None:<sha>`、Qdrant 过滤器变成 `kb_id == "None"` →
+    语义层恒 miss（缓存静默失效）。chat.py 的 _latest_kb_id 库内无 KB 时确实返回 None。
+    """
+    seen: dict = {}
+
+    def _spy(q, v, kb_id=None):
+        seen["kb_id"] = kb_id
+        return None
+
+    monkeypatch.setattr("app.services.answer_cache.get", _spy)
+
+    p = Pipeline(query="保修多久", kb_id=None)
+    p.rewritten_query = "保修多久"
+    check_cache(p)
+    assert seen["kb_id"] is None, f"None 必须原样传下去，实际 {seen['kb_id']!r}"
+
+    kb = uuid4()
+    p2 = Pipeline(query="保修多久", kb_id=kb)
+    p2.rewritten_query = "保修多久"
+    check_cache(p2)
+    assert seen["kb_id"] == str(kb), "有 KB 时仍是字符串库号（既有语义不变）"

@@ -422,14 +422,9 @@ class TestSharedClientLifecycle:
         asyncio.run(run())
         assert chat_mod._shared_client is None
 
-    def test_lifespan_shutdown_calls_close(self):
-        """main.lifespan shutdown 段引用 close_shared_client（防被误删，删了必红）。"""
-        import inspect
-
-        import app.main as m
-
-        src = inspect.getsource(m.lifespan)
-        assert "close_shared_client" in src
+    # 注：原 test_lifespan_shutdown_calls_close（inspect.getsource(m.lifespan) 找函数名的
+    # 源码文本守卫）已由 tests/test_startup_hooks.py::test_startup_hooks_run_when_enabled
+    # 的真实调用断言取代——文本断言只防「删掉」不防「调了不生效」，留两把重叠尺子没意义。
 
 
 class TestChatRouting:

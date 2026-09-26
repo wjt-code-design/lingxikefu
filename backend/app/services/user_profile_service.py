@@ -130,6 +130,9 @@ def merge_profile(
     - idem_key：幂等键（如 message_id / feedback 的 message_id），同一键重复调用不重复计数；
       用 user_profiles 表外一张轻量记忆不可行（不引新表），改用"签名缓存"：
       本服务用 Redis 记录已处理幂等键（fail-open：Redis 异常则放行，宁可重复不丢信号）。
+      B5：闸门是进合并前的一次 SET NX（抢不到就返回），不是"先查后写"——并发同键时
+      只有一个调用能计数。代价：本轮合并最终失败（CAS 三次冲突）时该键已占，同键不再重试；
+      改前那种失败同样丢信号（调用方是消息/反馈落库后的一次性挂点，没有重试路径）。
     - sat_rating：feedback 满意度（up/down），单独累加。
     - fail-open：任何异常 log 后返回 False，不抛（不阻断回答）。
     """
@@ -140,8 +143,8 @@ def merge_profile(
         if sat_rating in ("up", "down") and sat_rating:
             signals["satisfaction"] = {sat_rating: 1}
 
-        if idem_key and _already_processed(idem_key):
-            return True  # 幂等：已处理过（避免重复计数）
+        if idem_key and not _mark_processed(idem_key):
+            return True  # 幂等：SET NX 抢占失败 = 该键已被别人占过（重复信号），不重复计数
 
         row = db.scalar(
             sa.select(UserProfile).where(
@@ -173,8 +176,6 @@ def merge_profile(
             )
             db.commit()
             if result.rowcount:
-                if idem_key:
-                    _mark_processed(idem_key)
                 return True
             # CAS 未命中 = 并发覆盖：回滚、重读最新行再试（保留对方增量后合并本次信号）
             db.rollback()
@@ -194,20 +195,24 @@ def merge_profile(
         return False
 
 
-def _already_processed(idem_key: str) -> bool:
-    """Redis 幂等键查重（fail-open：Redis 异常返回 False 放行）。"""
-    try:
-        return get_redis().exists(_idem_key_name(idem_key)) == 1
-    except Exception:  # noqa: BLE001
-        return False
+def _mark_processed(idem_key: str) -> bool:
+    """原子占位幂等键（B5，审计 2026-09-27）：返回「本次是否抢到计数权」。
 
+    - True  = 首次占位成功（或 Redis 异常 → fail-open 放行，宁可重复计也不丢信号）；
+    - False = 键已存在（同一 idem_key 的并发/重复信号）→ 调用方直接返回，不重复计数。
 
-def _mark_processed(idem_key: str) -> None:
-    """标记幂等键（fail-open：失败不影响主流程）。"""
+    原实现是 `_already_processed` 读 + 合并成功后 `_mark_processed` 写的 check-then-act：
+    双标签页对同一条消息各点一次「踩」会双双通过查重、满意度计两次（且写侧无 nx=True，
+    挡不住任何人）。改为单条 SET NX 闸门后只剩一次 Redis 往返。写法同 R-4 的
+    `token_revocation.consume_token`（本仓既有正确先例）。
+    """
     try:
-        get_redis().set(_idem_key_name(idem_key), "1", ex=60 * 60 * 24)  # 24h 内同键不重复计
-    except Exception:  # noqa: BLE001
-        pass
+        return bool(
+            get_redis().set(_idem_key_name(idem_key), "1", ex=60 * 60 * 24, nx=True)
+        )  # 24h 内同键不重复计
+    except Exception:  # noqa: BLE001 - fail-open：Redis 异常放行（与降级前语义一致）
+        logger.warning("画像幂等键占位失败（Redis 不可用，放行）: key=%s", idem_key)
+        return True
 
 
 def _idem_key_name(idem_key: str) -> str:

@@ -175,11 +175,11 @@ def list_sessions(
     """
     user_id = uuid.UUID(payload["sub"])
     role = payload.get("role")
-    conds = [
-        Session.tenant_id == settings.TENANT_DEFAULT
-        if role in ("admin", "agent")
-        else Session.user_id == user_id
-    ]
+    # C6（红线⑨）：租户条件恒置（旧三元式让 user 分支整个丢掉 tenant 过滤，与 staff 分支不对称）；
+    # 单租户部署下等价，多租户成为真需求的那天这里不会再静默开口子。
+    conds: list = [Session.tenant_id == settings.TENANT_DEFAULT]
+    if role not in ("admin", "agent"):
+        conds.append(Session.user_id == user_id)
     if satisfaction:
         conds.append(Session.satisfaction == satisfaction)
     if keyword:

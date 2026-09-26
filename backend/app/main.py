@@ -81,7 +81,7 @@ async def _warmup_embedding() -> None:
     放线程池执行（model.encode 是 CPU 阻塞）；失败仅告警不阻塞启动——
     首个请求仍会触发懒加载，预热是尽力而为的体验优化。
     """
-    if not settings.RATE_LIMIT_ENABLED:
+    if not settings.STARTUP_DB_HOOKS_ENABLED:
         return  # 测试/内部环境跳过（避免每用例起模型加载线程拖慢 TestClient）
     try:
         from app.llm_clients.embedding import get_embedding_client
@@ -151,12 +151,12 @@ def _recover_stale_imports() -> None:
 
     daemon 导入线程随进程被强杀后文档会永久卡中间态 —— 重启用本钩子清理，幂等、不阻塞启动。
 
-    - 测试/内部环境（RATE_LIMIT_ENABLED=false）直接跳过：不连 DB（TestClient 每用例起 app，
+    - 测试/内部环境（STARTUP_DB_HOOKS_ENABLED=false）直接跳过：不连 DB（TestClient 每用例起 app，
       若逐个连真实 PG 会让测试累计极慢）；生产默认 true 执行恢复。
     - 生产用**独立短超时 engine**（connect_timeout=2s）而非 SessionLocal：DB 不可达时快速失败，
       不阻塞 lifespan（防 pitfall G：启动钩子同步连 DB 无超时导致整体挂起）。
     """
-    if not settings.RATE_LIMIT_ENABLED:
+    if not settings.STARTUP_DB_HOOKS_ENABLED:
         return
     try:
         from sqlalchemy import create_engine
@@ -186,7 +186,7 @@ def _recover_orphan_batches() -> None:
     （publish 409、上传 400、列表永远「评测中」）。与 _recover_stale_imports
     同款纪律：独立短超时 engine、测试环境跳过、失败不阻塞启动。
     """
-    if not settings.RATE_LIMIT_ENABLED:
+    if not settings.STARTUP_DB_HOOKS_ENABLED:
         return
     try:
         from sqlalchemy import create_engine

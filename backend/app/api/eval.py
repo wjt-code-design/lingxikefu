@@ -56,6 +56,7 @@ def eval_history(
     """
     run_ids = db.execute(
         select(EvalResult.run_id)
+        .where(EvalResult.tenant_id == settings.TENANT_DEFAULT)
         .group_by(EvalResult.run_id)
         .order_by(desc(func.max(EvalResult.created_at)))
         .limit(30)
@@ -64,7 +65,10 @@ def eval_history(
     if run_ids:
         rows = db.scalars(
             select(EvalResult)
-            .where(EvalResult.run_id.in_(run_ids))
+            .where(
+                EvalResult.run_id.in_(run_ids),
+                EvalResult.tenant_id == settings.TENANT_DEFAULT,
+            )
             .order_by(desc(EvalResult.created_at))
         ).all()
         items = [EvalResultItem.model_validate(r) for r in rows]
@@ -83,6 +87,7 @@ def eval_latest(
     # 取最新 run_id
     latest_run = db.scalar(
         select(EvalResult.run_id)
+        .where(EvalResult.tenant_id == settings.TENANT_DEFAULT)
         .order_by(desc(EvalResult.created_at))
         .limit(1)
     )
@@ -90,13 +95,19 @@ def eval_latest(
         return {"has_history": False, "latest": None, "alerts": []}
 
     rows = db.scalars(
-        select(EvalResult).where(EvalResult.run_id == latest_run)
+        select(EvalResult).where(
+            EvalResult.run_id == latest_run,
+            EvalResult.tenant_id == settings.TENANT_DEFAULT,
+        )
     ).all()
 
     # 计算历史均值（最近 10 次运行）
     history = db.scalars(
         select(EvalResult)
-        .where(EvalResult.metric == "faithfulness")
+        .where(
+            EvalResult.metric == "faithfulness",
+            EvalResult.tenant_id == settings.TENANT_DEFAULT,
+        )
         .order_by(desc(EvalResult.created_at))
         .limit(10)
     ).all()
@@ -146,7 +157,10 @@ def eval_gate(
     # 当前版本绑定的最近一次运行（同 eval_history 的 run_id 聚合口径）
     latest_run = db.scalar(
         select(EvalResult.run_id)
-        .where(EvalResult.kb_version == current)
+        .where(
+            EvalResult.kb_version == current,
+            EvalResult.tenant_id == settings.TENANT_DEFAULT,
+        )
         .group_by(EvalResult.run_id)
         .order_by(desc(func.max(EvalResult.created_at)))
         .limit(1)
@@ -156,7 +170,11 @@ def eval_gate(
 
     rows = db.scalars(
         select(EvalResult)
-        .where(EvalResult.run_id == latest_run, EvalResult.kb_version == current)
+        .where(
+            EvalResult.run_id == latest_run,
+            EvalResult.kb_version == current,
+            EvalResult.tenant_id == settings.TENANT_DEFAULT,
+        )
         .order_by(EvalResult.created_at)
     ).all()
     return EvalGateResp(

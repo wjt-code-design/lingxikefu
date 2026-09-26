@@ -26,3 +26,26 @@ def test_redis_client_configures_socket_timeouts(monkeypatch):
     assert captured.get("socket_timeout") == 2, "缺 socket_timeout：Redis 挂起将永久阻塞"
     assert captured.get("socket_connect_timeout") == 2, "缺 socket_connect_timeout：连接挂起将永久阻塞"
     assert captured.get("health_check_interval") == 30, "缺 health_check_interval：半开连接无法自愈"
+
+
+def test_redis_client_decodes_responses(monkeypatch):
+    """decode_responses 必须为 True（B1 修复的连带前提，审计 A/B 批 2026-09-27）。
+
+    工单扫描锁的释放走 `pipe.get(key) != token` 的 str↔str 比对：若有人把它翻成 False，
+    get 返回 bytes 而 token 是 str → 恒不相等 → 锁**永不释放**（退回 B1 的「持有者被自己
+    挡住」症状，且静默无日志）。故在此把它和生产方比对口径一起钉住。
+    """
+    captured: dict = {}
+
+    def _fake_from_url(url, **kwargs):
+        captured.update(kwargs)
+        return object()
+
+    monkeypatch.setattr(redis_pkg, "from_url", _fake_from_url)
+    monkeypatch.setattr(rc, "_redis", None)
+
+    rc.get_redis()
+
+    assert captured.get("decode_responses") is True, (
+        "decode_responses 必须为 True：锁释放等 str↔str 比对在生产方按字符串写死"
+    )

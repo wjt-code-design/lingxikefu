@@ -21,10 +21,16 @@ class _FakeHit:
 
 
 class _FakeQdrant:
+    """Qdrant 替身：A10（审计 M4）——search 不再恒返回 self.hits，而是**按 query_filter
+    的 must 条件真过滤**，与真 Qdrant 契约一致；并把每次调用的 kwargs 记进 self.searched，
+    使「过滤器有没有被构造出来」这件事本身可断言。
+    """
+
     def __init__(self):
         self.collections = {COLLECTION: True}
         self.hits: list[_FakeHit] = []
         self.upserted: list[dict] = []
+        self.searched: list[dict] = []  # A10：记录 search 入参（query_filter 构造可断言）
         self.fail = False  # m2：模拟 Qdrant 侧失败（集合被外部删除 404 等）
 
     def get_collections(self):
@@ -39,7 +45,12 @@ class _FakeQdrant:
     def search(self, **kw):
         if self.fail:
             raise RuntimeError("404: collection answer_cache not found")
-        return self.hits
+        self.searched.append(kw)
+        hits = self.hits
+        query_filter = kw.get("query_filter")
+        for cond in list(getattr(query_filter, "must", None) or []):
+            hits = [h for h in hits if (h.payload or {}).get(cond.key) == cond.match.value]
+        return hits
 
     def upsert(self, **kw):
         if self.fail:
@@ -140,7 +151,13 @@ def test_put_same_query_reuses_deterministic_point_id(monkeypatch):
     assert ids[2] != ids[0], "不同问句必须是不同的点"
 
 def test_kb_isolation_prevents_cross_kb_hit(monkeypatch):
-    """跨 KB 隔离（审查修复）：kb_id 不同的缓存不得互相命中（精确层 key 维度隔离）。"""
+    """跨 KB 隔离（审查修复 + A10）：kb_id 不同的缓存不得互相命中，且必须由 **Qdrant 侧
+    query_filter** 参与挡住。
+
+    A10 旧态：`_FakeQdrant.search` 恒返回 self.hits（此用例里恰好是空表）→ 「不命中」只是
+    空结果的巧合，answer_cache.get 里那段过滤器构造是未测代码。现 fake 按 must 真过滤，
+    并断言这次检索**确实带着** kb_id==请求库 的过滤器（把 `if kb_id:` 那段注释掉即红）。
+    """
     monkeypatch.setattr(answer_cache, "settings", type("S", (), {
         "ANSWER_CACHE_ENABLED": True,
         "ANSWER_CACHE_THRESHOLD": 0.95,
@@ -155,8 +172,50 @@ def test_kb_isolation_prevents_cross_kb_hit(monkeypatch):
     put("保修多久", "KB-A 答案", [{"chunk_id": "c1"}], ["d1"], "v1", kb_id="kb-a")
     # 同 KB 命中（精确层）
     assert get("保修多久", "v1", kb_id="kb-a")["answer"] == "KB-A 答案"
-    # 跨 KB 不命中（key 含 kb_id，天然 miss）
-    assert get("保修多久", "v1", kb_id="kb-b") is None
+    assert not any(k.startswith("answer_cache_exact:kb-b:") for k in r.store), "跨库不得复用精确层键"
+
+    # 让语义层里真的躺着 KB-A 的点（假 embed 同向量：无过滤器时必然被检索回来）
+    qd.hits = [_FakeHit(qd.upserted[0]["points"][0]["payload"], score=0.99)]
+    qd.searched.clear()
+    assert get("保修多久", "v1", kb_id="kb-b") is None, "跨 KB 不得命中"
+    filters = [kw.get("query_filter") for kw in qd.searched]
+    assert all(f is not None for f in filters), f"带 kb_id 的检索必须构造过滤器，实际 {filters}"
+    kb_values = [
+        [c.match.value for c in (f.must or []) if c.key == "kb_id"] for f in filters
+    ]
+    assert kb_values == [["kb-b"]], f"过滤器必须按请求库过滤（不是写死的库），实际 {kb_values}"
+
+
+def test_none_kb_id_adds_no_filter_and_no_none_segment(monkeypatch):
+    """B8（审计 M4）：kb_id=None 的语义是「不过滤」，不是 `kb_id == "None"` 恒 miss。
+
+    上游 `str(kb_id)` 会把 None 变成字面串 "None"（缓存键写成 `...:None:<sha>`、过滤器
+    变成 kb_id=="None"）→ 无 KB 时缓存静默失效。本用例钉住 answer_cache 侧的正确契约：
+    断过滤器**没有被加上**（而不是断它等于 "None"）。
+    """
+    monkeypatch.setattr(answer_cache, "settings", type("S", (), {
+        "ANSWER_CACHE_ENABLED": True,
+        "ANSWER_CACHE_THRESHOLD": 0.95,
+        "ANSWER_CACHE_TTL_HOURS": 24,
+    })())
+    qd = _FakeQdrant()
+    qd.hits = [_FakeHit({"question": "保修多久", "answer": "12 个月", "sources": [],
+                         "kb_version": "v1"}, score=0.99)]
+    monkeypatch.setattr(answer_cache, "get_qdrant_client", lambda: qd)
+    r = _FakeRedis()
+    monkeypatch.setattr(answer_cache, "get_redis", lambda: r)
+    monkeypatch.setattr(answer_cache, "get_embedding_client", lambda: type("E", (), {"dim": 768, "embed": lambda *a: [[0.1] * 768]})())
+
+    assert get("保修多久", "v1")["answer"] == "12 个月", "kb_id=None 须能走语义层命中（退化为不过滤）"
+    assert qd.searched, "应到达语义层"
+    assert qd.searched[-1].get("query_filter") is None, "kb_id=None 不得加 kb_id 过滤器"
+
+    put("保修多久", "12 个月", [], [], "v1")  # kb_id 默认 None
+    keys = list(r.store)
+    assert keys == [answer_cache._EXACT_PREFIX + _normalize_key("保修多久")], (
+        f"kb_id=None 的精确层键不得含任何库段（更不得是字面串 None）：{keys}"
+    )
+    assert "None" not in answer_cache.generation_key("保修多久", None), "键段不得出现字面串 None"
 
 
 def test_kb_mismatch_payload_rejected(monkeypatch):

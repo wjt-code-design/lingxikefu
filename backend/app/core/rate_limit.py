@@ -18,13 +18,17 @@ def rate_limit(key: str, limit: int, window: int) -> bool:
         return True
     try:
         r = get_redis()
-        # P3-⑪：incr+expire 并入同一 MULTI pipeline 原子提交——消除「incr 成功、expire 前崩溃
-        # → 永不失效计数键」导致的永久限流误伤（固定窗口语义不变：每次计数顺带刷新 TTL）。
+        # P3-⑪：计数键的创建与 TTL 落在同一 MULTI pipeline 里原子提交——消除「incr 成功、expire
+        # 前崩溃 → 永不失效计数键」的永久误伤窗口。
+        # B3（审计 2026-09-27）：TTL 只在窗口开启（计数 0→1）那次落地。此前每次请求都 expire，
+        # 被拒请求同样把窗口重置回满值 ⇒ 客户端每 <window 秒重试一次就永不解锁（共享出口 IP 下
+        # 一个人撞满配额会把同 IP 其他人长期锁死）。SET NX EX 先建带 TTL 的键、再 INCR：
+        # 键已存在时 SET NX 是空操作（不碰 TTL），故窗口锚定在建键那一刻——这才是固定窗口。
         pipe = r.pipeline()
+        pipe.set(key, 0, nx=True, ex=window)
         pipe.incr(key)
-        pipe.expire(key, window)
         results = pipe.execute()
-        return int(results[0]) <= limit
+        return int(results[1]) <= limit
     except Exception:  # noqa: BLE001 - Redis 不可用：降级放行（避免锁死登录）
         logger.warning("rate_limit: redis 不可用，放行请求")
         return True

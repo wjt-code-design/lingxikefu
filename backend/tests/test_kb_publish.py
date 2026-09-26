@@ -260,15 +260,30 @@ def test_batch_model_shape_and_tenant_conventions():
     assert t.columns["eval_result_id"].nullable, "eval_result_id 可空（评测前/重发布清空）"
 
 
-def test_migration_0020_chain():
-    """0020 迁移挂在 0019 之后（链完整性锁定）。"""
+def test_migration_chain_is_a_single_head_full_graph():
+    """迁移链完整性（A9）：查 alembic **真图**，不再对迁移源文件做字符串 grep。
+
+    旧实现 `'revision = "0020"' in text` 断的是文本形状：alembic 本来就保证的事（revision
+    变量长这样）它不增加覆盖，alembic 不保证的事（多 head、断链、漏文件）它一概不查。
+    现按 ScriptDirectory 解析：单 head + base→head 全链步数 + 0020 的真实父节点。
+    """
     from pathlib import Path
 
-    p = Path(__file__).resolve().parents[1] / "alembic" / "versions" / "0020_kb_publish_batches.py"
-    assert p.exists(), "缺 0020 迁移文件"
-    text = p.read_text(encoding="utf-8")
-    assert 'revision = "0020"' in text
-    assert 'down_revision = "0019"' in text
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    backend = Path(__file__).resolve().parents[1]
+    cfg = Config(str(backend / "alembic.ini"))
+    cfg.set_main_option("script_location", (backend / "alembic").as_posix())
+    sd = ScriptDirectory.from_config(cfg)
+
+    assert sd.get_heads() == ["0023"], f"迁移必须单 head（多 head 会让 upgrade head 歧义）：{sd.get_heads()}"
+    chain = [rev.revision for rev in sd.walk_revisions("base", "head")]
+    assert len(chain) == 23, (
+        f"base→head 链长应为 23，实际 {len(chain)}：{chain}；"
+        "确为新增迁移 → 同步本数字；迁移被删/漏挂 → 这是断链缺陷，查因后再改"
+    )
+    assert sd.get_revision("0020").down_revision == "0019", "0020 必须真挂在 0019 之后"
 
 
 # ---------------------------------------------------------------------------

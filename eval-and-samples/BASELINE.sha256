@@ -18,6 +18,8 @@
 7034bf8433f4b323b1acb60c95944f617f4db3c1597b3de24b3a3de2b595a17f *评测问题库.md
 316e9d3e4b4a9f228138bf83bb9bfa785eb7b6c310cdafd232a0fb4bae94c3f5 *ground-truth.md
 135e00f9f54272aae992d199408690d01d8bf3d34e1ade632814f5e892a898c2 *口语化评测集.md
+423fe3b4da65c9d2c5d50c2353a5cc3364ee27278d5dbb14fbb08963a83d671a *backend/scripts/eval_recall.py
+8a300492c3999d7db48916b832c5a1e36204ab84d5d3f3591dad03d9a1a0b9a0 *backend/scripts/eval_gate_error_rate.py
 
 # 2026-08-30 判定脚本 hash 同步（G2 授权变更）：run_faithfulness_eval 加可选 sample/kb_id 参数
 #   （KB 发布门禁 v2 的快检触发链），CLI argparse/main 本体零改动；评测集三行不变。
@@ -30,3 +32,9 @@
 #   同步 hash——因 CI 此前从不校验 BASELINE，漂移静默。本次按变更流程合规补登为
 #   6561047 后真实值 316e9d3e（git log 6561047..HEAD 对该文件零改动，工作区干净，
 #   即当前值=应有冻结值）。配套新增 scripts/check_baseline_hashes.py + CI 校验 step。
+# 2026-09-27 D6（审计 M4）补登两个判定脚本：本文件头部自陈冻结目的是「锁定 faithfulness /
+#   recall@5 / 诚实性拒答等指标的可比基线」，但清单里只有 eval_faithfulness.py —— recall@5
+#   是 eval.yml 的硬门禁，判定脚本却不在冻结面（改 eval_recall.py 即可让门禁恒绿）；
+#   eval_gate_error_rate.py 同批冻结，此前 eval.yml 明文写着它「不在 BASELINE.sha256 冻结清单」，
+#   属明知而不防。两行哈希按 scripts/check_baseline_hashes.py 同式（sha256(文件字节)）现算，
+#   判定逻辑零改动，故对既有基线数字无可比性影响。
