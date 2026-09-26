@@ -211,7 +211,9 @@ export function MessageBubble({
       onClick={clickable ? handleRootClick : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
-      aria-selected={clickable ? selected : undefined}
+      // aria-selected 不允许用于 role=button（axe aria-allowed-attr critical）；
+      // 气泡是"展开该回复溯源"的开关 → aria-pressed 才是合法且语义正确的表达。
+      aria-pressed={clickable ? selected : undefined}
       title={clickable ? '点击查看该回复的溯源来源' : undefined}
       onKeyDown={clickable ? handleKeyDown : undefined}
       style={
