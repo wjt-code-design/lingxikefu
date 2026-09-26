@@ -106,7 +106,13 @@ declare global {
         violations: {
           id: string;
           impact?: string;
-          nodes: { target?: string[]; message?: string }[];
+          nodes: {
+            target?: string[];
+            message?: string;
+            any?: { message?: string }[];
+            all?: { message?: string }[];
+            none?: { message?: string }[];
+          }[];
         }[];
       }>;
     };
@@ -129,6 +135,12 @@ const MIN_CONTENT_CHARS = 8;
  *    axe 对着空壳报 0 违规 = 纯假绿）。两种布局都有 `#main-content`（AdminLayout 的
  *    Layout.Content / WidgetShell 的 `<main class="widget-shell__body">`），故取它当公共锚。
  * ② 再等**加载态退场**（懒加载骨架 + 数据 Spin/Skeleton）。
+ * ③ 最后等**入场淡入真的结束**（`.page` 的 `page-in` 把 opacity 从 0 扫到 1，280ms）。
+ *    这条不是洁癖而是必要：`/feedback` 的次要文案静息值只有 4.89:1，淡入中途（实测 α=0.92 时
+ *    已降到 **4.15:1**）必然低于 AA 的 4.5 ⇒ axe 撞进这 280ms 就会偶发报 color-contrast
+ *    （本机 6 次全量红 1 次就是这么来的）。审"用户看得见的稳定态"才是这条门禁的语义。
+ *    只查 opacity——transform 位移不影响对比度；不做 `getAnimations().length===0`，
+ *    因为全站有 `chat-cursor-blink`/`dot-breathe` 这类 infinite 动画，那样写会永远等不到。
  *
  * 不用 `networkidle`：vite dev 的 HMR 是长连接，networkidle 永不触发（见 `login.spec.ts` 注释）。
  * 数据加载态也不静默放过——空库下这些页本就秒出，还卡在 Skeleton/Spin 就是真问题。
@@ -150,6 +162,15 @@ export async function settle(page: Page, route: string): Promise<void> {
       ),
     null,
     { timeout: 15_000 }
+  );
+
+  await page.waitForFunction(
+    () =>
+      [...document.querySelectorAll('.page, .widget-shell__body, .landing__feature')].every(
+        (el) => parseFloat(getComputedStyle(el).opacity) >= 0.999
+      ),
+    null,
+    { timeout: 10_000 }
   );
 }
 
@@ -178,7 +199,15 @@ export async function collectViolations(page: Page): Promise<Violation[]> {
       // message/target 并非所有规则都填（缺模板时是 undefined），取前先兜住，
       // 否则汇总代码自己抛错，把真违规盖成一条 evaluate 失败。
       at: v.nodes[0]?.target?.join(' ') ?? '',
-      why: v.nodes[0]?.message?.slice(0, 200) ?? '',
+      // 违规的具体理由在 nodes[].any/all/none 的 checks 里；nodes[].message 常常是空的
+      // （首版只读 message，结果 /feedback 那次红只留下一个空字符串，等于没证据）
+      why:
+        v.nodes[0]?.message ||
+        [...(v.nodes[0]?.any ?? []), ...(v.nodes[0]?.all ?? []), ...(v.nodes[0]?.none ?? [])]
+          .map((c) => c.message)
+          .filter(Boolean)
+          .join(' | ') ||
+        '',
     }));
   });
 }
