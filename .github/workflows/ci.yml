@@ -1,5 +1,10 @@
-# Lingxi CI：后端 lint(ruff) → 单测(pytest) → 前端(tsc+vitest) → secret 扫描 → 构建镜像
+# Lingxi CI：后端 lint(ruff) → 单测(pytest) → 前端(tsc+vitest+静态尺) → secret 扫描 → 构建镜像
 # 红线⑨：day1 必须有 CI + 单测基线；禁止提交真实密钥/endpoint。
+#
+# 评测门禁（花钱那部分）已于 2026-09-27 拆到 .github/workflows/eval.yml：
+# 留在本文件里会让"只改 CI 管线"的 push 也触发付费 LongCat 抽样（每次 ≈¥0.6-1），
+# 于是接 lint/接静态尺这类零信号改动每次都要付钱，门禁就退化成"靠人记得本机跑"。
+# 改本文件 = 免费；改 backend/** / contracts/** / eval-and-samples/** / eval.yml = 跑评测。
 #
 # ⚠️ 2026-08-23 修复"幻影 CI"：本文件此前位于 backend/.github/workflows/——GitHub Actions
 # 只读仓库根的 .github/workflows/，导致全部 4 个 job 从未在远端执行过（硬编码密钥与
@@ -10,40 +15,13 @@ on:
   push:
     branches: [master]
   pull_request:
-  # 手动全量评测入口：full_eval=true 时 eval job 跑全量 100 题 faithfulness（约 1h，
-  # 仅手动触发，不改变 push 的 20 题抽样门禁）。用于拿全量基线/验证抽样代表性。
+  # 手动重跑整条管线（不跑评测）。全量评测入口在 "Eval" workflow 里。
   workflow_dispatch:
-    inputs:
-      full_eval:
-        description: "全量 100 题 faithfulness 评测（约 1h，仅手动）"
-        type: boolean
-        default: false
 
 env:
   PYTHON_VERSION: "3.13"
 
 jobs:
-  # 变更检测：eval 门禁（真金白银调 LongCat）只在评测面文件变更时跑。
-  # 纯前端/文档/样式 push 不触发 20 题 LLM 评测（收费后每次抽样 ≈ ¥0.6-1，零信号不花）。
-  changes:
-    name: Detect changed paths
-    runs-on: ubuntu-latest
-    # paths-filter 在无 diff 上下文的事件上会报错；手动全量无需过滤（eval 的 if 已短路）
-    if: github.event_name != 'workflow_dispatch'
-    outputs:
-      eval: ${{ steps.filter.outputs.eval }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          filters: |
-            eval:
-              - 'backend/**'
-              - 'contracts/**'
-              - 'eval-and-samples/**'
-              - '.github/workflows/ci.yml'
-
   lint:
     name: Lint (ruff)
     runs-on: ubuntu-latest
@@ -255,7 +233,7 @@ jobs:
           PY
 
   frontend:
-    name: Frontend (tsc + vitest)
+    name: Frontend (tsc + vitest + 静态尺)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -273,6 +251,16 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      # 以下三把此前只在本机手动跑（靠人记得）——2026-09-26 一轮 a11y 审查的结论正是
+      # "静态尺只算白底色对 + 不进 CI"导致对比度问题反复静默复发，故一次接齐。
+      # max-warnings=0：仓库最后一条既有 warning（ChatContainer 缺 navigate 依赖）已修掉，
+      # 不设阈值等于给新 warning 留门。
+      - name: Lint (eslint, 0 warnings allowed)
+        run: npx eslint src --max-warnings=0
+      - name: Token sync (tokens.css ↔ theme.ts)
+        run: npm run check:tokens
+      - name: A11y contrast (前景 × 实际底色矩阵)
+        run: npm run check:a11y
 
   build:
     name: Build Docker image
@@ -295,131 +283,3 @@ jobs:
       - name: Validate docker-compose
         working-directory: backend
         run: docker compose config --quiet
-
-
-  # ═══════════════════════════════════════════════════════════════════
-  # P1-③ 评测门禁（2026-08-26 落地 report-only；2026-08-27 转硬门禁）
-  # 契约阈值：recall@5 ≥ 85%（eval_recall）、问答 faithfulness ≥ 85% 且
-  # 诚实性拒答率 ≥ 90%（eval_faithfulness）；任一未达或 step 未执行 → job 失败 → 阻断 CI。
-  # 历史教训（2026-08-27）：曾用 continue-on-error + `|| echo 警告` 吞错，导致
-  # faithfulness 在 CI 全题 ModelNotConfiguredError（CHAT_PROVIDER 默认 bailian 缺
-  # DASHSCOPE_API_KEY）也显示"绿"——假绿。故转硬门禁时固定 CHAT_PROVIDER 并去吞错。
-  # 数据源全在仓库内：eval-and-samples/（评测集）+ kb/ + kb-pdf/（知识库），
-  # 与生产 KB 同源（smoke_import 导入）。LLM 走 LongCat LongCat-2.0，Key 经 GitHub
-  # Secrets(LONGCAT_API_KEY) 注入；未配置 key 时 faithfulness step 显式失败（没跑=不过）。
-  eval:
-    name: Eval gate (hard)
-    runs-on: ubuntu-latest
-    # 成本门禁（LongCat 收费，2026-09-05）：仅评测面变更跑 20 题抽样；workflow_dispatch
-    # 手动全量不受限（inputs.full_eval 恒为显式花钱入口）。
-    needs: changes
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      needs.changes.outputs.eval == 'true'
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: lingxi
-          POSTGRES_PASSWORD: lingxi
-          POSTGRES_DB: lingxi
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U lingxi -d lingxi"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
-      qdrant:
-        image: qdrant/qdrant:v1.9.1
-        ports:
-          - 6333:6333
-        options: >-
-          --health-cmd "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      POSTGRES_HOST: localhost
-      POSTGRES_PORT: "5432"
-      POSTGRES_USER: lingxi
-      POSTGRES_PASSWORD: lingxi
-      POSTGRES_DB: lingxi
-      REDIS_URL: redis://localhost:6379/0
-      QDRANT_URL: http://localhost:6333
-      # CI 测试专用密钥（非生产）：config.validate() fail-closed 要求 JWT_SECRET 非空非占位符
-      JWT_SECRET: ci-test-jwt-secret-0123456789abcdef0123456789abcdef
-      LONGCAT_API_KEY: ${{ secrets.LONGCAT_API_KEY }}
-      # 评测 LLM 固定走 LongCat（2026-08-27 从智谱切来；key 经 GitHub Secrets(LONGCAT_API_KEY) 注入）
-      CHAT_PROVIDER: longcat
-      EVAL_KB_NAME: "星河智家·官方政策库"
-    defaults:
-      run:
-        working-directory: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-      - name: Apply migrations (fresh PG)
-        run: alembic upgrade head
-      # bge 模型预下载：CI 全新 runner 无 HF 缓存，而 embedding.py 以 HF_HUB_OFFLINE=1 强制离线加载，
-      # 无缓存会 OSError 秒崩（run#2 已实证）。此处先行在线下载（经 hf-mirror 镜像），
-      # 落盘后 smoke_import 内 setdefault 设离线可命中缓存。注意本 step 不得设置 HF_HUB_OFFLINE。
-      - name: Pre-download embedding model (bge-base-zh-v1.5)
-        run: python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-base-zh-v1.5'); print('bge model cached OK')"
-        # run#3 实证：hf-mirror.com 国内镜像在 GitHub 海外 runner 上 6s 超时失败；
-        # 移除 HF_ENDPOINT，走默认直连 huggingface.co（海外 runner 可达），下载 bge 落缓存
-        env:
-          HF_HUB_DOWNLOAD_TIMEOUT: "60"
-      # 导入评测知识库（eval-and-samples/kb/ + kb-pdf/，sha256 幂等）。
-      # smoke_import 建库名为「星河智家·官方政策库」，评测脚本经 --kb-name 对齐。
-      # --strict：fresh 库审计出非 kb/ 源文档即 exit 1（2026-08-28 KB 污染事故防线）；
-      # fresh PG 只会导入 kb/+kb-pdf/，审计恒过，不会误伤。
-      - name: Import eval KB (kb/ + kb-pdf/)
-        run: python -m scripts.smoke_import --strict
-      # recall@5：检索层，无 LLM，不依赖 key。契约阈值 recall@5 >= 85%。
-      - name: Recall eval (recall@5 >= 85%)
-        run: python -m scripts.eval_recall --kb-name "$EVAL_KB_NAME"
-      # faithfulness：真实 LLM 调用（LongCat LongCat-2.0，走 CHAT_PROVIDER=longcat）。
-      # 硬门禁：未达阈值脚本 exit 1 → step 失败 → 阻断 CI。
-      # 抽样模式（push，--sample 20）：判 qa≥85% + refuse≥90%，citation 仅报告（样本量不足，单点抖动 3-7pp）；
-      # 全量模式（workflow_dispatch full_eval=true，100 题约 1h）：追加 citation≥95% 判定。
-      - name: Faithfulness eval (qa >= 85% / refuse >= 90%; citation >= 95% @ full_eval)
-        if: env.LONGCAT_API_KEY != ''
-        # push 默认 20 题抽样（~20min）；workflow_dispatch 传 full_eval=true 时跑全量 100 题（~1h）。
-        # ${{ github.event.inputs.full_eval }} 在 push 事件中为空（空 → 0 → 走 sample 20）。
-        # 若 inputs.full_eval 的字面值为 true → runner 无法解析布尔比较，用字符串比较绕过。
-        # --out 导出逐题明细（error/skip 也在内），供下一步分母缩水门禁判定。
-        run: |
-          SAMPLE_FLAG="--sample 20"
-          if [ "${{ github.event.inputs.full_eval }}" = "true" ]; then
-            SAMPLE_FLAG=""
-            echo "::notice::全量评测模式（100 题，约 1-2h）"
-          fi
-          python -m scripts.eval_faithfulness $SAMPLE_FLAG --kb-name "$EVAL_KB_NAME" --out eval-results.json
-      # 防分母缩水假绿（BASELINE.md §四 2026-08-30 登记，2026-09-02 加固落地）：
-      # LongCat 欠费期部分题 402 error 后不进 faithfulness 分母——20 题若 15 题 402，
-      # 余 5 题全过即 100% 假绿。error 占比 >20% 直接 FAIL（判定脚本本体零改动，
-      # 门禁逻辑在独立脚本 scripts/eval_gate_error_rate.py，不在 BASELINE.sha256 冻结清单）。
-      - name: Error-rate gate (errors >20% of results => FAIL)
-        if: env.LONGCAT_API_KEY != ''
-        run: python -m scripts.eval_gate_error_rate eval-results.json
-      # 未配置 LLM Key = 门禁无法执行 = 显式失败（fail-closed，杜绝"没跑算过"假绿）
-      - name: Faithfulness skipped (missing LONGCAT_API_KEY) => FAIL
-        if: env.LONGCAT_API_KEY == ''
-        run: |
-          echo "::error::未配置 GitHub Secrets LONGCAT_API_KEY，faithfulness 门禁未执行（fail-closed）"
-          exit 1

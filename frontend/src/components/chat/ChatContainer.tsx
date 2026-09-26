@@ -543,7 +543,7 @@ export function ChatContainer({
       }
       return true;
     },
-    [sessionId, stream, streaming, isStaff, intervened, authed]
+    [sessionId, stream, streaming, isStaff, intervened, authed, navigate]
   );
 
   // U1：一键重试——重发失败的那条用户消息
