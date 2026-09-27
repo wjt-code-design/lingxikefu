@@ -1,4 +1,9 @@
-# Lingxi CI：后端 lint(ruff) → 单测(pytest) → 前端(tsc+vitest+静态尺) → e2e(Playwright+axe) → secret 扫描 → 构建镜像
+# Lingxi CI：后端 lint(ruff) → 单测(pytest) → 前端(tsc+vitest+静态尺+vite build+产物守卫) → e2e(Playwright+axe) → secret 扫描 → 构建镜像
+#   末段"构建镜像"只打【后端】镜像（build job 的 context 是 backend），前端产物在 frontend job 里构建：
+#   `npm run build` 出 dist/ + `check:bundle` 验 React19 补丁真的进了入口 chunk
+#   （2026-09-27 门禁有效性审计靶 2：此前 `npm run build` 在 CI 里 0 引用，dist/ 从未被构建过）。
+#   仍未覆盖的一条如实写明：e2e 起的是 vite dev server（playwright.config.ts 的 webServer = npm run dev），
+#   所以"这份 dist/ 被真浏览器打开过"暂时还没有尺子。
 # 红线⑨：day1 必须有 CI + 单测基线；禁止提交真实密钥/endpoint。
 #
 # 评测门禁（花钱那部分）已于 2026-09-27 拆到 .github/workflows/eval.yml：
@@ -178,11 +183,68 @@ jobs:
       - name: Downgrade all the way to base
         run: |
           alembic downgrade base
-          # 反向确认真退到了 base：downgrade 静默空转（命令名打错/no-op）时本 job 会白跑成绿
-          if alembic current | grep -q "(head)"; then
-            echo "::error::downgrade base 之后 alembic current 仍在 head，down 路径实际没跑"
+          # >>> base-check（这段谓词可用假 alembic current 输出在内存里逐例验红，改它请连同自证一起改）
+          # 反向确认"真的退到了 base"。上一版这里写的是
+          #   `if alembic current | grep -q "(head)"; then ...红; fi`
+          # 审计把 4 种 alembic 真实输出逐条喂给那条谓词：`0023 (head)` 红，而 `0022` / `0001` / 空
+          # 全部放行 ⇒ down 链条中途 no-op（某个 revision 的 downgrade() 忘了写、autocommit_block 吞掉
+          # 后续、命令被打错成空转）也照样绿——它只断"不在 head"，从不断"在 base"。
+          # 现在断 base 的两种真形态：
+          #   ① 输出为空：fresh 库 downgrade base 后 alembic_version 表里没有行（主形态）；
+          #   ② 输出恰好等于本仓 base 号：被 stamp 过/历史库里指针会停在 base 那一行。
+          # base 号现查不照抄：alembic/versions 里 down_revision = None 的那个 revision。
+          # 查得 23 个 revision 为单线 0001 → 0023，base = 0001（0001_initial.py: revision="0001" /
+          # down_revision=None）。找不到 base 就直接红，不静默放行。
+          BASE_REV=$(python - <<'PY'
+          import pathlib
+          import re
+          import sys
+          bases = []
+          for p in sorted(pathlib.Path("alembic/versions").glob("*.py")):
+              text = p.read_text(encoding="utf-8", errors="ignore")
+              if re.search(r"^down_revision\s*=\s*None\s*$", text, re.M):
+                  m = re.search(r"^revision\s*=\s*[\"']([^\"']+)", text, re.M)
+                  if m:
+                      bases.append(m.group(1))
+          if len(bases) != 1:
+              # 单线链才有"唯一 base"这个概念；一旦分叉，下面的 `cur == BASE_REV` 判据就不再成立，
+              # 必须让人来看——不静默挑一个然后给出一个看起来很权威的绿。
+              sys.exit(f"期望恰好 1 个 base revision（down_revision=None），实际找到 {bases}")
+          print(bases[0])
+          PY
+          )
+          if [ -z "$BASE_REV" ]; then
+            echo "::error::在 alembic/versions 里找不到 down_revision=None 的 base revision，无法校验降级终点"
             exit 1
           fi
+          echo "本仓 base revision（现查）= $BASE_REV"
+          # INFO 行走 stderr（backend/alembic.ini: handler_console args = (sys.stderr,)），stdout 只有版本号；
+          # 这里刻意不对 alembic 本身加 `|| true`——alembic 非 0 退出会被 bash -e 直接把本步打红，
+          # 而不是被当成"输出为空 = 已在 base"这种假绿。
+          raw=$(alembic current 2>/dev/null)
+          cur=$(printf '%s' "$raw" | tr -d '\r' | sed -E 's/\(head[^)]*\)//g; s/[[:space:]]+/ /g; s/^ //; s/ $//')
+          if [ -z "$cur" ]; then
+            echo "OK: alembic current 为空 = alembic_version 无行，确实退到了 base"
+          elif [ "$cur" = "$BASE_REV" ]; then
+            echo "OK: alembic current = base revision $cur"
+          else
+            echo "::error::downgrade base 之后 alembic current = '${cur}'：既不是空、也不是 base（${BASE_REV}）"
+            echo "::error::说明 down 链条在中途某个 revision no-op（只退了一半）——旧谓词只看'不在 head'，这种情况会放行"
+            exit 1
+          fi
+          # <<< base-check
+          #
+          # ⚠️ 这把尺量到哪，讲清楚：本步骤验的是【版本指针能回位】，不验【schema 对象真的回来】。
+          #   alembic current 读的就是 alembic_version 里那一行；只要 upgrade() 返回而没抛异常，alembic
+          #   就无条件把版本行推上去——"版本号回来了"和"DDL 真的执行了"之间没有任何绑定。
+          #   现成实例（不是假想）：backend/alembic/versions/0019_evalresult_kb_version.py 的 downgrade()
+          #   只 drop_column、不 drop table，文件注释自认"表残留为空表（无害）"⇒ downgrade base 之后库里
+          #   确实还剩一张 eval_results，而 alembic current 输出为空 → 本步判绿。别把这行绿读成"结构对称已验证"。
+          #   审计 4b 全仓 grep `information_schema|has_table|get_columns|compare_metadata` 在
+          #   backend/tests/、alembic/env.py、app/db/ = 0 命中 ⇒ 目前没有任何尺子比对 down/up 后的实际 schema。
+          #   真要补有两条路（本轮不实现：都需要真 PG，且落在 backend/**——另一个 agent 正在改那棵树）：
+          #     ① re-upgrade 后跑 `alembic revision --autogenerate` 并断言生成的 upgrade() 体为空；
+          #     ② 用 sqlalchemy.inspect 把 Base.metadata.tables 与 information_schema.columns 做集合相等断言。
       - name: Re-upgrade and assert back at head
         run: |
           alembic upgrade head
@@ -196,52 +258,274 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan for leaked secrets
+        # ⚠️ job 名 "Secret scan (gitleaks 等价)" 保持原样不要改：本仓分支保护按 job 名匹配必检
+        #   状态，改名会让这道必检门禁静默失效。名字里的"等价"是高估，实际能力见下面 python 块首的诚实标注。
         run: |
           python - <<'PY'
           import pathlib
           import re
+          import subprocess
           import sys
 
+          # ══ 这把尺实际是什么（先把自己量到哪讲清楚）═══════════════════════════════
+          # 它 = 11 条品牌/结构正则 + 1 条"上下文条件长随机串" + 1 条 "KEY=值 硬编码" 检查，
+          #     扫的是【工作树里 git 认得的文件】= tracked + 未被 .gitignore 忽略的 untracked。
+          # 它【不是】gitleaks：gitleaks 有 ~130 个 detector、熵阈值分析，以及最要紧的
+          #   **git history 扫描**；这里一条历史都不读。
+          # 已知不覆盖（写清楚，好过让"没命中"冒充"没有密钥"）：
+          #   1) git 历史：把带密钥的文件删掉再 push ⇒ 本 job 绿，密钥仍躺在远端历史里可 git log -p 捞回。
+          #      要堵这条得接真 gitleaks 并开 history 模式（代价：clone 全史 + 装工具），本轮按
+          #      "只改免费面、小步" 的口径没接。ci.yml 开头的注释自认历史上真发生过硬编码密钥推上远端。
+          #   2) 无上下文的裸密钥：一段 64-hex / base64 若出现在既不含关键词、也不是 KEY=值 赋值的行里
+          #      （文档正文、数据文件、测试 fixture）不报。无条件的熵检测会把哨兵值、fixture、
+          #      package-lock 的 sha512 integrity 一并打红，所以刻意只做"关键词同行"这条件版。
+          #   3) 短于 40 字符的随机串（第 2 条的下界），以及短于 20 字符的 sk- 值。
+          #   4) 值以 $ 开头（${VAR} / $(cmd) / GH secrets 表达式注入的那一类）按"注入而非硬编码"放行；
+          #      值里含 " = "（带默认值的类型声明）按声明位放行。真密钥刻意伪装成这两种形状即可绕过。
+          #      （这里刻意不写出那个双大括号字面量：run 块里即使写在注释里也会被 Actions 先展开。）
+
+          # ── 扫描面：由 git 决定，不再"点开头就跳过"──────────────────────────────
+          # 旧实现是 `if any(part.startswith(".") and part != ".github"): continue`，注释写的是
+          # "跳过 .git/.venv 等"，实际干的是"跳过一切点开头文件"：2026-09-27 审计本机实测
+          # SKIPPED=56656 / READ=29084，仓库里 12 个已提交 dotfile（frontend/.npmrc、
+          # backend/.env.example、contracts/.check-baseline.json、.gitattributes …）零覆盖，
+          # 而 npm registry 的 "_auth"+"Token"= 赋值行（.npmrc 的经典泄漏形状）与 deploy 下的
+          # *_key.txt 私钥文件，恰是密钥最常待的地方——意图与实现的偏差正好落在高危面上。
+          # 现在：dotfile 一律进扫描面；该排除的交给 .gitignore（node_modules/.venv/dist/本机 backend/.env
+          # 都在里面）+ 下面这份【显式目录名】名单。本机未提交的开发用 .env 不该让 PR 红（它也进不了库）；
+          # 一旦 commit/add 进 git，它就在这个面上。
+          SKIP_DIRS = {
+              ".git", ".hg", ".svn", "node_modules", ".pnpm-store",
+              ".venv", "venv", "dist", "build", "out", "__pycache__",
+              ".mypy_cache", ".pytest_cache", ".ruff_cache", ".turbo", ".cache", ".parcel-cache",
+              "coverage", "htmlcov", ".nyc_output", "playwright-report", "test-results",
+          }
+          SKIP_SUFFIXES = {
+              ".png", ".jpg", ".jpeg", ".gif", ".ico", ".webp", ".bmp",
+              ".woff", ".woff2", ".ttf", ".otf", ".eot", ".pdf", ".zip", ".gz",
+              ".lock", ".pyc", ".so", ".wheel", ".coverage", ".map",
+          }
+
+          # ── 模式集：品牌前缀 / 结构特征（命中即报，不给豁免——这些形状不可能是占位符）──
+          # 审计实测旧的 4 条正则对 13 个真实密钥形状只命中 3。补进来的每一条都对应一个真实形状，
+          # 且 file 末尾的 SELF_TEST 会逐条自证它们真的还在工作（模式被人删掉/改坏 = 本 job 红）。
           SECRET_PATTERNS = [
-              re.compile(r"sk-[A-Za-z0-9]{20,}"),                    # OpenAI-style keys
-              re.compile(r"AKIA[0-9A-Z]{16}"),                       # AWS access key id
-              re.compile(r"sk_live_[A-Za-z0-9]{20,}"),               # Stripe live keys
-              re.compile(r"-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY"),  # private keys
+              ("OpenAI 风格 sk- 密钥", re.compile(r"sk-[A-Za-z0-9]{20,}")),
+              ("AWS access key id", re.compile(r"AKIA[0-9A-Z]{16}")),
+              ("Stripe live/test key", re.compile(r"(?:sk|rk)_(?:live|test)_[A-Za-z0-9]{20,}")),
+              # 覆盖 RSA / EC / DSA / OPENSSH / PKCS8 / ENCRYPTED / PGP … * PRIVATE KEY( BLOCK) 全家，
+              # 旧式只列了 (RSA |EC |OPENSSH )? 因而漏掉 PGP/DSA/ENCRYPTED/PKCS8 之外的头。
+              ("PEM 私钥头（任意算法）", re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY(?: BLOCK)?")),
+              ("GitHub token（ghp_/gho_/ghu_/ghs_/ghr_/github_pat_）",
+               re.compile(r"\bgh[pousr]_[A-Za-z0-9]{36,}\b|\bgithub_pat_[A-Za-z0-9_]{40,}")),
+              ("Google API key（AIza…）", re.compile(r"\bAIza[0-9A-Za-z_-]{35}")),
+              ("Slack token（xoxb/xoxp/xoxa/xoxr/xoxs-）", re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}")),
+              ("npm registry 令牌（.npmrc 经典形状）", re.compile(r"_auth\s?Token\s*=\s*\S{8,}|\bnpm_[A-Za-z0-9]{36}")),
+              ("AWS secret access key（显式键名）",
+               re.compile(r"(?i)aws_?secret_?access_?key\s*[:=]\s*[A-Za-z0-9/+=]{30,}")),
+              ("SSH/GPG 私钥材料的另一特征行", re.compile(r"(?i)Proc-Type:\s*4,ENCRYPTED|Version:\s*GPG/PGP\s")),
+              ("JWT 字面量（eyJ 头 + 两段 base64url）",
+               re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b")),
           ]
-          SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".lock", ".woff", ".woff2"}
 
-          hits = []
-          for path in pathlib.Path(".").rglob("*"):
-              if any(part.startswith(".") and part != ".github" for part in path.parts):
-                  continue  # 跳过 .git/.venv 等
-              if path.suffix.lower() in SKIP_SUFFIXES or not path.is_file():
-                  continue
+          # ── 第 2 条尺：上下文条件长随机串（要求同一行有关键词）─────────────────────
+          # 只在同行出现"密钥类关键词"时才报，否则裸 hex/base64 会把哨兵值与 fixture 全打红。
+          CTX_KEYWORDS = re.compile(
+              r"(?i)(secret|token|password|passwd|api_?key|access_?key|credential|private_?key|auth|signature)")
+          LONG_RANDOM_RUN = re.compile(r"[A-Za-z0-9+/=]{40,}")
+
+          # ── 第 3 条尺：KEY=值 硬编码位（本仓最该防的两把密钥就在这里）───────────────
+          # LONGCAT_API_KEY / VOLCENGINE_API_KEY 没有公开前缀特征，品牌正则永远抓不到它们
+          # （.planning/.../M5.md:220 立过案，审计 3.3 复述）；只能按"键名 + 赋了非占位符的值"抓。
+          KEY_ASSIGN = re.compile(
+              r"""^\s*(?:export\s+|local\s+)?                     # env 文件 / shell 里的赋值
+                  ([A-Za-z0-9_.\-]*
+                   (?:API_?KEY|API_SECRET|SECRET|TOKEN|PASSWORD|PASSWD|AUTH_?TOKEN|ACCESS_KEY|CREDENTIAL|PRIVATE_KEY)
+                   [A-Za-z0-9_.\-]*)
+                  \s*[:=]\s*(.+?)\s*$""", re.X)
+
+          # ── 显式豁免白名单（哨兵/示例值）：逐条写理由，不再靠"点开头一律不看"──────────
+          # 判据是"值里含下列某项登记哨兵"，只豁免这一行的这一个值，不豁免整个文件——
+          # 同一个 .env.example 里若另起一行写真密钥，照样红。
+          # 代价如实写明：`密钥真值__CHANGE_ME__` 这种故意绕行的写法会漏（旧实现的 endswith 同样漏）；
+          # 收紧到"值必须精确等于哨兵"会让 backend/.env.example:33 的 ak-__CHANGE_ME__ 这种
+          # 带前缀示例位立刻翻红，故本轮取"含哨兵即豁免"并把绕过形状记进已知不覆盖。
+          EXAMPLE_SENTINEL = "__CHANGE_ME__"     # 示例文件里密钥位必须用的那一个占位符
+          VALUE_SENTINELS = [
+              (EXAMPLE_SENTINEL,
+               "全仓占位符约定（backend/.env.example / docker-compose.yml 默认值）；"
+               "app.core.config.validate() 会拒绝用它启动，所以它不可能是生产密钥"),
+              ("ci-test-jwt-secret",
+               "ci.yml / eval.yml 里 test+e2e job 的 CI 专用 JWT 字面量：一次性 runner、非生产、"
+               "且缺失会让 pytest collection 直接崩（ci.yml:97-99 注释已立案）。"
+               "形状刻意不含 sk-/hex≥40，所以只有这条 KEY=值 尺会碰到它"),
+          ]
+
+          def exempt_value(value):
+              """返回豁免理由（None = 不豁免）。只给 KEY=值 这条位置型尺子用。"""
+              v = value.strip().strip("\"'").split(" #")[0].strip()
+              if len(v) < 8:
+                  return "值短于 8，视为示例/空值/声明"
+              if v.startswith("$") or "secrets." in v:
+                  return "值来自注入（${VAR} / $(cmd) / GH secrets 表达式），非硬编码"
+              if re.search(r"\s=\s", v):
+                  return "带默认值的类型声明位（KEY: type = default），非赋值"
+              for sentinel, _reason in VALUE_SENTINELS:
+                  if sentinel in v:
+                      return f"登记哨兵 {sentinel}"
+              return None
+
+          def listed_files():
+              """扫描面 = git 认得的文件（tracked + 未忽略的 untracked），由 git 自己决定。"""
               try:
-                  content = path.read_text(encoding="utf-8", errors="ignore")
-              except OSError:
-                  continue
-              for lineno, line in enumerate(content.splitlines(), 1):
-                  if any(p.search(line) for p in SECRET_PATTERNS):
-                      hits.append(f"{path}:{lineno}")
+                  tracked = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True)
+                  others = subprocess.run(
+                      ["git", "ls-files", "-z", "--others", "--exclude-standard"],
+                      capture_output=True, check=True)
+              except Exception as exc:                      # git 坏了就红，绝不退化成"读 0 个文件也绿"
+                  print(f"::error::git ls-files 失败，无法确定扫描面（宁可红也不装作扫过）：{exc}")
+                  sys.exit(1)
+              out = []
+              for blob in (tracked.stdout, others.stdout):
+                  out += [p for p in blob.decode("utf-8", "surrogateescape").split("\0") if p]
+              return list(dict.fromkeys(out))
 
-          if hits:
-              print("::error::疑似真实密钥泄漏（请改用 secret 注入）:")
-              for h in hits:
-                  print(f"  - {h}")
+          raw = listed_files()
+          targets = []
+          dotfiles = []
+          missing = []
+          for rel in raw:
+              p = pathlib.PurePosixPath(rel)
+              if any(part in SKIP_DIRS for part in p.parts[:-1]):
+                  continue
+              if p.suffix.lower() in SKIP_SUFFIXES:
+                  continue
+              if not pathlib.Path(str(rel)).is_file():
+                  missing.append(rel)                         # 在 index 里却不在工作树里：合并/删除中间态
+                  continue
+              targets.append(p)
+              if any(part.startswith(".") for part in p.parts):
+                  dotfiles.append(rel)
+
+          # ── 下界断言：扫不到东西 ≠ 绿 ────────────────────────────────────────────
+          # 旧实现在 `if hits:` 之前没有任何"至少读了 N 个文件"的断言，读 0 个也照样打同一句 OK
+          # （审计 3c）。现在两个下界都钉住：总量、以及"dotfile 覆盖数"（后者专防 3a 那个回归
+          # 再被某句 `startswith(".")` 悄悄带回来）。
+          MIN_SCANNED = 300        # 本机实测 473 项（467 tracked + 未忽略的 untracked）；CI checkout 上
+                                   # 约等于 tracked 数，取 0.64× 作下界：真塌了才红，日常浮动不炸
+          MIN_DOTFILES = 8         # 本仓已提交的 dotfile 有 12 个（旧实现一个都扫不到），取下界 8
+          if len(targets) < MIN_SCANNED:
+              print(f"::error::扫描面塌了：实际只读到 {len(targets)} 个文件，低于下界 {MIN_SCANNED}。"
+                    f"常见原因=遍历被改成子集、SKIP 名单被加大、浅检出、或 git 异常。")
+              print(f"  scanned={len(targets)}  min_scanned_required={MIN_SCANNED}  git_listed={len(raw)}")
+              sys.exit(1)
+          if len(dotfiles) < MIN_DOTFILES:
+              print(f"::error::dotfile 覆盖塌了：只扫到 {len(dotfiles)} 个点开头文件，低于下界 {MIN_DOTFILES}。"
+                    f"（2026-09-27 审计 3a 就是 .npmrc/.env.example 这类文件被整体跳过而 CI 仍绿）")
+              print(f"  dotfiles_scanned={len(dotfiles)}  min_dotfiles_required={MIN_DOTFILES}")
               sys.exit(1)
 
-          # .env.example 的 JWT_SECRET 必须是占位符
-          env_example = pathlib.Path("backend/.env.example")
-          if env_example.exists():
-              text = env_example.read_text(encoding="utf-8")
-              for key in ("JWT_SECRET",):
-                  bad = [ln for ln in text.splitlines()
-                         if ln.startswith(f"{key}=") and not ln.endswith("__CHANGE_ME__")]
-                  if bad:
-                      print(f"::error::{key} 必须为占位符 __CHANGE_ME__: {bad}")
-                      sys.exit(1)
+          print(f"扫描面: git 列出 {len(raw)} 项 -> 实际读取 {len(targets)} 个文件"
+                f"（含 dotfile {len(dotfiles)} 个），跳过目录名单 {len(SKIP_DIRS)} 项 / 后缀名单 {len(SKIP_SUFFIXES)} 项")
+          if missing:
+              print(f"  ⚠ git 列出但工作树里不存在（未读）: {len(missing)} 个，前 5: {missing[:5]}")
+          print(f"  dotfile 覆盖明细: {', '.join(sorted(dotfiles))}")
 
-          print("OK: 未发现真实密钥，.env.example 全为占位符")
+          hits = []
+          for p in targets:
+              rel = str(p).replace("\\", "/")
+              try:
+                  text = pathlib.Path(rel).read_text(encoding="utf-8", errors="ignore")
+              except OSError:
+                  continue
+              for lineno, line in enumerate(text.splitlines(), 1):
+                  for label, rx in SECRET_PATTERNS:
+                      if rx.search(line):
+                          hits.append((rel, lineno, label))
+                  if CTX_KEYWORDS.search(line) and LONG_RANDOM_RUN.search(line):
+                      hits.append((rel, lineno, "上下文条件长随机串（同行关键词 + ≥40 位随机字符）"))
+                  m = KEY_ASSIGN.match(line)
+                  if m:
+                      reason = exempt_value(m.group(2))
+                      if reason is None:
+                          hits.append((rel, lineno, f"密钥位 {m.group(1)} 被硬编码赋值"))
+                      # （命中且被豁免时不打印值，避免把哨兵旁边可能存在的真片段写进 CI 日志）
+
+          if hits:
+              # 故意只报 path:line + 规则名，绝不回显匹配内容——CI 日志本身不是 secret 存储。
+              print(f"::error::疑似真实密钥泄漏（{len(hits)} 处，请改用 secret 注入）:")
+              for rel, lineno, label in hits:
+                  print(f"  - {rel}:{lineno}  [{label}]")
+              sys.exit(1)
+
+          # ── 自证：模式集逐条还能抓到自己的样本 ────────────────────────────────────
+          # 这一条治的是"尺子被改坏而输出照旧是 OK"：样本用**拼接**构造，所以这些密钥形状
+          # 不会作为字面量躺在 ci.yml 里被上面的循环扫到（否则本 job 会把自己扫红）。
+          SELF_TEST = [
+              ("OpenAI 风格 sk- 密钥", "OPENAI_API_KEY = " + '"' + "sk-" + "a" * 24 + '"'),
+              ("AWS access key id", "AWS=" + "AKIA" + "A" * 16),
+              ("Stripe live/test key", "STRIPE=" + "sk_" + "live_" + "b" * 24),
+              ("PEM 私钥头（任意算法）", "-----BEGIN " + "OPENSSH " + "PRIVATE KEY-----"),
+              ("PEM 私钥头（任意算法）", "-----BEGIN " + "PGP " + "PRIVATE KEY BLOCK-----"),
+              ("PEM 私钥头（任意算法）", "-----BEGIN " + "ENCRYPTED " + "PRIVATE KEY-----"),
+              ("GitHub token（ghp_/gho_/ghu_/ghs_/ghr_/github_pat_）", "T=" + "ghp_" + "A" * 40),
+              ("GitHub token（ghp_/gho_/ghu_/ghs_/ghr_/github_pat_）", "T=" + "github_pat_" + "A" * 45),
+              ("Google API key（AIza…）", "KEY=" + "AIza" + "A" * 35),
+              ("Slack token（xoxb/xoxp/xoxa/xoxr/xoxs-）", "T=" + "xoxb-" + "1" * 12 + "-" + "1" * 13 + "-" + "A" * 16),
+              ("npm registry 令牌（.npmrc 经典形状）", "//registry.npmjs.org/:_auth" + "Token=" + "npm_" + "a" * 36),
+              ("AWS secret access key（显式键名）", "aws_secret_access_key" + "=" + "A" * 40),
+              ("JWT 字面量（eyJ 头 + 两段 base64url）", "T=" + "eyJhbGciOi" + "x" * 12 + ".eyJzdWIiOi" + "y" * 12 + "." + "z" * 43),
+              ("上下文条件长随机串（同行关键词 + ≥40 位随机字符）", "client_" + "secret: " + "7b" * 25),
+              ("密钥位 被硬编码赋值", "LONGCAT_API_KEY" + "=" + "Z" * 30),
+              ("密钥位 被硬编码赋值", "VOLCENGINE_API_KEY" + "=" + '"' + "q" * 32 + '"'),
+          ]
+          blind = []
+          for expect_label, sample in SELF_TEST:
+              caught = {lbl for lbl, rx in SECRET_PATTERNS if rx.search(sample)}
+              if CTX_KEYWORDS.search(sample) and LONG_RANDOM_RUN.search(sample):
+                  caught.add("上下文条件长随机串（同行关键词 + ≥40 位随机字符）")
+              m = KEY_ASSIGN.match(sample)
+              if m and exempt_value(m.group(2)) is None:
+                  caught.add("密钥位 被硬编码赋值")
+              if expect_label not in caught:
+                  blind.append(f"    样本应被 [{expect_label}] 抓到，实际抓到 {sorted(caught) or '无'}")
+          if blind:
+              print("::error::密钥模式集自检失败——有规则名义上在、实际抓不到自己的样本"
+                    "（模式被删/被改坏/豁免被放宽）:")
+              print("\n".join(blind))
+              sys.exit(1)
+          print(f"模式自检: {len(SELF_TEST)} 个样本全部被对应规则抓到")
+
+          # ── 示例文件的占位符约束（显式白名单 + 缺文件即红）────────────────────────
+          # 旧实现：硬编码只读 backend/.env.example，且带 `if exists()` —— 文件被改名/删掉这段
+          # 就静默跳过、照样打 OK（审计 3d）；键清单又只有 JWT_SECRET 一个，frontend/.env.example
+          # 完全不在面上。现在：登记在案的示例文件必须存在，且其中**每一个**密钥位都必须是占位符。
+          EXAMPLE_FILES = ("backend/.env.example", "frontend/.env.example")
+          gone = [f for f in EXAMPLE_FILES if not pathlib.Path(f).exists()]
+          if gone:
+              print(f"::error::登记的示例文件不见了：{gone}。要么补回来，要么在这里显式除名并说明理由"
+                    "（静默跳过这段 = 审计 3d 立案的那个洞）。")
+              sys.exit(1)
+          example_checked = 0
+          for rel in EXAMPLE_FILES:
+              for lineno, line in enumerate(pathlib.Path(rel).read_text(encoding="utf-8").splitlines(), 1):
+                  m = KEY_ASSIGN.match(line.lstrip("#").strip()) or KEY_ASSIGN.match(line)
+                  if not m:
+                      continue
+                  example_checked += 1
+                  # 这里不复用 exempt_value 的理由串做判据（那种耦合会随措辞改动静默失效）：
+                  # 示例文件的口径就是一条——每个密钥位的值必须含 EXAMPLE_SENTINEL。
+                  # 所以 JWT_SECRET=$JWT_SECRET 这种"注入形状"在 .env.example 里也算红（示例文件
+                  # 的作用就是给人抄的模板，该写占位符而不是变量引用）。
+                  value = m.group(2).strip().strip("\"'").split(" #")[0].strip()
+                  if EXAMPLE_SENTINEL not in value:
+                      print(f"::error::{rel}:{lineno} 的 {m.group(1)} 不是占位符（值里应含 {EXAMPLE_SENTINEL}）"
+                            "——值本身不回显。")
+                      sys.exit(1)
+          print(f"占位符检查: {len(EXAMPLE_FILES)} 个示例文件里的 {example_checked} 个密钥位全为 {EXAMPLE_SENTINEL}")
+
+          print("OK: 工作树(git 面，含 dotfile)未发现真实密钥；模式自检通过；示例文件全为占位符")
+          print("   注意：本 job 不读 git history（上面第 1) 条已知不覆盖），历史面需要真 gitleaks 才堵得上")
           PY
 
   frontend:
@@ -263,6 +547,21 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      # 靶 2(b)：`npm run build` 此前在全仓 0 处 CI 引用（本文件里那个 "Build Docker image" job 是
+      # context: backend 的后端镜像打包，跟前端产物无关；playwright.config.ts:19 起的是 npm run dev），
+      # 于是 dist/ 从未被构建、也从未被任何门禁打开过——它一直是"靠人本机记得跑"的门禁。
+      # 为什么接进来而不是删掉：审计做过反向对照，"引用一个不存在的 CSS 说明符"时 tsc 绿而
+      # vite build 红（[vite:load-fallback] ... ENOENT）⇒ 它有 tsc 覆盖不到的独有断言面
+      # （非 TS 说明符可解析 + 整棵模块图能被转译），值得跑。
+      - name: Build production bundle (vite)
+        run: npm run build
+      # 靶 2(a)：但 build 只是转换+打包机，不执行任何一行代码，所以它挡不住"删掉 src/main.tsx:1
+      # 的 React19 补丁 import"（实测 build/tsc/vitest 三绿，而产物里 20+ 处 message.* 运行期全废）。
+      # 另加一把看**产物**的尺子。用 --dist 指向上面 npm run build 刚写出的 dist/：
+      # 断的是真要发出去的那份 artifact，且省掉第二次构建（默认不带 --dist 时它自己内存构建，
+      # 适合本机没跑 build 时独立取证）。
+      - name: React19 patch present in built entry chunk (check:bundle)
+        run: npm run check:bundle -- --dist dist
       # 以下三把此前只在本机手动跑（靠人记得）——2026-09-26 一轮 a11y 审查的结论正是
       # "静态尺只算白底色对 + 不进 CI"导致对比度问题反复静默复发，故一次接齐。
       # max-warnings=0：仓库最后一条既有 warning（ChatContainer 缺 navigate 依赖）已修掉，

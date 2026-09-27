@@ -16,6 +16,7 @@
     "test:watch": "vitest",
     "check:tokens": "node scripts/check-tokens.mjs",
     "check:a11y": "node scripts/check-a11y.mjs",
+    "check:bundle": "node scripts/check-patch-bundle.mjs",
     "lint": "eslint src --ext .ts,.tsx",
     "format": "prettier --write .",
     "e2e": "playwright test"
