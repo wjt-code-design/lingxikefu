@@ -80,12 +80,19 @@ def patch(monkeypatch):
 
 
 def test_search_kb_query_has_bge_prefix(patch):
-    """核心事实：query 必须加 BGE_QUERY_PREFIX，否则与入库 document 语义空间不匹配。"""
+    """核心事实：query 必须加 BGE_QUERY_PREFIX，否则与入库 document 语义空间不匹配。
+
+    字面量钉（审计 M5 任务 2，2026-09-27）：旧断言 `sent == BGE_QUERY_PREFIX + q`
+    期望值与实现同源——把常量置空/改掉，两侧一起变、全量 813 条无一红。该前缀是
+    bge 官方 query 指令前缀（document 入库不加），改了=查询向量与库内语义空间
+    错位，faithfulness/recall@5 评测口径直接失效，必须独立钉死。
+    """
     kb_id = uuid4()
     hits = search_kb("退款多久到账", kb_id, top_k=5)
 
     sent = patch["emb"].calls[0][0]
-    assert sent == BGE_QUERY_PREFIX + "退款多久到账"
+    assert BGE_QUERY_PREFIX == "为这个句子生成表示以用于检索相关文章："
+    assert sent == "为这个句子生成表示以用于检索相关文章：退款多久到账"
     assert len(hits) == 2
     assert isinstance(hits[0], RetrievedChunk)
     assert hits[0].doc_id == "d1" and hits[0].text == "退款政策第一条"

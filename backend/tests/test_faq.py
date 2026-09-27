@@ -8,6 +8,7 @@ import pytest
 from app.core.database import get_db
 from app.main import app
 from app.models.base import Base
+from app.models.kb_publish import KBPublishBatch
 from app.models.knowledge import Chunk, Document, DocumentStatus, KnowledgeBase
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -27,8 +28,16 @@ def _make_engine():
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+    # 2026-09-27 越权补漏后 /faq 列表/原文端点按 KBPublishBatch 推导发布态
+    # （无批次=直通可见），故夹具建批次表；本文件用例均不建批次行（全部直通可见）。
     Base.metadata.create_all(
-        engine, tables=[KnowledgeBase.__table__, Document.__table__, Chunk.__table__]
+        engine,
+        tables=[
+            KnowledgeBase.__table__,
+            Document.__table__,
+            Chunk.__table__,
+            KBPublishBatch.__table__,
+        ],
     )
     return engine
 

@@ -96,6 +96,35 @@ def test_defaults_are_consistent() -> None:
     assert "http://localhost:5173" in settings.CORS_ORIGINS
 
 
+def test_eval_caliber_defaults_pinned_to_baseline() -> None:
+    """评测口径值以**字面量**钉死 config 默认值（审计 M5 任务 2，2026-09-27）。
+
+    背景：此前全仓无一处独立期望——同时改坏 RETRIEVAL_TOP_K 5→1 / MIN_SCORE 0.30→0.99 /
+    QDRANT_COLLECTION / CHUNK_SIZE 等，53 条相关测试与 baseline 一字不差全绿（期望值
+    == settings.X 与实现同源，永远一起错）。而这些值直接进入评测门禁判定面
+    （faithfulness / recall@5 / 诚实性拒答，见 eval-and-samples/BASELINE.sha256 头部
+    「冻结四件套」：RETRIEVAL_TOP_K=5 / MIN_SCORE=0.30 + 判定脚本 + 评测集）。
+
+    取 **Settings.model_fields 的代码默认值**而非单例：钉的是 config.py 实现常量本身
+    （部署经 env 显式覆盖是文档化路径，不属本测试射程）；改坏默认值 → 本条必须红。
+    """
+    f = Settings.model_fields
+    assert f["RETRIEVAL_TOP_K"].default == 5
+    assert f["MIN_SCORE"].default == 0.30
+    assert f["CHUNK_SIZE"].default == 500
+    assert f["CHUNK_OVERLAP"].default == 50
+    # 集合名内嵌 embedding 口径（bge/768）：换名=换语义空间，评测基线不可比
+    assert f["QDRANT_COLLECTION"].default == "lingxi_bge_768"
+    assert f["QDRANT_COLLECTION_HYBRID"].default == "lingxi_hybrid_bge_768"
+    assert f["TENANT_DEFAULT"].default == "default"
+    # 检索拒答/降噪定值与 hybrid 现势口径（切换=换检索链路，基线数字失效）
+    assert f["RAG_ENABLE_HYBRID"].default is True
+    assert f["EMBEDDING_PROVIDER"].default == "local"
+    assert f["EMBEDDING_MODEL"].default == "BAAI/bge-base-zh-v1.5"
+    assert f["CHAT_PROVIDER"].default == "longcat"
+    assert f["LONGCAT_CHAT_MODEL"].default == "LongCat-2.0"
+
+
 def test_no_proxy_covers_loopback_and_external_ai_hosts() -> None:
     """config import 时 NO_PROXY 必须含回环豁免 + 外网 AI 服务域名直连（2026-09-02 实测：
     仅回环豁免时 urllib 回退注册表死代理 → LongCat ConnectError 10061 → eval 全 ERR）。

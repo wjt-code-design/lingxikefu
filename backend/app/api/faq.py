@@ -1,8 +1,11 @@
 """FAQ 路由（Phase 4）：/api/v1/faq 帮助中心匿名公开访问（无鉴权）。
 
 返回 tenant 过滤的知识库 + 各 KB 文档清单（status/chunks）。
-安全边界：清单只返回名称级信息；原文端点仅放行**已索引**文档的 raw_text
-（政策原文本意公开），未索引/无原文/跨租户一律 404，不泄漏存在性。
+安全边界（2026-09-27 补漏）：清单只返回名称级信息，且不枚举匿名不可见文档的 id；
+原文端点仅放行**已索引且已发布**文档的 raw_text——发布态在 PG 侧以 KBPublishBatch
+推导（kb_visibility：无批次=直通导入可见；有批次=最新批次 released 才可见；staged/
+评测中/失败/回滚均不可见）。未发布/未索引/无原文/跨租户一律 404，不泄漏存在性
+（口径与 chat.py _check_session_access 一致，用 404 防探测）。
 """
 from __future__ import annotations
 
@@ -17,6 +20,7 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.models.knowledge import Chunk, Document, DocumentStatus, KnowledgeBase
 from app.schemas.faq import FaqDocContentResp, FaqDocItem, FaqKbItem, FaqListResp
+from app.services import kb_visibility
 
 router = APIRouter(prefix="/faq", tags=["faq"])
 
@@ -50,6 +54,15 @@ def list_faq(db: Session = Depends(get_db)) -> FaqListResp:
         .order_by(Document.created_at.desc())
     ).all():
         docs_by_kb.setdefault(d.kb_id, []).append(d)
+    # 发布门禁（2026-09-27 越权补漏）：staged/回滚未发布的草案不得出现在匿名清单
+    # （否则 doc_id 可被枚举进而拉原文）。批次判定一条查询搞定（kb_visibility，
+    # 内部单次 select KBPublishBatch），禁止逐 doc 查批次。
+    all_docs = [d for grouped in docs_by_kb.values() for d in grouped]
+    visible = kb_visibility.anonymous_visible_doc_ids(db, [d.id for d in all_docs])
+    docs_by_kb = {
+        kb_id: [d for d in grouped if d.id in visible]
+        for kb_id, grouped in docs_by_kb.items()
+    }
     items: list[FaqKbItem] = []
     for kb in kbs:
         docs = docs_by_kb.get(kb.id, [])
@@ -79,10 +92,12 @@ def get_doc_content(
     doc_id: UUID,
     db: Session = Depends(get_db),
 ) -> FaqDocContentResp:
-    """方案A：政策原文浏览——返回单篇**已索引**文档的公开原文。
+    """方案A：政策原文浏览——返回单篇**已索引且已发布**文档的公开原文。
 
-    404 统一口径（不区分「不存在 / 跨租户 / 未索引 / 无原文」）：
-    未就绪内容不展示，也不泄漏存在性。
+    404 统一口径（不区分「不存在 / 跨租户 / 未索引 / 未发布 / 无原文」）：
+    未就绪内容不展示，也不泄漏存在性。发布态以 KBPublishBatch 推导（见
+    app/services/kb_visibility.py）——status=indexed 但最新批次非 released
+    （staged/评测中/失败/回滚）的草案在这里同样 404，堵「已索引未发布」越权读原文。
     """
     tenant = settings.TENANT_DEFAULT
     row = db.execute(
@@ -98,6 +113,9 @@ def get_doc_content(
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在或暂不可读")
     doc, kb_name = row
+    # 发布门禁：批次派生不可见（staged/rolled_back 等）→ 404，不用 403（防探测）
+    if doc.id not in kb_visibility.anonymous_visible_doc_ids(db, [doc.id]):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在或暂不可读")
     if not doc.raw_text:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "文档不存在或暂不可读")
     return FaqDocContentResp(

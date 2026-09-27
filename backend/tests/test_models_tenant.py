@@ -6,7 +6,9 @@
 A6（审计 M4 2026-09-27）：本文件前三条只验 **schema 形状**，不验任何一条查询——于是
 eval.py / audit_logs.py 整文件零 tenant 时这里照样全绿。末尾那条把根目录的查询级尺子
 scripts/check_tenant_filters.py 接进 pytest，让红线⑨ 在「列存在」和「查询真过滤」两层
-都有东西守着（CI 未接该脚本前，这里就是它的执行点）。
+都有东西守着。（2026-09-27 修正反向幽灵标注：ci.yml 早已把该脚本接为独立 step
+「Tenant filter check」，本文件的 pytest 接线是其第二执行点——本地/推 CI 前同样会红，
+不是「CI 未接前」的临时替身。）
 """
 from __future__ import annotations
 

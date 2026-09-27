@@ -68,11 +68,24 @@ API_PREFIX = "/api/v1"  # 与 contracts/api.ts 的 API_PREFIX 保持一致
 # fail-closed 启动校验：任何配置缺失 / 占位 / 非法值在此抛 ValueError，进程拒绝启动。
 settings.validate()
 
-# L3：生产环境关闭 API 文档暴露（避免 schema 信息泄漏）；dev 保留便于调试
-_app_kwargs: dict = {"title": "Lingxi Customer Service API", "version": "0.2"}
-if settings.ENV == "prod":
-    _app_kwargs["docs_url"] = None
-    _app_kwargs["redoc_url"] = None
+# L3：生产环境关闭 API 文档暴露（避免 schema 信息泄漏）；dev 保留便于调试。
+# 补漏（审计 2026-09-27 M5 任务 3）：此前只关 docs_url/redoc_url，**/openapi.json 在
+# prod 仍在线**——匿名可直接枚举全部端点与请求/响应 schema（攻击面地图）。prod 一并关掉。
+# 边界澄清：openapi_url=None 只是「不挂载该 HTTP 路由」，``app.openapi()`` 仍可从 app
+# 对象直接生成 schema——契约工具链（scripts/generate_openapi.py、check_contracts.py、
+# ci.yml 契约门禁）都走对象不走 HTTP，不受影响（2026-09-27 读码核实）。
+def _docs_exposure_kwargs(env: str) -> dict:
+    """按运行环境决定 FastAPI 文档/schema 暴露参数（prod=全关，dev/test=全开）。"""
+    if env == "prod":
+        return {"docs_url": None, "redoc_url": None, "openapi_url": None}
+    return {}
+
+
+_app_kwargs: dict = {
+    "title": "Lingxi Customer Service API",
+    "version": "0.2",
+    **_docs_exposure_kwargs(settings.ENV),
+}
 
 
 async def _warmup_embedding() -> None:
