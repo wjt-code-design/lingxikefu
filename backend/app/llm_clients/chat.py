@@ -102,8 +102,16 @@ class OpenAILikeChatClient(ChatClient):
             # usage 埋点（2026-09-05 LongCat 收费）：流式默认不返回 usage，显式要求
             # 末块附带（实测 LongCat 支持，usage 块 choices 为空、不进正文）。
             payload.setdefault("stream_options", {"include_usage": True})
-        if not settings.LLM_ENABLE_THINKING and "chat_template_kwargs" not in payload:
-            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        # 思考模式开关：**参数风格随平台而变**（2026-10-27 百炼切换）。
+        # - chat_template_kwargs.enable_thinking：LongCat / vLLM 系（嵌套）
+        # - 顶层 enable_thinking：百炼 OpenAI 兼容模式
+        # 传错风格的后果分两种：被静默忽略（思考没关掉，白烧 token）或 400（直接失败）。
+        # 调用方显式传 chat_template_kwargs 时不覆盖（保留调用方意图）。
+        if not settings.LLM_ENABLE_THINKING:
+            if settings.LLM_THINKING_PARAM_STYLE == "top_level":
+                payload.setdefault("enable_thinking", False)
+            elif "chat_template_kwargs" not in payload:
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
         return payload
 
     @staticmethod

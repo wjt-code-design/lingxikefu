@@ -139,6 +139,7 @@ def _build_pipeline(pipeline: Pipeline) -> Pipeline:
     from app.services.steps.cache_check import check_cache
     from app.services.steps.intent import classify_intent as _classify_intent
     from app.services.steps.refuse import check_refuse
+    from app.services.steps.rerank import rerank_chunks
     from app.services.steps.retrieve import retrieve_chunks
     from app.services.steps.rewrite import rewrite_query
 
@@ -150,6 +151,7 @@ def _build_pipeline(pipeline: Pipeline) -> Pipeline:
             rewrite_query,
             check_cache,
             retrieve_chunks,
+            rerank_chunks,   # 2026-10-27：重排在检索之后、拒答之前（见 steps/rerank.py 位置契约）
             check_refuse,
         ],
     )

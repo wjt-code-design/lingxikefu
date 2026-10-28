@@ -1,0 +1,50 @@
+[
+  {
+    "arm": "A0_native_weighted",
+    "label": "自研 + 加权RRF 2:1（生产基线）",
+    "elapsed_sec": 47.9,
+    "qa": "2/2 = 100.0%",
+    "qa_rate": 1.0,
+    "refuse": "1/1 = 100.0%",
+    "citation": "8/8 = 100.0%",
+    "citation_rate": 1.0,
+    "errors": 0,
+    "refuse_qa": "0/0"
+  },
+  {
+    "arm": "A1_native_equal",
+    "label": "自研 + 等权RRF 1:1（消融）",
+    "elapsed_sec": 36.3,
+    "qa": "2/2 = 100.0%",
+    "qa_rate": 1.0,
+    "refuse": "1/1 = 100.0%",
+    "citation": "8/8 = 100.0%",
+    "citation_rate": 1.0,
+    "errors": 0,
+    "refuse_qa": "0/0"
+  },
+  {
+    "arm": "B0_langchain_equal",
+    "label": "LangChain 等权RRF（框架默认）",
+    "elapsed_sec": 41.8,
+    "qa": "2/2 = 100.0%",
+    "qa_rate": 1.0,
+    "refuse": "1/1 = 100.0%",
+    "citation": "9/9 = 100.0%",
+    "citation_rate": 1.0,
+    "errors": 0,
+    "refuse_qa": "0/0"
+  },
+  {
+    "arm": "B1_langchain_weighted",
+    "label": "LangChain 加权RRF 2:1",
+    "elapsed_sec": 38.2,
+    "qa": "2/2 = 100.0%",
+    "qa_rate": 1.0,
+    "refuse": "1/1 = 100.0%",
+    "citation": "6/6 = 100.0%",
+    "citation_rate": 1.0,
+    "errors": 0,
+    "refuse_qa": "0/0"
+  }
+]

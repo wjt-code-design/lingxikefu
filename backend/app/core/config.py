@@ -37,6 +37,9 @@ _EXTERNAL_HOSTS = [
     for u, d in (
         ("LONGCAT_BASE_URL", "https://api.longcat.chat/openai"),
         ("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3"),
+        # 百炼（2026-10-27 切换）：chat/视觉走 compatible-mode/v1，rerank 走原生 api/v1。
+        # 两者同域（ws-xxx.cn-beijing.maas.aliyuncs.com），故取其一即可豁免。
+        ("RERANK_BASE_URL", "https://ws-<your-workspace-id>.cn-beijing.maas.aliyuncs.com"),
     )
 ]
 for _np_key in ("NO_PROXY", "no_proxy"):
@@ -76,6 +79,37 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
     )
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls,
+        init_settings,
+        env_settings,
+        dotenv_settings,
+        file_secret_settings,
+    ):
+        """让 **.env 覆盖同名系统环境变量**（2026-10-27 百炼切换时踩坑）。
+
+        默认优先级：init > 系统环境变量 > .env > secrets。本机系统环境里残留着旧
+        provider 的 key（如 LONGCAT_API_KEY=ak_...），而 .env 里才是当前生效的
+        百炼 key ——默认优先级下 .env 被静默跳过，表现为「配了新 key 却仍报 401
+        InvalidApiKey」，极难定位（.env 内容看着完全正确）。
+
+        改成 .env 优先的理由：
+        - 本项目的 Key 以 ``.env`` 为真源（已 gitignore，不入库）；
+        - CI **不读 .env**（key 经 GitHub Secrets 注入为系统环境变量），故此改动
+          对 CI 无影响——.env 不存在时 dotenv 源为空，自动回落到系统环境变量；
+        - Docker compose 走 env_file 注入，容器内无 .env 文件，同样回落。
+
+        风险控制：仅当 .env 实际提供了该键时才覆盖（dotenv 源为空 → 回落 env 源）。
+        """
+        return (
+            init_settings,
+            dotenv_settings,   # .env 优先于系统环境变量
+            env_settings,
+            file_secret_settings,
+        )
 
     # --- PostgreSQL（关系库） ---
     POSTGRES_HOST: str = ""
@@ -141,18 +175,27 @@ class Settings(BaseSettings):
     # --- 租户（MVP 单租户，Phase3 才启用行级过滤） ---
     TENANT_DEFAULT: str = "default"
 
-    # --- 模型（2026-08-27 全面收敛：对话/评测只用 LongCat；embedding 本地 bge） ---
+    # --- 模型（2026-10-27 切换到阿里云百炼：对话/视觉 qwen3.8-flash，rerank qwen3.7-text-rerank）---
     # chat provider：仅 longcat（已全面取消百炼/智谱）
     CHAT_PROVIDER: str = "longcat"
-    # LongCat API（OpenAI 兼容端点）；CHAT_PROVIDER=longcat 时生效。Key 只经 env 注入，严禁提交。
+    # chat 走 OpenAI 兼容端点。**变量名沿用 LONGCAT_* 但实际可指向任意 OpenAI 兼容平台**
+    # （百炼 compatible-mode/v1 亦为 OpenAI 格式）——历史命名，避免连带改 .env.example /
+    # docker-compose.yml / ci.yml / conftest.py / test_config.py 五处引用。
+    # Key 只经 env 注入，严禁提交。
     LONGCAT_API_KEY: str | None = None
     LONGCAT_BASE_URL: str = "https://api.longcat.chat/openai"
     LONGCAT_CHAT_MODEL: str = "LongCat-2.0"
-    # LongCat-2.0 为推理模型：默认开思考（思维链经 SSE reasoning 事件透传，前端展示
-    # "思考中"——用户感知首反馈 ~2s；实测思维链对拒答/防编造判定有实质贡献：
+    # 思考模式参数风格：**LongCat 用 chat_template_kwargs.enable_thinking，百炼用顶层
+    # enable_thinking**（两者不通用，传错会被静默忽略或 400）。
+    # - "chat_template_kwargs"：LongCat / vLLM 系（嵌套在 chat_template_kwargs 里）
+    # - "top_level"：百炼 OpenAI 兼容模式（顶层 enable_thinking 字段）
+    LLM_THINKING_PARAM_STYLE: Literal["chat_template_kwargs", "top_level"] = "chat_template_kwargs"
+    # 推理模型默认开思考（思维链经 SSE reasoning 事件透传，前端展示"思考中"——
+    # 用户感知首反馈 ~2s；LongCat-2.0 实测思维链对拒答/防编造判定有实质贡献：
     # 关思考时拒答锚点统计通过率仅 83%，开思考 100%）。置 false 可关（省 token 换速度）。
     LLM_ENABLE_THINKING: bool = True
-    # 火山引擎（视觉模型）：Image Agent 图片理解
+    # 视觉模型（Image Agent 图片理解）：OpenAI 兼容（content 数组 + image_url）。
+    # 变量名沿用 VOLCENGINE_* 但实际可指向任意 OpenAI 兼容平台（百炼 qwen3.8-flash 亦兼容）。
     VOLCENGINE_API_KEY: str | None = None
     VOLCENGINE_BASE_URL: str = "https://ark.cn-beijing.volces.com/api/v3"
     VOLCENGINE_CHAT_MODEL: str = "ep-m-20260811130634-mnpgq"
@@ -162,9 +205,24 @@ class Settings(BaseSettings):
     # embedding：local=本机 BAAI/bge-base-zh-v1.5（0 成本、不出境；已取消百炼 embedding）
     EMBEDDING_PROVIDER: str = "local"
     EMBEDDING_MODEL: str = "BAAI/bge-base-zh-v1.5"
-    # rerank：MVP 关闭（管线预留节点，评测 recall@5 不达标再开）
+    # rerank：管线预留节点（2026-08-15 MVP 关闭 → 2026-10-27 接入百炼原生 rerank）。
     RAG_ENABLE_RERANK: bool = False
     RERANK_MODEL: str = "gte-rerank-v2"
+    # ⚠️ 百炼 rerank **不走 OpenAI 兼容端点**：打 compatible-mode/v1/rerank 返回
+    # HTTP 404 + 空响应体（无错误说明，最难排查的一类）。必须用 DashScope 原生路径：
+    #   {base}/api/v1/services/rerank/text-rerank/text-rerank
+    # 请求体与响应体也自成一套（input.query/input.documents 嵌套；output.results[].relevance_score）。
+    RERANK_BASE_URL: str | None = None
+    RERANK_API_KEY: str | None = None
+    # 送入 rerank 的候选数（rerank 前从混合召回取多少条参与重排）。
+    RERANK_CANDIDATES: int = 24
+    # rerank 后保留条数（= 送入 prompt 的 chunk 数）。
+    RERANK_TOP_N: int = 5
+    # 排序任务指令（仅 qwen3.7-text-rerank / qwen3-rerank / qwen3-vl-rerank 生效）。
+    # 默认=问答检索任务：优先找"能解答 query 的文档"，而非"主题相近的文档"。
+    RERANK_INSTRUCT: str = (
+        "Given a web search query, retrieve relevant passages that answer the query."
+    )
     # hybrid 检索（ADR-2026-08-16）：sparse(BM25 bigram) + dense + RRF。
     # true 用 QDRANT_COLLECTION_HYBRID（named vectors dense+sparse，需重建索引）；
     # false 回退纯 dense 旧集合（QDRANT_COLLECTION，无需重导，回滚路径）。
@@ -264,6 +322,21 @@ class Settings(BaseSettings):
             errors.append(f"MAX_UPLOAD_MB 非法值: {self.MAX_UPLOAD_MB!r}（应为 1-100 MB）")
         if not self.QDRANT_COLLECTION.strip():
             errors.append("QDRANT_COLLECTION 缺失（向量集合名不能为空）")
+
+        # --- rerank（2026-10-27 接入百炼原生 rerank）---
+        if self.RAG_ENABLE_RERANK:
+            if not (self.RERANK_BASE_URL or "").strip():
+                errors.append(
+                    "RAG_ENABLE_RERANK=true 但 RERANK_BASE_URL 未配置"
+                    "（百炼 rerank 需原生端点，如 https://{ws}.cn-beijing.maas.aliyuncs.com）"
+                )
+            if not (self.RERANK_API_KEY or "").strip():
+                errors.append("RAG_ENABLE_RERANK=true 但 RERANK_API_KEY 未配置")
+            if not (1 <= self.RERANK_TOP_N <= self.RERANK_CANDIDATES):
+                errors.append(
+                    f"RERANK_TOP_N({self.RERANK_TOP_N}) 非法：应满足 1 <= top_n <= candidates"
+                    f"({self.RERANK_CANDIDATES})"
+                )
 
         if errors:
             raise ValueError(

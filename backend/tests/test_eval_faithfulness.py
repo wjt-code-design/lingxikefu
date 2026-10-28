@@ -7,6 +7,11 @@
 """
 from __future__ import annotations
 
+from app.core.baseline import (
+    FROZEN_CHAT_MODEL,
+    FROZEN_CHAT_PROVIDER,
+    FROZEN_RETRIEVAL_TOP_K,
+)
 from scripts.eval_faithfulness import _is_llm_refusal, judge_citations, judge_qa, judge_refuse
 
 
@@ -202,9 +207,9 @@ def test_write_report_structure(tmp_path):
     import json
 
     data = json.loads(p.read_text(encoding="utf-8"))
-    assert data["meta"]["provider"] == "longcat"
-    assert data["meta"]["top_k"] == 5
-    assert data["meta"]["model"] == "LongCat-2.0"
+    assert data["meta"]["provider"] == FROZEN_CHAT_PROVIDER
+    assert data["meta"]["top_k"] == FROZEN_RETRIEVAL_TOP_K
+    assert data["meta"]["model"] == FROZEN_CHAT_MODEL
     assert data["meta"]["kb_name"] == "星河智家·官方政策库"
     assert len(data["meta"]["script_sha256_12"]) == 12
     assert data["summary"]["citation"] == [1, 1]

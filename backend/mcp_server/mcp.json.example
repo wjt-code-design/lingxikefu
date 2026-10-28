@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "lingxi-rag": {
+      "command": "<REPO_ROOT>/backend/.venv/bin/python",
+      "args": ["-m", "mcp_server.server"],
+      "cwd": "<REPO_ROOT>/backend",
+      "env": {
+        "PYTHONPATH": "<REPO_ROOT>/backend"
+      }
+    }
+  }
+}
+
+说明：
+- Windows 把 .venv/bin/python 换成 .venv/Scripts/python.exe
+- <REPO_ROOT> 替换为本仓库在你机器上的绝对路径
+- 也可以直接用仓库根的 .mcp.json（已用 ${workspaceFolder} 风格变量）

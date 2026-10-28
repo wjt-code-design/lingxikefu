@@ -379,11 +379,22 @@ export function ChatContainer({
   // 客服自己发消息走乐观上屏（本地临时 id，落库后对齐服务端 id）——发送后短暂停一轮
   // 轮询，避免"服务端已落库 + 本地临时 id 未对齐"的窗口期拉出双份。
   const lastAgentSendRef = useRef(0);
+  // 🔑 流式进行中标记（2026-10-27 修「一次点击出现两条顾客消息」）：
+  //   本地乐观上屏的 user 消息用的是**临时 id**（`u-c-<ts>-<rand>`），要等
+  //   finalize 才换成后端真 id。而观察视角轮询按 id 去重、不按 role 过滤 →
+  //   finalize 之前那轮轮询会把 DB 里同一条（真 id）当成「新消息」追加 → 显示两条。
+  //   故流式期间**跳过轮询**；流式结束后 finalize 已完成 id 对齐，轮询去重即正确。
+  //   （刻意在 render body 赋值而非 useEffect：要的是「每次 render 立刻同步」，
+  //     useEffect 会晚一个 tick；此处只写自己的 ref、不影响渲染输出，无 tear 风险。）
+  const streamingRef = useRef(false);
+  streamingRef.current = streaming;
   useEffect(() => {
     if (!sessionId || !observeMode) return;
     const sid = sessionId; // B1-3：发起时捕获（同顾客端轮询守卫）
     const timer = setInterval(() => {
       if (Date.now() - lastAgentSendRef.current < 4_000) return;
+      // 流式进行中不轮询：本地 user 消息此刻仍是临时 id，轮询会误判为新消息（见上方注释）
+      if (streamingRef.current) return;
       getSessionDetail(sid)
         .then((d) => {
           // B1-3（2026-09-06 深度审查）：stale 守卫——切会话/退出观察态后在途响应丢弃，
@@ -395,6 +406,16 @@ export function ChatContainer({
             const known = new Set(prev.map((m) => m.id));
             const fresh = d.messages
               .filter((m) => !known.has(m.id))
+              // 🔑 兜底过滤（2026-10-27）：跳过「本轮流式中那条」user 消息的 DB 版本。
+              //   streamingUserRef 在 onSend 时**立即**写入（不依赖组件重渲），故此判断任何时刻都准确；
+              //   而 streamingRef 快照要等重渲才更新，存在「轮询已触发但重渲未发生」的竞态窗口。
+              //   两道防线各覆盖一类：快照防「整轮拉取」，内容比对防「同一条被追加」。
+              .filter((m) => {
+                const pending = streamingUserRef.current?.text;
+                // ⚠️ 已知边界：若**另一 tab** 恰好发了内容完全相同的问题，那条会被此处跳过
+                //   （概率极低，且本地已乐观上屏同内容，用户观感无异常）。
+                return !(m.role === 'user' && pending && m.content === pending);
+              })
               .map(toChatMessage);
             return fresh.length ? [...prev, ...fresh] : prev;
           });
@@ -434,8 +455,12 @@ export function ChatContainer({
           ? {
               ...m,
               status: (stage === 'done' ? 'done' : 'failed') as ChatMessage['status'],
-              // C4：done 后用后端真 id 对齐本地 user 消息 id（供引用/编辑/定位）
-              ...(stage === 'done' && userMessageId ? { id: userMessageId } : {}),
+              // C4：用后端真 id 对齐本地 user 消息 id（供引用/编辑/定位）。
+              // 2026-10-27 补：原先仅 done 态对齐；**error 态不对齐** → 后端已落库的
+              //   user 消息（_persist_user_message 在流开始前就写了）与本地临时 id
+              //   不匹配 → 观察视角轮询按 id 去重失效 → error 后同样出现两条顾客消息。
+              //   后端 done/error 都带 user_message_id（chat.py 无条件设置），故不按 stage 分叉。
+              ...(userMessageId ? { id: userMessageId } : {}),
             }
           : m
       );

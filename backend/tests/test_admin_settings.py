@@ -4,6 +4,11 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from app.core.baseline import (
+    FROZEN_CHAT_MODEL,
+    FROZEN_CHAT_PROVIDER,
+    FROZEN_EMBEDDING_MODEL,
+)
 from app.core.config import settings
 from app.core.security import create_access_token
 from app.main import app
@@ -43,13 +48,15 @@ def test_admin_settings_structure(client):
         assert group in data
     assert "quota" not in data  # 额度系统已移除（2026-09-06）
     assert data["env"] == settings.ENV
-    # model 分组（评测口径字面量钉：生成/嵌入模型即基线可比性的一部分，
-    # BASELINE.sha256 头部「LongCat-2.0（backend/.env，CHAT_PROVIDER=longcat）」）
-    assert data["model"]["provider"] == "longcat"
-    assert data["model"]["model"] == "LongCat-2.0"
+    # model 分组（评测口径字面量钉：生成/嵌入模型即基线可比性的一部分）。
+    # 期望值取自 app/core/baseline.py（冻结真源），**不写死字面量也不取 settings.X**：
+    # 写死 → 换模型时不知该改成什么；取 settings.X → 期望值跟着实现走，守卫退化成同义反复
+    # （2026-09-27 审计 M5 任务 2 的原始病灶）。真源随四件套变更同步更新。
+    assert data["model"]["provider"] == FROZEN_CHAT_PROVIDER
+    assert data["model"]["model"] == FROZEN_CHAT_MODEL
     assert data["model"]["fallback"] is None
     assert data["model"]["embedding_provider"] == "local"
-    assert data["model"]["embedding_model"] == "BAAI/bge-base-zh-v1.5"
+    assert data["model"]["embedding_model"] == FROZEN_EMBEDDING_MODEL
     # rag 分组（评测口径字面量钉：检索条数/拒答阈值/混合检索/切片参数直接进入
     # faithfulness·recall@5·诚实性拒答指标的判定面；数字=冻结清单与 config 现值）
     assert data["rag"]["top_k"] == 5  # 降噪扫描定值（8→5，precision@5 20%→32%）

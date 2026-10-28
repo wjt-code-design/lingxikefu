@@ -97,7 +97,13 @@ class TestLongCatChat:
         assert captured["body"]["messages"] == [{"role": "user", "content": "hi"}]
 
     def test_complete_disables_thinking_by_default(self, monkeypatch):
-        """TTFT 优化：默认关闭 LongCat 思维链（enable_thinking=False），content 首字不等推理。"""
+        """TTFT 优化：默认关闭思维链（enable_thinking=False），content 首字不等推理。
+
+        ⚠️ 参数风格随平台而变（2026-10-27 百炼切换）：
+        - chat_template_kwargs：LongCat / vLLM 系（嵌套）
+        - 顶层 enable_thinking：百炼 OpenAI 兼容模式
+        两种风格都要覆盖——传错风格的后果是「思考没关掉」（白烧 token）或 400。
+        """
         monkeypatch.setattr(settings, "LONGCAT_API_KEY", "unit-longcat-key")
         monkeypatch.setattr(settings, "LLM_ENABLE_THINKING", False)
         captured: dict = {}
@@ -105,8 +111,18 @@ class TestLongCatChat:
 
         import asyncio
 
+        # --- 风格 A：chat_template_kwargs（LongCat / vLLM）---
+        monkeypatch.setattr(settings, "LLM_THINKING_PARAM_STYLE", "chat_template_kwargs")
         asyncio.run(OpenAILikeChatClient().complete([{"role": "user", "content": "hi"}]))
         assert captured["body"]["chat_template_kwargs"] == {"enable_thinking": False}
+        assert "enable_thinking" not in captured["body"]
+
+        # --- 风格 B：顶层 enable_thinking（百炼 OpenAI 兼容模式）---
+        captured.clear()
+        monkeypatch.setattr(settings, "LLM_THINKING_PARAM_STYLE", "top_level")
+        asyncio.run(OpenAILikeChatClient().complete([{"role": "user", "content": "hi"}]))
+        assert captured["body"]["enable_thinking"] is False
+        assert "chat_template_kwargs" not in captured["body"]
 
     def test_complete_enable_thinking_respects_config(self, monkeypatch):
         """LLM_ENABLE_THINKING=true 时开回思维链（回归评测用）。"""
@@ -446,8 +462,14 @@ class TestChatRouting:
 
 
 class TestRerankGate:
-    def test_disabled_by_default_raises(self):
-        assert settings.RAG_ENABLE_RERANK is False
+    def test_disabled_by_default_raises(self, monkeypatch):
+        """RAG_ENABLE_RERANK=false 时 get_rerank_client() 必须抛可操作错误。
+
+        ⚠️ 2026-10-27 起 rerank 已接入百炼原生端点（qwen3.7-text-rerank），且本机
+        .env 里 RAG_ENABLE_RERANK=true —— 故本测试**显式 monkeypatch 为 false**，
+        不再依赖"默认值恰好是 false"。断言对象是"开关关闭时的行为"，与配置取值解耦。
+        """
+        monkeypatch.setattr(settings, "RAG_ENABLE_RERANK", False)
         with pytest.raises(ModelNotConfiguredError):
             get_rerank_client()
 

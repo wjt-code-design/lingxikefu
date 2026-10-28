@@ -1,29 +1,45 @@
-# 隔离仓库：只跟踪本项目交付物，排除参考克隆/环境/产物
-research/
-wt/
-.workbuddy/
-node_modules/
+# ---- Python ----
 __pycache__/
-*.pyc
-.env
-venv/
+*.py[cod]
+*.egg-info/
 .venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# ---- Node ----
+node_modules/
 dist/
 build/
-*.egg-info/
+.vite/
+*.local
+*.tsbuildinfo
+
+# ---- 环境与密钥（绝不提交）----
+.env
+.env.*
+!.env.example
+
+# ---- 编辑器 / 系统 ----
+.idea/
+.vscode/
 .DS_Store
-.excalidraw
+Thumbs.db
 
-# 测试/工具运行时产物（2026-08-25）
+# ---- 本地产物 ----
+*.log
+*.sqlite3
 backend-test-results.xml
-coverage.xml
-.coverage
-.superpowers/
+
+# ---- AI 编程工具产物（不进仓库）----
+.workbuddy/
 .zcode/
+.zcodeignore
 .trae/
-
-# eval 运行日志不入库（2026-09-02 清理 8 个历史日志后的防回填；json 入库存档策略不变）
-eval-and-samples/results/*.log
-
-# 审计/派单中间产物（多 agent 工作记忆，不入库；真源报告在 .workbuddy/ 同样不入库）
+.superpowers/
 .planning/
+.cursor/

@@ -54,27 +54,34 @@ def _db_unreachable(exc: BaseException) -> bool:
 
 @pytest.fixture(scope="module")
 def demo_kb_id() -> str:
-    """定位最新 demo KB；连不上 DB 才 skip（文案含真因），无 KB/无订单文档一律 fail。"""
+    """定位**含订单 demo 文档**的 KB；连不上 DB 才 skip，无此类 KB 一律 fail。
+
+    ⚠️ 2026-10-27 修正定位口径：原实现取「租户内最新 KB」，隐含假设「最新 KB 就是
+    含订单文档的 demo KB」。该假设在本机不成立——库里有两个 KB：
+      - 「星河智家·官方政策库」（13 docs，评测用，创建 2026-08-27）
+      - 「星河智家·售后与订单全量库」（21 docs，含订单文档，创建 2026-08-15）
+    评测库更新 → 被「最新 KB」选中 → 断言「应含订单文档」失败。
+    这不是 seed 坏了，而是**定位方式与测试意图不符**（测试意图见模块 docstring：
+    「订单 demo 数据已灌入 demo KB」）。
+
+    改为按**内容特征**定位（存在标题含「改地址」的 indexed 文档）——
+    与测试意图一致，且不依赖 KB 的创建顺序或 seed 先后。
+    """
     db = SessionLocal()
     try:
         kb = db.scalar(
             sa.select(KnowledgeBase)
-            .where(KnowledgeBase.tenant_id == settings.TENANT_DEFAULT)
+            .join(
+                Document,
+                Document.kb_id == KnowledgeBase.id,
+            )
+            .where(
+                KnowledgeBase.tenant_id == settings.TENANT_DEFAULT,
+                Document.status == "indexed",
+                Document.name.like("%改地址%"),
+            )
             .order_by(KnowledgeBase.created_at.desc())
             .limit(1)
-        )
-        has_order_doc = (
-            db.scalar(
-                sa.select(Document.id)
-                .where(
-                    Document.kb_id == kb.id,
-                    Document.status == "indexed",
-                    Document.name.like("%改地址%"),
-                )
-                .limit(1)
-            )
-            if kb
-            else None
         )
     except Exception as exc:
         if _db_unreachable(exc):
@@ -84,9 +91,10 @@ def demo_kb_id() -> str:
         db.close()
 
     if kb is None:
-        pytest.fail("租户内无任何知识库 —— seed 步骤坏掉了，请执行 scripts/seed_demo_data.py")
-    if not has_order_doc:
-        pytest.fail(f"KB {kb.id} 未导入订单 demo 文档（标题需含「改地址」）—— seed 步骤坏掉了")
+        pytest.fail(
+            "租户内无任何**含订单 demo 文档**的知识库 —— seed 步骤坏掉了，"
+            "请执行 scripts/seed_demo_data.py"
+        )
     return str(kb.id)
 
 

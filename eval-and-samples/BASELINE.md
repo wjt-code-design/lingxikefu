@@ -9,7 +9,7 @@
 | 评测集 | 评测问题库.md / ground-truth.md / 口语化评测集.md | hash 见 BASELINE.sha256 |
 | 判定脚本 | backend/scripts/eval_faithfulness.py @ df79cb1（sha256 `43934ccf2026`；S1 空句子窗口修复版） | git commit |
 | 检索参数 | RETRIEVAL_TOP_K=5（2026-08-21 降噪 8→5）+ MIN_SCORE=0.30（拒答判定走 dense_score 解耦；RRF score 仅排序，无绝对语义） | backend/app/core/config.py |
-| 模型 | LongCat-2.0（CHAT_PROVIDER=longcat） | backend/.env |
+| 模型 | **qwen3.8-flash**（阿里云百炼业务空间专属端点，OpenAI 兼容）—— 2026-10-27 起生效，见 §十 新基线 | backend/.env |
 | 评测 KB | 星河智家·官方政策库（= smoke_import._KB_NAME，唯一真源） | backend/scripts/smoke_import.py |
 
 ## 二、faithfulness 新基线（2026-08-28，LongCat-2.0 + 判定脚本@df79cb1）
@@ -81,3 +81,111 @@
 - **⚠️ 外部依赖风险（2026-08-30 登记）：LongCat 账户余额**：CI #65/#66（H1/H2）抽样评测全题 `402 Payment Required` → 0/0 假红（门禁判 FAIL 的方向安全但不可用）；#67 部分恢复仍 7 处 402——**部分 402 题 error 后不进分母，分母缩水会造成假绿**（方向性风险：20 题若 15 题 402，余 5 题全过即 100%）。加固建议：评测门禁加 error 率上限（如 error 分母占比 >20% 直接 FAIL，防欠费期假绿）。运维：LONGCAT_API_KEY 账户余额需监控/充值。
 - **✅ 402 事件结案（2026-08-30 晚）**：LongCat 充值后实测验证（longcat-refill-verify-20260830.json，100 题分母完整）：qa 76/79 = **96.2%**（勘误 2026-08-31：原文误写 93.8%——那是 08-28 基线 run1 的 76/81；76/79 实算 96.2%）/ refuse 8/8 = 100% / citation 97.9%，PASS——402 消失、门禁真实健康。两点观察：① LongCat 吞吐限速（充值后 <2.2 字/s 渐恢复至 9.3 字/s），评测时长 35min→3h+，属平台侧；② refuse_qa 误拒答 2 起（Q093 已知抖动 + Q095 新漂移），不进门禁分母，列观察。**判定脚本 sha 已同步 9b381e948fb1**（G2 授权的 sample/kb_id 参数化，CLI 本体零改动，BASELINE.sha256 已更新）。加固建议（error 率上限）仍待批。
 - **✅ error 率上限加固落地（2026-09-02，handoff §六待办#1 结案）**：CI eval job 新增独立门禁 step——`scripts/eval_gate_error_rate.py` 解析 faithfulness `--out` 逐题明细，**error 占比 >20% 直接 FAIL**（20 题抽样下 error >4 题即红；skip 计入分母但不算 error；results 空/缺 kind 字段/JSON 不可解析一律 fail-closed）。判定脚本本体零改动，门禁逻辑在独立脚本（不在冻结清单）。TDD 14 用例（边界 20% PASS / 25% FAIL / 全 error / 形态异常 / CLI exit code）。**顺带发现并补登**：cf47d54（fix_citations 接线）曾修改判定脚本但漏同步 BASELINE.sha256（冻结记录 9b381e 仍指向 a5608b9 旧版）——本次按 0575c14 先例合规补登为 5d452507（先记录理由后更新 hash），冻结体系恢复一致。
+
+## 九、四件套变更登记（2026-10-27 · 模型切换）
+
+**变更内容**：对话模型 `LongCat-2.0` → `qwen3.8-flash`（阿里云百炼业务空间专属端点
+`https://ws-<your-workspace-id>.cn-beijing.maas.aliyuncs.com/compatible-mode/v1`，
+OpenAI 兼容格式）。同批接入**百炼原生 rerank**（`qwen3.7-text-rerank`），
+`RAG_ENABLE_RERANK` 由 false 改为 true。
+
+**变更理由**：① 业务空间专属端点的稳定性与性能优于公共域名；② qwen3.8 系列为
+混合思考模型，思维链行为需按新模型重测；③ 补齐 JD 高频词「重排」——此前
+`RAG_ENABLE_RERANK=false` 属明确的待补强项。
+
+**影响面（必须知道的三条）**：
+
+1. **本文件 §二~§八的全部历史数字均为 LongCat-2.0 口径**，与 qwen3.8-flash
+   **不可直接比较**（模型项是四件套之一）。新基线须重跑全量后另行登记。
+2. **拒答行为需重测**：LongCat-2.0 的实测结论「关思考时拒答锚点通过率 83%、
+   开思考 100%」是**该模型特有**的，qwen3.8 的思维链贡献需重新测量，不能沿用。
+3. **rerank 改变了检索结果的顺序**（2026-10-29 表述订正：原写「顺序与内容」，
+   与代码实现不符）：重排插在 retrieve 之后、refuse 之前（拒答仍走 dense_score，
+   语义不变）。按当前实现（`RETRIEVAL_TOP_K=5` → `RERANK_CANDIDATES=24` 取到
+   的是全部 5 条 → `RERANK_TOP_N=5`）rerank 实为 **5 进 5 出**：top-5
+   **成员不变、仅顺序变**（故 recall@5 对其不敏感，见 §九·附）。但 chunk 顺序
+   一变，`[来源N]` 编号随之变化 → citation 合法率与 faithfulness 的分母构成
+   随之变化，新基线必须重跑。
+   （若日后把 retrieve 的 top_k 放宽到 24 让 rerank 真正筛选，成员才会变，届时需
+   重冻结四件套后再比。）
+
+**同批落地的口径调整**（非冻结项，但影响可比性）：
+
+- 守卫测试的模型名期望值改为引用 `backend/app/core/baseline.py`（冻结真源的
+  代码化载体），**不再硬编码字面量**——原写法在换模型时既不知该改成什么，
+  改成"跟着实现走"更会让基线守卫退化成同义反复（2026-09-27 审计 M5 任务 2
+  的原始病灶）。
+- `backend/.env` 优先级调整为**高于系统环境变量**（`settings_customise_sources`）。
+  本机系统环境残留旧 provider 的 key，默认优先级下 .env 被静默跳过，表现为
+  「配了新 key 却仍 401 InvalidApiKey」。CI 不读 .env（key 走 GitHub Secrets
+  注入为环境变量），故此改动对 CI 无影响。
+
+**待办**：用 qwen3.8-flash + rerank 开启态重跑全量评测，登记新冻结数字
+（本节留空即表示**新基线尚未生成**，此前不得引用任何 qwen 口径的指标）。
+
+### 九·附：rerank 效果的确定性对比（2026-10-27，零 LLM 成本）
+
+⚠️ **recall@5 对 rerank 不敏感**——它判定「期望来源是否进入 top-5 集合」，
+而 rerank 只重排**已在 top-5 内**的候选，不改变集合成员。实测 ON/OFF 均为
+**81/82 = 98.8%**（完全相同）。这不是 rerank 无效，是**指标量纲不对**——
+拿 recall 衡量 rerank 是常见错误。
+
+rerank 该被衡量的是**排序质量**（期望文档排到第几位）。同一评测集（90 道
+有期望来源的问答类题）、同一 KB、同一模型：
+
+| 指标 | rerank OFF | rerank ON | 变化 |
+|---|---|---|---|
+| **top-1 命中率** | 72/90 = 80.0% | **80/90 = 88.9%** | **+8 题（+8.9pp）** |
+| **MRR** | 0.8735 | **0.9333** | **+0.0598** |
+| 名次分布 | 第1名72 / 第2名8 / 第3名5 / 第4名3 / 第5名1 | 第1名80 / 第2名6 / 第3名3 | 最差名次由第 5 收敛到第 3 |
+| recall@5 | 81/82 = 98.8% | 81/82 = 98.8% | **不变（重排不丢召回）** |
+
+**读法**：recall@5 不变 + top-1 提升 8.9pp + MRR 提升 = **重排把"召回到了但排后面"
+的候选提到了前面，且没有牺牲任何召回**——这是 rerank 的理想形态。
+未命中仍为 Q072（两态相同，非 rerank 引入）。
+
+复现：`backend/experiments/compare_rerank.py`（确定性、零 LLM 成本）
+明细：`backend/experiments/rerank_comparison.json`
+
+## 十、新基线（2026-10-27 · qwen3.8-flash + 百炼 rerank 开启态）
+
+**四件套**：评测集三件（hash 未变）+ 判定脚本 `eval_faithfulness.py@5d4525070d71`
+（`script_sha256_12 = 5d4525070d71`，与本文件冻结 hash 一致）+ 检索参数
+`RETRIEVAL_TOP_K=5` / `MIN_SCORE=0.30`（未变）+ **模型 qwen3.8-flash** +
+KB「星河智家·官方政策库」（13 docs / 26 chunks，errors=0）
+
+| 指标 | 数值 | 门槛 | 判定 |
+|---|---|---|---|
+| qa（问答正确率） | **78/80 = 97.5%** | ≥85% | ✅ |
+| refuse（拒答准确率） | **8/8 = 100%** | ≥90% | ✅ |
+| citation（引用合法率） | **256/256 = 100%** | ≥95% | ✅ |
+| errors | **0** | — | ✅ |
+| handoff / chitchat | 5/5、5/5 | — | ✅ |
+
+- 失败题：**Q028**（断言窗口交集 29%）、**Q093**（23%）——均未达 30% 阈值
+- 误拒答（refuse_qa）：**2 起**（Q056、Q096）
+- 产物：`backend/experiments/full_qwen_rerank.json`
+- ⚠️ **与 §二~§八的历史数字不可直接相减**（模型换了，模型是四件套之一）。
+  历史数字均为 LongCat-2.0 口径，仅作存档。
+- ⚠️ 本基线**含 rerank 开启态**（§九·附已量化 rerank 单独贡献：
+  top-1 命中率 80.0%→88.9%、MRR 0.8735→0.9333、recall@5 98.8% 不变）。
+  故本基线与「rerank 关闭态」的旧数字之间还叠加了 rerank 这一变量。
+
+### 十·附：LangChain A/B 四臂对比（同日，20 题抽样）
+
+同一 KB / 同一模型 / 同一检索参数 / 同一冻结判定脚本，仅替换检索层：
+
+| 臂 | qa | refuse | 误拒答 | 引用合法率 |
+|---|---|---|---|---|
+| A0 自研 + 加权RRF 2:1（基线） | 17/17 = 100% | 2/2 | 1 起 | 54/54 |
+| A1 自研 + 等权RRF 1:1 | 17/17 = 100% | 2/2 | 1 起 | 54/54 |
+| B0 LangChain 等权（默认） | 11/12 = 91.7% | 2/2 | 3 起 | 40/40 |
+| B1 LangChain 加权 2:1 | 16/16 = 100% | 2/2 | 2 起 | 55/55 |
+
+- 唯一严格单变量结论：**B0 vs B1**（同框架仅改权重）→ 加权明显更好，
+  反向验证自研选「加权 RRF」正确
+- A0 vs A1 在 20 题上打平 → **样本量不足以区分**，不可据此断言「加权优于等权」；
+  权重的贡献由 B0 vs B1 与确定性层 top-1/MRR 指标共同支撑
+- ⚠️ A* vs B* 是**系统级对比**（sparse 算法不同：自研 2-gram tf 无 IDF vs BM25 含 IDF）
+- 产物：`backend/experiments/ab_summary_sample20.json`
+- 完整报告：`灵犀项目-LangChain对比实验报告.md`
